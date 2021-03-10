@@ -111,11 +111,11 @@ func (r *RuntimeLauncher) Launch(ccid string, streamHandler extcc.StreamHandler)
 				startFailCh <- errors.WithMessage(err, "error starting container")
 				return
 			}
-			exitCode, err := r.Runtime.Wait(ccid)
-			if err != nil {
-				launchState.Notify(errors.Wrap(err, "failed to wait on container exit"))
-			}
-			launchState.Notify(errors.Errorf("container exited with %d", exitCode))
+			//exitCode, err := r.Runtime.Wait(ccid)
+			//if err != nil {
+			//	launchState.Notify(errors.Wrap(err, "failed to wait on container exit"))
+			//}
+			//launchState.Notify(errors.Errorf("container exited with %d", exitCode))
 		}()
 	}
 

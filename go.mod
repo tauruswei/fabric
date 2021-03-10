@@ -3,7 +3,11 @@ module github.com/hyperledger/fabric
 go 1.14
 
 // https://github.com/golang/go/issues/34610
-replace golang.org/x/sys => golang.org/x/sys v0.0.0-20190920190810-ef0ce1748380
+replace (
+	golang.org/x/sys => golang.org/x/sys v0.0.0-20190920190810-ef0ce1748380
+	k8s.io/api => k8s.io/api v0.17.17
+	k8s.io/apimachinery => k8s.io/apimachinery v0.17.17
+)
 
 require (
 	code.cloudfoundry.org/clock v1.0.0
@@ -21,6 +25,7 @@ require (
 	github.com/eapache/go-resiliency v1.2.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
+	github.com/frankban/quicktest v1.9.0 // indirect
 	github.com/fsouza/go-dockerclient v1.4.1
 	github.com/go-kit/kit v0.8.0
 	github.com/golang/protobuf v1.3.3
@@ -68,6 +73,10 @@ require (
 	google.golang.org/grpc v1.29.1
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 	gopkg.in/cheggaaa/pb.v1 v1.0.28
+	gopkg.in/yaml.v2 v2.3.0
+	k8s.io/api v0.17.17
+	k8s.io/apimachinery v0.17.17
+	k8s.io/client-go v0.17.17
 	gopkg.in/yaml.v2 v2.3.0
 )
 

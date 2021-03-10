@@ -529,6 +529,11 @@ func serve(args []string) error {
 			logger.Panicf("cannot create docker client: %s", err)
 		}
 
+		k8sClient, err := createK8sClient()
+		if err != nil {
+			logger.Panicf("cannot create k8s client: %s", err)
+		}
+
 		dockerVM := &dockercontroller.DockerVM{
 			PeerID:        coreConfig.PeerID,
 			NetworkID:     coreConfig.NetworkID,
@@ -550,7 +555,8 @@ func serve(args []string) error {
 				"CORE_CHAINCODE_LOGGING_SHIM=" + chaincodeConfig.ShimLogLevel,
 				"CORE_CHAINCODE_LOGGING_FORMAT=" + chaincodeConfig.LogFormat,
 			},
-			MSPID: mspID,
+			MSPID:     mspID,
+			K8sClient: k8sClient,
 		}
 		if err := opsSystem.RegisterChecker("docker", dockerVM); err != nil {
 			logger.Panicf("failed to register docker health check: %s", err)
@@ -1104,6 +1110,10 @@ func computeChaincodeEndpoint(chaincodeAddress string, chaincodeListenAddress st
 
 	logger.Infof("Exit with ccEndpoint: %s", ccEndpoint)
 	return ccEndpoint, nil
+}
+
+func createK8sClient() (*dockercontroller.K8sClientSet, error) {
+	return dockercontroller.NewK8SClient()
 }
 
 func createDockerClient(coreConfig *peer.Config) (*docker.Client, error) {

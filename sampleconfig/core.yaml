@@ -493,6 +493,13 @@ vm:
                     max-size: "50m"
                     max-file: "5"
             Memory: 2147483648
+    k8s:
+        config: "/etc/hyperledger/fabric/k8s/config.yaml"
+        ns: ""
+        policy: ""
+        affk: ""
+        affv: ""
+        lables: ""
 
 ###############################################################################
 #

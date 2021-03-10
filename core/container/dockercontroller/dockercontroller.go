@@ -10,11 +10,11 @@ import (
 	"archive/tar"
 	"bufio"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/spf13/viper"
 	"io"
 	"regexp"
 	"strconv"
@@ -98,6 +98,12 @@ func (ci *ContainerInstance) Wait() (int, error) {
 	return ci.DockerVM.Wait(ci.CCID)
 }
 
+type k8sClient interface {
+	createPod(imageID, containerID string, args, env []string, fileUploads map[string][]byte,
+		ns, affinityKey, affinityValue, imagePullPolicy string, labels map[string]string) error
+	deletePod(del Opt) error
+}
+
 // DockerVM is a vm. It is identified by an image id
 type DockerVM struct {
 	PeerID          string
@@ -111,6 +117,7 @@ type DockerVM struct {
 	PlatformBuilder PlatformBuilder
 	LoggingEnv      []string
 	MSPID           string
+	K8sClient       k8sClient
 }
 
 // HealthCheck checks if the DockerVM is able to communicate with the Docker
@@ -122,26 +129,26 @@ func (vm *DockerVM) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-func (vm *DockerVM) createContainer(imageID, containerID string, args, env []string) error {
-	logger := dockerLogger.With("imageID", imageID, "containerID", containerID)
-	logger.Debugw("create container")
-	_, err := vm.Client.CreateContainer(docker.CreateContainerOptions{
-		Name: containerID,
-		Config: &docker.Config{
-			Cmd:          args,
-			Image:        imageID,
-			Env:          env,
-			AttachStdout: vm.AttachStdOut,
-			AttachStderr: vm.AttachStdOut,
-		},
-		HostConfig: vm.HostConfig,
-	})
-	if err != nil {
-		return err
-	}
-	logger.Debugw("created container")
-	return nil
-}
+//func (vm *DockerVM) createContainer(imageID, containerID string, args, env []string) error {
+//	logger := dockerLogger.With("imageID", imageID, "containerID", containerID)
+//	logger.Debugw("create container")
+//	_, err := vm.Client.CreateContainer(docker.CreateContainerOptions{
+//		Name: containerID,
+//		Config: &docker.Config{
+//			Cmd:          args,
+//			Image:        imageID,
+//			Env:          env,
+//			AttachStdout: vm.AttachStdOut,
+//			AttachStderr: vm.AttachStdOut,
+//		},
+//		HostConfig: vm.HostConfig,
+//	})
+//	if err != nil {
+//		return err
+//	}
+//	logger.Debugw("created container")
+//	return nil
+//}
 
 func (vm *DockerVM) buildImage(ccid string, reader io.Reader) error {
 	id, err := vm.GetVMNameForDocker(ccid)
@@ -275,6 +282,10 @@ func (vm *DockerVM) GetEnv(ccid string, tlsConfig *ccintf.TLSConfig) []string {
 	return envs
 }
 
+func (vm *DockerVM) deletePod(name string, timeout uint, dontkill, dontremove bool) error {
+	return vm.K8sClient.deletePod(Opt{NS: GetK8sNamespace(), Name: strings.Replace(name, ".", "-", -1)})
+}
+
 // Start starts a container using a previously created docker image
 func (vm *DockerVM) Start(ccid string, ccType string, peerConnection *ccintf.PeerConnection) error {
 	imageName, err := vm.GetVMNameForDocker(ccid)
@@ -285,72 +296,93 @@ func (vm *DockerVM) Start(ccid string, ccType string, peerConnection *ccintf.Pee
 	containerName := vm.GetVMName(ccid)
 	logger := dockerLogger.With("imageName", imageName, "containerName", containerName)
 
-	vm.stopInternal(containerName)
-
+	//vm.stopInternal(containerName)
+	err = vm.deletePod(containerName, 0, false, false)
+	if err != nil {
+		dockerLogger.Warnf("delete cc pod err [%v]", err)
+	}
 	args, err := vm.GetArgs(ccType, peerConnection.Address)
 	if err != nil {
 		return errors.WithMessage(err, "could not get args")
 	}
-	dockerLogger.Debugf("start container with args: %s", strings.Join(args, " "))
+	dockerLogger.Infof("start container with args: %s", strings.Join(args, " "))
 
 	env := vm.GetEnv(ccid, peerConnection.TLSConfig)
-	dockerLogger.Debugf("start container with env:\n\t%s", strings.Join(env, "\n\t"))
+	dockerLogger.Infof("start container with env:\n\t%s", strings.Join(env, "\n\t"))
 
-	err = vm.createContainer(imageName, containerName, args, env)
-	if err != nil {
-		logger.Errorf("create container failed: %s", err)
-		return err
-	}
-
-	// stream stdout and stderr to chaincode logger
-	if vm.AttachStdOut {
-		containerLogger := flogging.MustGetLogger("peer.chaincode." + containerName)
-		streamOutput(dockerLogger, vm.Client, containerName, containerLogger)
-	}
-
-	// upload TLS files to the container before starting it if needed
+	var filesToUpload = make(map[string][]byte)
 	if peerConnection.TLSConfig != nil {
-		// the docker upload API takes a tar file, so we need to first
-		// consolidate the file entries to a tar
-		payload := bytes.NewBuffer(nil)
-		gw := gzip.NewWriter(payload)
-		tw := tar.NewWriter(gw)
-
-		// Note, we goofily base64 encode 2 of the TLS artifacts but not the other for strange historical reasons
-		err = addFiles(tw, map[string][]byte{
-			TLSClientKeyPath:      []byte(base64.StdEncoding.EncodeToString(peerConnection.TLSConfig.ClientKey)),
-			TLSClientCertPath:     []byte(base64.StdEncoding.EncodeToString(peerConnection.TLSConfig.ClientCert)),
-			TLSClientKeyFile:      peerConnection.TLSConfig.ClientKey,
-			TLSClientCertFile:     peerConnection.TLSConfig.ClientCert,
-			TLSClientRootCertFile: peerConnection.TLSConfig.RootCert,
-		})
-		if err != nil {
-			return fmt.Errorf("error writing files to upload to Docker instance into a temporary tar blob: %s", err)
-		}
-
-		// Write the tar file out
-		if err := tw.Close(); err != nil {
-			return fmt.Errorf("error writing files to upload to Docker instance into a temporary tar blob: %s", err)
-		}
-
-		gw.Close()
-
-		err := vm.Client.UploadToContainer(containerName, docker.UploadToContainerOptions{
-			InputStream:          bytes.NewReader(payload.Bytes()),
-			Path:                 "/",
-			NoOverwriteDirNonDir: false,
-		})
-		if err != nil {
-			return fmt.Errorf("Error uploading files to the container instance %s: %s", containerName, err)
-		}
+		filesToUpload[TLSClientKeyPath] = []byte(base64.StdEncoding.EncodeToString(peerConnection.TLSConfig.ClientKey))
+		filesToUpload[TLSClientCertPath] = []byte(base64.StdEncoding.EncodeToString(peerConnection.TLSConfig.ClientCert))
+		filesToUpload[TLSClientKeyFile] = peerConnection.TLSConfig.ClientKey
+		filesToUpload[TLSClientCertFile] = peerConnection.TLSConfig.ClientCert
+		filesToUpload[TLSClientRootCertFile] = peerConnection.TLSConfig.RootCert
 	}
+	containerN := strings.ReplaceAll(containerName, ".", "-")
+	dockerLogger.Infof("containerN %s", containerN)
+	dockerLogger.Infof("imageName %s", imageName)
 
-	// start container with HostConfig was deprecated since v1.10 and removed in v1.2
-	err = vm.Client.StartContainer(containerName, nil)
+	err = vm.K8sClient.createPod(imageName, containerN, args, env, filesToUpload,
+		GetK8sNamespace(), GetK8sAffk(), GetK8sAffv(), GetK8sPullPolicy(), map[string]string{"aaa": "bbb"})
 	if err != nil {
-		dockerLogger.Errorf("start-could not start container: %s", err)
+		logger.Debugf("Started container error %v", err)
 		return err
 	}
+	//err = vm.createContainer(imageName, containerName, args, env)
+	//if err != nil {
+	//	logger.Errorf("create container failed: %s", err)
+	//	return err
+	//}
+	//
+	//// stream stdout and stderr to chaincode logger
+	//if vm.AttachStdOut {
+	//	containerLogger := flogging.MustGetLogger("peer.chaincode." + containerName)
+	//	streamOutput(dockerLogger, vm.Client, containerName, containerLogger)
+	//}
+	//
+	//// upload TLS files to the container before starting it if needed
+	//if peerConnection.TLSConfig != nil {
+	//	// the docker upload API takes a tar file, so we need to first
+	//	// consolidate the file entries to a tar
+	//	payload := bytes.NewBuffer(nil)
+	//	gw := gzip.NewWriter(payload)
+	//	tw := tar.NewWriter(gw)
+	//
+	//	// Note, we goofily base64 encode 2 of the TLS artifacts but not the other for strange historical reasons
+	//	err = addFiles(tw, map[string][]byte{
+	//		TLSClientKeyPath:      []byte(base64.StdEncoding.EncodeToString(peerConnection.TLSConfig.ClientKey)),
+	//		TLSClientCertPath:     []byte(base64.StdEncoding.EncodeToString(peerConnection.TLSConfig.ClientCert)),
+	//		TLSClientKeyFile:      peerConnection.TLSConfig.ClientKey,
+	//		TLSClientCertFile:     peerConnection.TLSConfig.ClientCert,
+	//		TLSClientRootCertFile: peerConnection.TLSConfig.RootCert,
+	//	})
+	//	if err != nil {
+	//		return fmt.Errorf("error writing files to upload to Docker instance into a temporary tar blob: %s", err)
+	//	}
+	//
+	//	// Write the tar file out
+	//	if err := tw.Close(); err != nil {
+	//		return fmt.Errorf("error writing files to upload to Docker instance into a temporary tar blob: %s", err)
+	//	}
+	//
+	//	gw.Close()
+	//
+	//	err := vm.Client.UploadToContainer(containerName, docker.UploadToContainerOptions{
+	//		InputStream:          bytes.NewReader(payload.Bytes()),
+	//		Path:                 "/",
+	//		NoOverwriteDirNonDir: false,
+	//	})
+	//	if err != nil {
+	//		return fmt.Errorf("Error uploading files to the container instance %s: %s", containerName, err)
+	//	}
+	//}
+	//
+	//// start container with HostConfig was deprecated since v1.10 and removed in v1.2
+	//err = vm.Client.StartContainer(containerName, nil)
+	//if err != nil {
+	//	dockerLogger.Errorf("start-could not start container: %s", err)
+	//	return err
+	//}
 
 	dockerLogger.Debugf("Started container %s", containerName)
 	return nil
@@ -516,4 +548,20 @@ func (vm *DockerVM) preFormatImageName(ccid string) string {
 	}
 
 	return name
+}
+
+func GetK8sNamespace() string {
+	return viper.GetString("vm.k8s.ns")
+}
+
+func GetK8sAffk() string {
+	return viper.GetString("vm.k8s.affk")
+}
+
+func GetK8sAffv() string {
+	return viper.GetString("vm.k8s.affv")
+}
+
+func GetK8sPullPolicy() string {
+	return viper.GetString("vm.k8s.policy")
 }
