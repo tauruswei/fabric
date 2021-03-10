@@ -201,7 +201,8 @@ $(BUILD_DIR)/bin/%: GO_LDFLAGS = $(METADATA_VAR:%=-X $(PKGNAME)/common/metadata.
 $(BUILD_DIR)/bin/%:
 	@echo "Building $@"
 	@mkdir -p $(@D)
-	GOBIN=$(abspath $(@D)) go install -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
+	go env -w GOPROXY=https://goproxy.cn,direct
+	GOBIN=$(abspath $(@D)) go install -mod=mod -tags "$(GO_TAGS)" -ldflags "$(GO_LDFLAGS)" $(pkgmap.$(@F))
 	@touch $@
 
 .PHONY: docker
