@@ -24,7 +24,7 @@ import (
 	"github.com/hyperledger/fabric/orderer/consensus/kafka/mock"
 	mockmultichannel "github.com/hyperledger/fabric/orderer/mocks/common/multichannel"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 //go:generate counterfeiter -o mock/orderer_config.go --fake-name OrdererConfig . ordererConfig
@@ -113,16 +113,14 @@ func TestHandleChain(t *testing.T) {
 
 	mockMetadata := &cb.Metadata{Value: protoutil.MarshalOrPanic(&ab.KafkaMetadata{LastOffsetPersisted: newestOffset - 1})}
 	_, err := consenter.HandleChain(mockSupport, mockMetadata)
-	require.NoError(t, err, "Expected the HandleChain call to return without errors")
+	assert.NoError(t, err, "Expected the HandleChain call to return without errors")
 }
 
 // Test helper functions and mock objects defined here
 
-var (
-	mockConsenter    commonConsenter
-	mockLocalConfig  *localconfig.TopLevel
-	mockBrokerConfig *sarama.Config
-)
+var mockConsenter commonConsenter
+var mockLocalConfig *localconfig.TopLevel
+var mockBrokerConfig *sarama.Config
 
 func extractEncodedOffset(marshalledOrdererMetadata []byte) int64 {
 	omd := &cb.Metadata{}
@@ -138,6 +136,7 @@ func newMockBrokerConfig(
 	retryOptions localconfig.Retry,
 	kafkaVersion sarama.KafkaVersion,
 	chosenStaticPartition int32) *sarama.Config {
+
 	brokerConfig := newBrokerConfig(
 		tlsConfig,
 		saslPlain,
@@ -176,6 +175,7 @@ func newMockLocalConfig(
 	saslPlain localconfig.SASLPlain,
 	retryOptions localconfig.Retry,
 	verboseLog bool) *localconfig.TopLevel {
+
 	return &localconfig.TopLevel{
 		General: localconfig.General{
 			TLS: localconfig.TLS{

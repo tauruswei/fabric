@@ -61,12 +61,14 @@ var _ = BeforeSuite(func() {
 		ClientCAs:    caCertPool,
 		RootCAs:      caCertPool,
 	}
+	serverTLSConfig.BuildNameToCertificate()
 
 	clientTLSConfig = &tls.Config{
 		Certificates:       []tls.Certificate{clientCertWithKey},
 		RootCAs:            caCertPool,
 		ClientSessionCache: tls.NewLRUClientSessionCache(10),
 	}
+	clientTLSConfig.BuildNameToCertificate()
 })
 
 //go:generate counterfeiter -o fakes/echo_service.go --fake-name EchoServiceServer . echoServiceServer

@@ -35,8 +35,8 @@ import (
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/protoutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -61,10 +61,8 @@ func protoMatcher(pvds ...*proto.PvtDataDigest) func([]*proto.PvtDataDigest) boo
 	}
 }
 
-var (
-	policyLock    sync.Mutex
-	policy2Filter map[privdata.CollectionAccessPolicy]privdata.Filter
-)
+var policyLock sync.Mutex
+var policy2Filter map[privdata.CollectionAccessPolicy]privdata.Filter
 
 type mockCollectionStore struct {
 	m            map[string]*mockCollectionAccess
@@ -185,6 +183,7 @@ type receivedMsg struct {
 }
 
 func (msg *receivedMsg) Ack(_ error) {
+
 }
 
 func (msg *receivedMsg) Respond(message *proto.GossipMessage) {
@@ -378,8 +377,8 @@ func TestPullerFromOnly1Peer(t *testing.T) {
 	rws1 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[0])
 	rws2 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[1])
 	fetched := []util.PrivateRWSet{rws1, rws2}
-	require.NoError(t, err)
-	require.Equal(t, p2TransientStore.RWSet, fetched)
+	assert.NoError(t, err)
+	assert.Equal(t, p2TransientStore.RWSet, fetched)
 }
 
 func TestPullerDataNotAvailable(t *testing.T) {
@@ -419,8 +418,8 @@ func TestPullerDataNotAvailable(t *testing.T) {
 
 	dasf := &digestsAndSourceFactory{}
 	fetchedMessages, err := p1.fetch(dasf.mapDigest(toDigKey(dig)).toSources().create())
-	require.Empty(t, fetchedMessages.AvailableElements)
-	require.NoError(t, err)
+	assert.Empty(t, fetchedMessages.AvailableElements)
+	assert.NoError(t, err)
 }
 
 func TestPullerNoPeersKnown(t *testing.T) {
@@ -434,9 +433,9 @@ func TestPullerNoPeersKnown(t *testing.T) {
 	dasf := &digestsAndSourceFactory{}
 	d2s := dasf.mapDigest(&privdatacommon.DigKey{Collection: "col1", TxId: "txID1", Namespace: "ns1"}).toSources().create()
 	fetchedMessages, err := p1.fetch(d2s)
-	require.Empty(t, fetchedMessages)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "Empty membership")
+	assert.Empty(t, fetchedMessages)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Empty membership")
 }
 
 func TestPullPeerFilterError(t *testing.T) {
@@ -451,9 +450,9 @@ func TestPullPeerFilterError(t *testing.T) {
 	dasf := &digestsAndSourceFactory{}
 	d2s := dasf.mapDigest(&privdatacommon.DigKey{Collection: "col1", TxId: "txID1", Namespace: "ns1"}).toSources().create()
 	fetchedMessages, err := p1.fetch(d2s)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "Failed obtaining filter")
-	require.Empty(t, fetchedMessages)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Failed obtaining filter")
+	assert.Empty(t, fetchedMessages)
 }
 
 func TestPullerPeerNotEligible(t *testing.T) {
@@ -518,8 +517,8 @@ func TestPullerPeerNotEligible(t *testing.T) {
 	dasf := &digestsAndSourceFactory{}
 	d2s := dasf.mapDigest(&privdatacommon.DigKey{Collection: "col1", TxId: "txID1", Namespace: "ns1"}).toSources().create()
 	fetchedMessages, err := p1.fetch(d2s)
-	require.Empty(t, fetchedMessages.AvailableElements)
-	require.NoError(t, err)
+	assert.Empty(t, fetchedMessages.AvailableElements)
+	assert.NoError(t, err)
 }
 
 func TestPullerDifferentPeersDifferentCollections(t *testing.T) {
@@ -609,16 +608,16 @@ func TestPullerDifferentPeersDifferentCollections(t *testing.T) {
 
 	dasf := &digestsAndSourceFactory{}
 	fetchedMessages, err := p1.fetch(dasf.mapDigest(toDigKey(dig1)).toSources().mapDigest(toDigKey(dig2)).toSources().create())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	rws1 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[0])
 	rws2 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[1])
 	rws3 := util.PrivateRWSet(fetchedMessages.AvailableElements[1].Payload[0])
 	rws4 := util.PrivateRWSet(fetchedMessages.AvailableElements[1].Payload[1])
 	fetched := []util.PrivateRWSet{rws1, rws2, rws3, rws4}
-	require.Contains(t, fetched, p2TransientStore.RWSet[0])
-	require.Contains(t, fetched, p2TransientStore.RWSet[1])
-	require.Contains(t, fetched, p3TransientStore.RWSet[0])
-	require.Contains(t, fetched, p3TransientStore.RWSet[1])
+	assert.Contains(t, fetched, p2TransientStore.RWSet[0])
+	assert.Contains(t, fetched, p2TransientStore.RWSet[1])
+	assert.Contains(t, fetched, p3TransientStore.RWSet[0])
+	assert.Contains(t, fetched, p3TransientStore.RWSet[1])
 }
 
 func TestPullerRetries(t *testing.T) {
@@ -717,12 +716,12 @@ func TestPullerRetries(t *testing.T) {
 	// Fetch from someone
 	dasf := &digestsAndSourceFactory{}
 	fetchedMessages, err := p1.fetch(dasf.mapDigest(toDigKey(dig)).toSources().create())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	rws1 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[0])
 	rws2 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[1])
 	fetched := []util.PrivateRWSet{rws1, rws2}
-	require.NoError(t, err)
-	require.Equal(t, transientStore.RWSet, fetched)
+	assert.NoError(t, err)
+	assert.Equal(t, transientStore.RWSet, fetched)
 }
 
 func TestPullerPreferEndorsers(t *testing.T) {
@@ -809,16 +808,16 @@ func TestPullerPreferEndorsers(t *testing.T) {
 	dasf := &digestsAndSourceFactory{}
 	d2s := dasf.mapDigest(toDigKey(dig1)).toSources("p3").mapDigest(toDigKey(dig2)).toSources().create()
 	fetchedMessages, err := p1.fetch(d2s)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	rws1 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[0])
 	rws2 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[1])
 	rws3 := util.PrivateRWSet(fetchedMessages.AvailableElements[1].Payload[0])
 	rws4 := util.PrivateRWSet(fetchedMessages.AvailableElements[1].Payload[1])
 	fetched := []util.PrivateRWSet{rws1, rws2, rws3, rws4}
-	require.Contains(t, fetched, p3TransientStore.RWSet[0])
-	require.Contains(t, fetched, p3TransientStore.RWSet[1])
-	require.Contains(t, fetched, p2TransientStore.RWSet[0])
-	require.Contains(t, fetched, p2TransientStore.RWSet[1])
+	assert.Contains(t, fetched, p3TransientStore.RWSet[0])
+	assert.Contains(t, fetched, p3TransientStore.RWSet[1])
+	assert.Contains(t, fetched, p2TransientStore.RWSet[0])
+	assert.Contains(t, fetched, p2TransientStore.RWSet[1])
 }
 
 func TestPullerFetchReconciledItemsPreferPeersFromOriginalConfig(t *testing.T) {
@@ -925,16 +924,16 @@ func TestPullerFetchReconciledItemsPreferPeersFromOriginalConfig(t *testing.T) {
 	}
 
 	fetchedMessages, err := p1.FetchReconciledItems(d2cc)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	rws1 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[0])
 	rws2 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[1])
 	rws3 := util.PrivateRWSet(fetchedMessages.AvailableElements[1].Payload[0])
 	rws4 := util.PrivateRWSet(fetchedMessages.AvailableElements[1].Payload[1])
 	fetched := []util.PrivateRWSet{rws1, rws2, rws3, rws4}
-	require.Contains(t, fetched, p3TransientStore.RWSet[0])
-	require.Contains(t, fetched, p3TransientStore.RWSet[1])
-	require.Contains(t, fetched, p2TransientStore.RWSet[0])
-	require.Contains(t, fetched, p2TransientStore.RWSet[1])
+	assert.Contains(t, fetched, p3TransientStore.RWSet[0])
+	assert.Contains(t, fetched, p3TransientStore.RWSet[1])
+	assert.Contains(t, fetched, p2TransientStore.RWSet[0])
+	assert.Contains(t, fetched, p2TransientStore.RWSet[1])
 }
 
 func TestPullerAvoidPullingPurgedData(t *testing.T) {
@@ -1010,7 +1009,7 @@ func TestPullerAvoidPullingPurgedData(t *testing.T) {
 	p3.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", mock.MatchedBy(protoMatcher(dig1)), 0).Return(store, true, nil).
 		Run(
 			func(arg mock.Arguments) {
-				require.Fail(t, "we should not fetch private data from peers where it was purged")
+				assert.Fail(t, "we should not fetch private data from peers where it was purged")
 			},
 		)
 
@@ -1018,7 +1017,8 @@ func TestPullerAvoidPullingPurgedData(t *testing.T) {
 	p2.PrivateDataRetriever.(*dataRetrieverMock).On("CollectionRWSet", mock.MatchedBy(protoMatcher(dig2)), uint64(0)).Return(store, true, nil).
 		Run(
 			func(mock.Arguments) {
-				require.Fail(t, "we should not fetch private data of collection2 from peer 2")
+				assert.Fail(t, "we should not fetch private data of collection2 from peer 2")
+
 			},
 		)
 
@@ -1027,10 +1027,11 @@ func TestPullerAvoidPullingPurgedData(t *testing.T) {
 	// trying to fetch missing pvt data for block seq 1
 	fetchedMessages, err := p1.fetch(d2s)
 
-	require.NoError(t, err)
-	require.Equal(t, 1, len(fetchedMessages.PurgedElements))
-	require.Equal(t, dig1, fetchedMessages.PurgedElements[0])
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(fetchedMessages.PurgedElements))
+	assert.Equal(t, dig1, fetchedMessages.PurgedElements[0])
 	p3.PrivateDataRetriever.(*dataRetrieverMock).AssertNumberOfCalls(t, "CollectionRWSet", 1)
+
 }
 
 type counterDataRetreiver struct {
@@ -1115,7 +1116,7 @@ func TestPullerIntegratedWithDataRetreiver(t *testing.T) {
 	historyRetreiver.On("MostRecentCollectionConfigBelow", mock.Anything, ns2).Return(newCollectionConfig(col2), nil)
 	committer.On("GetConfigHistoryRetriever").Return(historyRetreiver, nil)
 
-	dataRetreiver := &counterDataRetreiver{PrivateDataRetriever: NewDataRetriever("testchannel", store, committer), numberOfCalls: 0}
+	dataRetreiver := &counterDataRetreiver{PrivateDataRetriever: NewDataRetriever(store, committer), numberOfCalls: 0}
 	p2.PrivateDataRetriever = dataRetreiver
 
 	dig1 := &privdatacommon.DigKey{
@@ -1137,11 +1138,11 @@ func TestPullerIntegratedWithDataRetreiver(t *testing.T) {
 	dasf := &digestsAndSourceFactory{}
 	d2s := dasf.mapDigest(dig1).toSources("p2").mapDigest(dig2).toSources("p2").create()
 	fetchedMessages, err := p1.fetch(d2s)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(fetchedMessages.AvailableElements))
-	require.Equal(t, 1, dataRetreiver.getNumberOfCalls())
-	require.Equal(t, 2, len(fetchedMessages.AvailableElements[0].Payload))
-	require.Equal(t, 2, len(fetchedMessages.AvailableElements[1].Payload))
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(fetchedMessages.AvailableElements))
+	assert.Equal(t, 1, dataRetreiver.getNumberOfCalls())
+	assert.Equal(t, 2, len(fetchedMessages.AvailableElements[0].Payload))
+	assert.Equal(t, 2, len(fetchedMessages.AvailableElements[1].Payload))
 }
 
 func toDigKey(dig *proto.PvtDataDigest) *privdatacommon.DigKey {
@@ -1213,17 +1214,17 @@ func TestPullerMetrics(t *testing.T) {
 	rws1 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[0])
 	rws2 := util.PrivateRWSet(fetchedMessages.AvailableElements[0].Payload[1])
 	fetched := []util.PrivateRWSet{rws1, rws2}
-	require.NoError(t, err)
-	require.Equal(t, p2TransientStore.RWSet, fetched)
+	assert.NoError(t, err)
+	assert.Equal(t, p2TransientStore.RWSet, fetched)
 
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", "A"},
 		testMetricProvider.FakePullDuration.WithArgsForCall(0),
 	)
-	require.True(t, testMetricProvider.FakePullDuration.ObserveArgsForCall(0) > 0)
-	require.Equal(t,
+	assert.True(t, testMetricProvider.FakePullDuration.ObserveArgsForCall(0) > 0)
+	assert.Equal(t,
 		[]string{"channel", "A"},
 		testMetricProvider.FakeRetrieveDuration.WithArgsForCall(0),
 	)
-	require.True(t, testMetricProvider.FakeRetrieveDuration.ObserveArgsForCall(0) > 0)
+	assert.True(t, testMetricProvider.FakeRetrieveDuration.ObserveArgsForCall(0) > 0)
 }

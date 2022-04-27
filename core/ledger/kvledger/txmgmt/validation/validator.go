@@ -9,6 +9,7 @@ package validation
 import (
 	"github.com/hyperledger/fabric-protos-go/ledger/rwset/kvrwset"
 	"github.com/hyperledger/fabric-protos-go/peer"
+	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/internal/version"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
@@ -18,13 +19,14 @@ import (
 // validator validates a tx against the latest committed state
 // and preceding valid transactions with in the same block
 type validator struct {
-	db       *privacyenabledstate.DB
-	hashFunc rwsetutil.HashFunc
+	db     *privacyenabledstate.DB
+	hasher ledger.Hasher
 }
 
 // preLoadCommittedVersionOfRSet loads committed version of all keys in each
 // transaction's read set into a cache.
 func (v *validator) preLoadCommittedVersionOfRSet(blk *block) error {
+
 	// Collect both public and hashed keys in read sets of all transactions in a given block
 	var pubKeys []*statedb.CompositeKey
 	var hashedKeys []*privacyenabledstate.HashedCompositeKey
@@ -101,9 +103,7 @@ func (v *validator) validateAndPrepareBatch(blk *block, doMVCCValidation bool) (
 		if validationCode == peer.TxValidationCode_VALID {
 			logger.Debugf("Block [%d] Transaction index [%d] TxId [%s] marked as valid by state validator. ContainsPostOrderWrites [%t]", blk.num, tx.indexInBlock, tx.id, tx.containsPostOrderWrites)
 			committingTxHeight := version.NewHeight(blk.num, uint64(tx.indexInBlock))
-			if err := updates.applyWriteSet(tx.rwset, committingTxHeight, v.db, tx.containsPostOrderWrites); err != nil {
-				return nil, err
-			}
+			updates.applyWriteSet(tx.rwset, committingTxHeight, v.db, tx.containsPostOrderWrites)
 		} else {
 			logger.Warningf("Block [%d] Transaction index [%d] TxId [%s] marked as invalid by state validator. Reason code [%s]",
 				blk.num, tx.indexInBlock, tx.id, validationCode.String())
@@ -117,9 +117,10 @@ func (v *validator) validateEndorserTX(
 	txRWSet *rwsetutil.TxRwSet,
 	doMVCCValidation bool,
 	updates *publicAndHashUpdates) (peer.TxValidationCode, error) {
-	validationCode := peer.TxValidationCode_VALID
+
+	var validationCode = peer.TxValidationCode_VALID
 	var err error
-	// mvcc validation, may invalidate transaction
+	//mvcc validation, may invalidate transaction
 	if doMVCCValidation {
 		validationCode, err = v.validateTx(txRWSet, updates)
 	}
@@ -128,7 +129,7 @@ func (v *validator) validateEndorserTX(
 
 func (v *validator) validateTx(txRWSet *rwsetutil.TxRwSet, updates *publicAndHashUpdates) (peer.TxValidationCode, error) {
 	// Uncomment the following only for local debugging. Don't want to print data in the logs in production
-	// logger.Debugf("validateTx - validating txRWSet: %s", spew.Sdump(txRWSet))
+	//logger.Debugf("validateTx - validating txRWSet: %s", spew.Sdump(txRWSet))
 	for _, nsRWSet := range txRWSet.NsRwSets {
 		ns := nsRWSet.NameSpace
 		// Validate public reads
@@ -223,14 +224,12 @@ func (v *validator) validateRangeQuery(ns string, rangeQueryInfo *kvrwset.RangeQ
 	var qv rangeQueryValidator
 	if rangeQueryInfo.GetReadsMerkleHashes() != nil {
 		logger.Debug(`Hashing results are present in the range query info hence, initiating hashing based validation`)
-		qv = &rangeQueryHashValidator{hashFunc: v.hashFunc}
+		qv = &rangeQueryHashValidator{hasher: v.hasher}
 	} else {
 		logger.Debug(`Hashing results are not present in the range query info hence, initiating raw KVReads based validation`)
 		qv = &rangeQueryResultsValidator{}
 	}
-	if err := qv.init(rangeQueryInfo, combinedItr); err != nil {
-		return false, err
-	}
+	qv.init(rangeQueryInfo, combinedItr)
 	return qv.validate()
 }
 

@@ -29,7 +29,7 @@ import (
 	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
 	"github.com/hyperledger/fabric/protoutil"
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 )
 
@@ -54,8 +54,7 @@ func newOrderer(port int, t *testing.T) *timeoutOrderer {
 	if err != nil {
 		panic(err)
 	}
-	o := &timeoutOrderer{
-		Server:           srv,
+	o := &timeoutOrderer{Server: srv,
 		Listener:         lsnr,
 		t:                t,
 		nextExpectedSeek: uint64(1),
@@ -225,10 +224,10 @@ func TestCreateChainWithOutputBlock(t *testing.T) {
 	defer func() { outputBlock = "" }()
 
 	err = cmd.Execute()
-	require.NoError(t, err, "execute should succeed")
+	assert.NoError(t, err, "execute should succeed")
 
 	_, err = os.Stat(outputBlockPath)
-	require.NoErrorf(t, err, "expected %s to exist", outputBlockPath)
+	assert.NoErrorf(t, err, "expected %s to exist", outputBlockPath)
 }
 
 func TestCreateChainWithDefaultAnchorPeers(t *testing.T) {
@@ -331,7 +330,7 @@ func TestCreateChainWithTimeoutErr(t *testing.T) {
 	if err := channelCmd.Execute(); err == nil {
 		t.Error("expected create chain to fail with deliver error")
 	} else {
-		require.Contains(t, err.Error(), "timeout waiting for channel creation")
+		assert.Contains(t, err.Error(), "timeout waiting for channel creation")
 	}
 
 	// failure - point to bad port and time out connecting to orderer
@@ -341,7 +340,7 @@ func TestCreateChainWithTimeoutErr(t *testing.T) {
 	if err := channelCmd.Execute(); err == nil {
 		t.Error("expected create chain to fail with deliver error")
 	} else {
-		require.Contains(t, err.Error(), "failed connecting")
+		assert.Contains(t, err.Error(), "failed connecting")
 	}
 }
 
@@ -443,7 +442,7 @@ func createTxFile(filename string, typ cb.HeaderType, channelID string) (*cb.Env
 		return nil, err
 	}
 
-	if err = ioutil.WriteFile(filename, data, 0o644); err != nil {
+	if err = ioutil.WriteFile(filename, data, 0644); err != nil {
 		return nil, err
 	}
 
@@ -463,7 +462,7 @@ func TestCreateChainFromTx(t *testing.T) {
 	}
 	defer os.RemoveAll(dir) // clean up
 
-	// this could be created by the create command
+	//this could be created by the create command
 	defer os.Remove(mockchannel + ".block")
 
 	file := filepath.Join(dir, mockchannel)
@@ -485,30 +484,30 @@ func TestCreateChainFromTx(t *testing.T) {
 	args := []string{"-c", "", "-f", file, "-o", "localhost:7050"}
 	cmd.SetArgs(args)
 	err = cmd.Execute()
-	require.Error(t, err, "Create command should have failed because channel ID is not specified")
-	require.Contains(t, err.Error(), "must supply channel ID")
+	assert.Error(t, err, "Create command should have failed because channel ID is not specified")
+	assert.Contains(t, err.Error(), "must supply channel ID")
 
 	// Error case 1
 	args = []string{"-c", mockchannel, "-f", file, "-o", "localhost:7050"}
 	cmd.SetArgs(args)
 	err = cmd.Execute()
-	require.Error(t, err, "Create command should have failed because tx file does not exist")
-	msgExpr := regexp.MustCompile(`channel create configuration tx file not found.*no such file or directory`)
-	require.True(t, msgExpr.MatchString(err.Error()))
+	assert.Error(t, err, "Create command should have failed because tx file does not exist")
+	var msgExpr = regexp.MustCompile(`channel create configuration tx file not found.*no such file or directory`)
+	assert.True(t, msgExpr.MatchString(err.Error()))
 
 	// Success case: -f option is empty
 	args = []string{"-c", mockchannel, "-f", "", "-o", "localhost:7050"}
 	cmd.SetArgs(args)
 	err = cmd.Execute()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	// Success case
 	args = []string{"-c", mockchannel, "-f", file, "-o", "localhost:7050"}
 	cmd.SetArgs(args)
 	_, err = createTxFile(file, cb.HeaderType_CONFIG_UPDATE, mockchannel)
-	require.NoError(t, err, "Couldn't create tx file")
+	assert.NoError(t, err, "Couldn't create tx file")
 	err = cmd.Execute()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 }
 
 func TestCreateChainInvalidTx(t *testing.T) {
@@ -527,7 +526,7 @@ func TestCreateChainInvalidTx(t *testing.T) {
 
 	defer os.RemoveAll(dir) // clean up
 
-	// this is created by create command
+	//this is created by create command
 	defer os.Remove(mockchannel + ".block")
 
 	file := filepath.Join(dir, mockchannel)
@@ -550,7 +549,7 @@ func TestCreateChainInvalidTx(t *testing.T) {
 	args := []string{"-c", mockchannel, "-f", file, "-o", "localhost:7050"}
 	cmd.SetArgs(args)
 
-	// bad type CONFIG
+	//bad type CONFIG
 	if _, err = createTxFile(file, cb.HeaderType_CONFIG, mockchannel); err != nil {
 		t.Fatalf("couldn't create tx file")
 	}
@@ -563,7 +562,7 @@ func TestCreateChainInvalidTx(t *testing.T) {
 		t.Errorf("invalid error")
 	}
 
-	// bad channel name - does not match one specified in command
+	//bad channel name - does not match one specified in command
 	if _, err = createTxFile(file, cb.HeaderType_CONFIG_UPDATE, "different_channel"); err != nil {
 		t.Fatalf("couldn't create tx file")
 	}
@@ -574,7 +573,7 @@ func TestCreateChainInvalidTx(t *testing.T) {
 		t.Errorf("invalid error")
 	}
 
-	// empty channel
+	//empty channel
 	if _, err = createTxFile(file, cb.HeaderType_CONFIG_UPDATE, ""); err != nil {
 		t.Fatalf("couldn't create tx file")
 	}
@@ -596,10 +595,10 @@ func TestCreateChainNilCF(t *testing.T) {
 
 	mockchannel := "mockchannel"
 	dir, err := ioutil.TempDir("", "createinvaltest-")
-	require.NoError(t, err, "Couldn't create temp dir")
+	assert.NoError(t, err, "Couldn't create temp dir")
 	defer os.RemoveAll(dir) // clean up
 
-	// this is created by create command
+	//this is created by create command
 	defer os.Remove(mockchannel + ".block")
 	file := filepath.Join(dir, mockchannel)
 
@@ -610,15 +609,15 @@ func TestCreateChainNilCF(t *testing.T) {
 	args := []string{"-c", mockchannel, "-f", file, "-o", "localhost:7050"}
 	cmd.SetArgs(args)
 	err = cmd.Execute()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to create deliver client")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create deliver client")
 
 	// Error case: invalid ordering service endpoint
 	args = []string{"-c", mockchannel, "-f", file, "-o", "localhost"}
 	cmd.SetArgs(args)
 	err = cmd.Execute()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "ordering service endpoint localhost is not valid or missing")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ordering service endpoint localhost is not valid or missing")
 
 	// Error case: invalid ca file
 	defer os.RemoveAll(dir) // clean up
@@ -626,9 +625,9 @@ func TestCreateChainNilCF(t *testing.T) {
 	args = []string{"create", "-c", mockchannel, "-f", file, "-o", "localhost:7050", "--tls", "true", "--cafile", dir + "/ca.pem"}
 	channelCmd.SetArgs(args)
 	err = channelCmd.Execute()
-	require.Error(t, err)
+	assert.Error(t, err)
 	t.Log(err)
-	require.Contains(t, err.Error(), "no such file or directory")
+	assert.Contains(t, err.Error(), "no such file or directory")
 }
 
 func TestSanityCheckAndSignChannelCreateTx(t *testing.T) {
@@ -640,28 +639,28 @@ func TestSanityCheckAndSignChannelCreateTx(t *testing.T) {
 	var err error
 
 	// Error case 1
-	_, err = sanityCheckAndSignConfigTx(env, signer)
-	require.Error(t, err, "Error expected for nil payload")
-	require.Contains(t, err.Error(), "bad payload")
+	env, err = sanityCheckAndSignConfigTx(env, signer)
+	assert.Error(t, err, "Error expected for nil payload")
+	assert.Contains(t, err.Error(), "bad payload")
 
 	// Error case 2
 	p := &cb.Payload{Header: nil}
 	data, err1 := proto.Marshal(p)
-	require.NoError(t, err1)
+	assert.NoError(t, err1)
 	env = &cb.Envelope{Payload: data}
-	_, err = sanityCheckAndSignConfigTx(env, signer)
-	require.Error(t, err, "Error expected for bad payload header")
-	require.Contains(t, err.Error(), "bad header")
+	env, err = sanityCheckAndSignConfigTx(env, signer)
+	assert.Error(t, err, "Error expected for bad payload header")
+	assert.Contains(t, err.Error(), "bad header")
 
 	// Error case 3
 	bites := bytes.NewBufferString("foo").Bytes()
 	p = &cb.Payload{Header: &cb.Header{ChannelHeader: bites}}
 	data, err = proto.Marshal(p)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	env = &cb.Envelope{Payload: data}
-	_, err = sanityCheckAndSignConfigTx(env, signer)
-	require.Error(t, err, "Error expected for bad channel header")
-	require.Contains(t, err.Error(), "could not unmarshall channel header")
+	env, err = sanityCheckAndSignConfigTx(env, signer)
+	assert.Error(t, err, "Error expected for bad channel header")
+	assert.Contains(t, err.Error(), "could not unmarshall channel header")
 
 	// Error case 4
 	mockchannel := "mockchannel"
@@ -672,14 +671,14 @@ func TestSanityCheckAndSignChannelCreateTx(t *testing.T) {
 	}()
 	ch := &cb.ChannelHeader{Type: int32(cb.HeaderType_CONFIG_UPDATE), ChannelId: mockchannel}
 	data, err = proto.Marshal(ch)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	p = &cb.Payload{Header: &cb.Header{ChannelHeader: data}, Data: bytes.NewBufferString("foo").Bytes()}
 	data, err = proto.Marshal(p)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	env = &cb.Envelope{Payload: data}
-	_, err = sanityCheckAndSignConfigTx(env, signer)
-	require.Error(t, err, "Error expected for bad payload data")
-	require.Contains(t, err.Error(), "Bad config update env")
+	env, err = sanityCheckAndSignConfigTx(env, signer)
+	assert.Error(t, err, "Error expected for bad payload data")
+	assert.Contains(t, err.Error(), "Bad config update env")
 
 	// Error case 5
 	signer = &mock.SignerSerializer{}
@@ -691,9 +690,9 @@ func TestSanityCheckAndSignChannelCreateTx(t *testing.T) {
 		&cb.ConfigEnvelope{},
 		0,
 		0)
-	require.NoError(t, err)
-	_, err = sanityCheckAndSignConfigTx(env, signer)
-	require.EqualError(t, err, "bad signer header")
+	assert.NoError(t, err)
+	env, err = sanityCheckAndSignConfigTx(env, signer)
+	assert.EqualError(t, err, "bad signer header")
 
 	// Error case 6
 	signer = &mock.SignerSerializer{}
@@ -705,7 +704,7 @@ func TestSanityCheckAndSignChannelCreateTx(t *testing.T) {
 		&cb.ConfigEnvelope{},
 		0,
 		0)
-	require.NoError(t, err)
-	_, err = sanityCheckAndSignConfigTx(env, signer)
-	require.EqualError(t, err, "signer failed to sign")
+	assert.NoError(t, err)
+	env, err = sanityCheckAndSignConfigTx(env, signer)
+	assert.EqualError(t, err, "signer failed to sign")
 }

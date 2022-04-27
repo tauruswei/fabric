@@ -8,7 +8,8 @@ package chaincode
 
 import (
 	"context"
-	"crypto/tls"
+	//"crypto/tls"
+	tls "github.com/tjfoc/gmtls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -139,6 +140,7 @@ func chaincodeInvokeOrQuery(cmd *cobra.Command, invoke bool, cf *ChaincodeCmdFac
 		cf.DeliverClients,
 		cf.BroadcastClient,
 	)
+
 	if err != nil {
 		return errors.Errorf("%s - proposal response: %v", err, proposalResp)
 	}
@@ -468,7 +470,7 @@ func InitCmdFactory(cmdName string, isEndorserRequired, isOrdererRequired bool, 
 			return nil, errors.New("no endorser clients retrieved - this might indicate a bug")
 		}
 	}
-	certificate, err := common.GetClientCertificateFnc()
+	certificate, err := common.GetCertificateFnc()
 	if err != nil {
 		return nil, errors.WithMessage(err, "error getting client certificate")
 	}
@@ -491,7 +493,7 @@ func InitCmdFactory(cmdName string, isEndorserRequired, isOrdererRequired bool, 
 				return nil, errors.WithMessagef(err, "error getting channel (%s) orderer endpoint", channelID)
 			}
 			if len(orderingEndpoints) == 0 {
-				return nil, errors.Errorf("no orderer endpoints retrieved for channel %s, pass orderer endpoint with -o flag instead", channelID)
+				return nil, errors.Errorf("no orderer endpoints retrieved for channel %s", channelID)
 			}
 			logger.Infof("Retrieved channel (%s) orderer endpoint: %s", channelID, orderingEndpoints[0])
 			// override viper env
@@ -499,6 +501,7 @@ func InitCmdFactory(cmdName string, isEndorserRequired, isOrdererRequired bool, 
 		}
 
 		broadcastClient, err = common.GetBroadcastClientFnc()
+
 		if err != nil {
 			return nil, errors.WithMessage(err, "error getting broadcast client")
 		}
@@ -692,13 +695,9 @@ func NewDeliverGroup(
 ) *DeliverGroup {
 	clients := make([]*DeliverClient, len(deliverClients))
 	for i, client := range deliverClients {
-		address := peerAddresses[i]
-		if address == "" {
-			address = viper.GetString("peer.address")
-		}
 		dc := &DeliverClient{
 			Client:  client,
-			Address: address,
+			Address: peerAddresses[i],
 		}
 		clients[i] = dc
 	}

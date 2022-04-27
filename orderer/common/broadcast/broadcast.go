@@ -88,6 +88,7 @@ func (bh *Handler) Handle(srv ab.AtomicBroadcast_BroadcastServer) error {
 			return err
 		}
 	}
+
 }
 
 type MetricsTracker struct {

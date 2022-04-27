@@ -17,10 +17,11 @@ import (
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protoutil"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestImplicitMetaPolicy_Convert(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a simple metapolicy requiring
 	// ALL of 2 sub-policies, each of which are plain signedby
 
@@ -41,8 +42,8 @@ func TestImplicitMetaPolicy_Convert(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p1)
-	require.NoError(t, err)
+	assert.NotNil(t, p1)
+	assert.NoError(t, err)
 
 	p2, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -59,8 +60,8 @@ func TestImplicitMetaPolicy_Convert(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p2)
-	require.NoError(t, err)
+	assert.NotNil(t, p2)
+	assert.NoError(t, err)
 
 	p := &policies.PolicyLogger{
 		Policy: &policies.ImplicitMetaPolicy{
@@ -71,9 +72,9 @@ func TestImplicitMetaPolicy_Convert(t *testing.T) {
 	}
 
 	spe, err := p.Convert()
-	require.NoError(t, err)
-	require.NotNil(t, spe)
-	require.Equal(t, &cb.SignaturePolicyEnvelope{
+	assert.NoError(t, err)
+	assert.NotNil(t, spe)
+	assert.Equal(t, &cb.SignaturePolicyEnvelope{
 		Version: 0,
 		Rule: policydsl.And(
 			policydsl.SignedBy(0),
@@ -103,6 +104,7 @@ func TestImplicitMetaPolicy_Convert(t *testing.T) {
 }
 
 func TestImplicitMetaPolicy_Convert1(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy requiring
 	// ALL of 2 sub-policies, where the first one is an OR of 2 and
 	// the second one is an OR of 1, with a principal that is already
@@ -111,12 +113,12 @@ func TestImplicitMetaPolicy_Convert1(t *testing.T) {
 	pfs := &cauthdsl.EnvelopeBasedPolicyProvider{}
 
 	p1, err := pfs.NewPolicy(policydsl.SignedByAnyMember([]string{"A", "B"}))
-	require.NotNil(t, p1)
-	require.NoError(t, err)
+	assert.NotNil(t, p1)
+	assert.NoError(t, err)
 
 	p2, err := pfs.NewPolicy(policydsl.SignedByAnyMember([]string{"B"}))
-	require.NotNil(t, p2)
-	require.NoError(t, err)
+	assert.NotNil(t, p2)
+	assert.NoError(t, err)
 
 	p := &policies.ImplicitMetaPolicy{
 		Threshold:     2,
@@ -125,9 +127,9 @@ func TestImplicitMetaPolicy_Convert1(t *testing.T) {
 	}
 
 	spe, err := p.Convert()
-	require.NoError(t, err)
-	require.NotNil(t, spe)
-	require.Equal(t, &cb.SignaturePolicyEnvelope{
+	assert.NoError(t, err)
+	assert.NotNil(t, spe)
+	assert.Equal(t, &cb.SignaturePolicyEnvelope{
 		Version: 0,
 		Rule: policydsl.And(
 			policydsl.Or(
@@ -162,6 +164,7 @@ func TestImplicitMetaPolicy_Convert1(t *testing.T) {
 }
 
 func TestImplicitMetaPolicy_Convert2(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy requiring
 	// ALL of 2 sub-policies, where the first one is an OR of an AND
 	// of 2 and an OR of 1 and the second one is an AND of 2, with
@@ -216,8 +219,8 @@ func TestImplicitMetaPolicy_Convert2(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p1)
-	require.NoError(t, err)
+	assert.NotNil(t, p1)
+	assert.NoError(t, err)
 
 	p2, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -248,8 +251,8 @@ func TestImplicitMetaPolicy_Convert2(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p2)
-	require.NoError(t, err)
+	assert.NotNil(t, p2)
+	assert.NoError(t, err)
 
 	p := &policies.ImplicitMetaPolicy{
 		Threshold:     2,
@@ -258,9 +261,9 @@ func TestImplicitMetaPolicy_Convert2(t *testing.T) {
 	}
 
 	spe, err := p.Convert()
-	require.NoError(t, err)
-	require.NotNil(t, spe)
-	require.Equal(t, &cb.SignaturePolicyEnvelope{
+	assert.NoError(t, err)
+	assert.NotNil(t, spe)
+	assert.Equal(t, &cb.SignaturePolicyEnvelope{
 		Version: 0,
 		Rule: policydsl.And(
 			policydsl.NOutOf(1,
@@ -327,6 +330,7 @@ func TestImplicitMetaPolicy_Convert2(t *testing.T) {
 }
 
 func TestImplicitMetaPolicy_Convert3(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy requiring
 	// ALL of 2 sub-policies, where the first one is a metapolicy itself,
 	// requiring ALL of 2 simple subpolicies to be satisfied and the
@@ -349,8 +353,8 @@ func TestImplicitMetaPolicy_Convert3(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p1)
-	require.NoError(t, err)
+	assert.NotNil(t, p1)
+	assert.NoError(t, err)
 
 	p2, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -367,8 +371,8 @@ func TestImplicitMetaPolicy_Convert3(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p2)
-	require.NoError(t, err)
+	assert.NotNil(t, p2)
+	assert.NoError(t, err)
 
 	p3, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -385,8 +389,8 @@ func TestImplicitMetaPolicy_Convert3(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p3)
-	require.NoError(t, err)
+	assert.NotNil(t, p3)
+	assert.NoError(t, err)
 
 	mp1 := &policies.ImplicitMetaPolicy{
 		Threshold:     2,
@@ -401,9 +405,9 @@ func TestImplicitMetaPolicy_Convert3(t *testing.T) {
 	}
 
 	spe, err := mp2.Convert()
-	require.NoError(t, err)
-	require.NotNil(t, spe)
-	require.Equal(t, &cb.SignaturePolicyEnvelope{
+	assert.NoError(t, err)
+	assert.NotNil(t, spe)
+	assert.Equal(t, &cb.SignaturePolicyEnvelope{
 		Version: 0,
 		Rule: policydsl.And(
 			policydsl.And(
@@ -445,6 +449,7 @@ func TestImplicitMetaPolicy_Convert3(t *testing.T) {
 }
 
 func TestImplicitMetaPolicy_Convert4(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy requiring
 	// ALL of 2 sub-policies, where the first one is a metapolicy itself,
 	// requiring ALL of 2 simple subpolicies to be satisfied and the
@@ -467,8 +472,8 @@ func TestImplicitMetaPolicy_Convert4(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p1)
-	require.NoError(t, err)
+	assert.NotNil(t, p1)
+	assert.NoError(t, err)
 
 	p2, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -485,8 +490,8 @@ func TestImplicitMetaPolicy_Convert4(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p2)
-	require.NoError(t, err)
+	assert.NotNil(t, p2)
+	assert.NoError(t, err)
 
 	p3, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -503,8 +508,8 @@ func TestImplicitMetaPolicy_Convert4(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p3)
-	require.NoError(t, err)
+	assert.NotNil(t, p3)
+	assert.NoError(t, err)
 
 	mp1 := &policies.ImplicitMetaPolicy{
 		Threshold:     2,
@@ -519,9 +524,9 @@ func TestImplicitMetaPolicy_Convert4(t *testing.T) {
 	}
 
 	spe, err := mp2.Convert()
-	require.NoError(t, err)
-	require.NotNil(t, spe)
-	require.Equal(t, &cb.SignaturePolicyEnvelope{
+	assert.NoError(t, err)
+	assert.NotNil(t, spe)
+	assert.Equal(t, &cb.SignaturePolicyEnvelope{
 		Version: 0,
 		Rule: policydsl.And(
 			policydsl.And(
@@ -545,6 +550,7 @@ func TestImplicitMetaPolicy_Convert4(t *testing.T) {
 }
 
 func TestImplicitMetaPolicy_Convert5(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy requiring
 	// ALL of 2 sub-policies, where the first one is an OR of an AND
 	// of 2 and an OR of 1 and the second one is an AND of 2, with
@@ -600,8 +606,8 @@ func TestImplicitMetaPolicy_Convert5(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p1)
-	require.NoError(t, err)
+	assert.NotNil(t, p1)
+	assert.NoError(t, err)
 
 	p2, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -632,8 +638,8 @@ func TestImplicitMetaPolicy_Convert5(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p2)
-	require.NoError(t, err)
+	assert.NotNil(t, p2)
+	assert.NoError(t, err)
 
 	p := &policies.ImplicitMetaPolicy{
 		Threshold:     2,
@@ -642,9 +648,9 @@ func TestImplicitMetaPolicy_Convert5(t *testing.T) {
 	}
 
 	spe, err := p.Convert()
-	require.NoError(t, err)
-	require.NotNil(t, spe)
-	require.Equal(t, &cb.SignaturePolicyEnvelope{
+	assert.NoError(t, err)
+	assert.NotNil(t, spe)
+	assert.Equal(t, &cb.SignaturePolicyEnvelope{
 		Version: 0,
 		Rule: policydsl.And(
 			policydsl.NOutOf(1,
@@ -702,6 +708,7 @@ func TestImplicitMetaPolicy_Convert5(t *testing.T) {
 }
 
 func TestImplicitMetaPolicy_Convert6(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy requiring
 	// ALL of 2 sub-policies, where the first one is an OR of an AND
 	// of 2 and an OR of 1 and the second one is an AND of 2, with
@@ -757,8 +764,8 @@ func TestImplicitMetaPolicy_Convert6(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p1)
-	require.NoError(t, err)
+	assert.NotNil(t, p1)
+	assert.NoError(t, err)
 
 	p2, err := pfs.NewPolicy(&cb.SignaturePolicyEnvelope{
 		Version: 0,
@@ -789,8 +796,8 @@ func TestImplicitMetaPolicy_Convert6(t *testing.T) {
 			},
 		},
 	})
-	require.NotNil(t, p2)
-	require.NoError(t, err)
+	assert.NotNil(t, p2)
+	assert.NoError(t, err)
 
 	p := &policies.ImplicitMetaPolicy{
 		Threshold:     2,
@@ -799,9 +806,9 @@ func TestImplicitMetaPolicy_Convert6(t *testing.T) {
 	}
 
 	spe, err := p.Convert()
-	require.NoError(t, err)
-	require.NotNil(t, spe)
-	require.Equal(t, &cb.SignaturePolicyEnvelope{
+	assert.NoError(t, err)
+	assert.NotNil(t, spe)
+	assert.Equal(t, &cb.SignaturePolicyEnvelope{
 		Version: 0,
 		Rule: policydsl.And(
 			policydsl.NOutOf(1,
@@ -860,6 +867,7 @@ func (i *inconvertiblePolicy) EvaluateIdentities(signatureSet []msp.Identity) er
 }
 
 func TestImplicitMetaPolicy_Convert7(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy
 	// with an incovertible subpolicy
 
@@ -870,8 +878,8 @@ func TestImplicitMetaPolicy_Convert7(t *testing.T) {
 	}
 
 	spe, err := p.Convert()
-	require.EqualError(t, err, "subpolicy number 0 type *policies_test.inconvertiblePolicy of policy mypolicy is not convertible")
-	require.Nil(t, spe)
+	assert.EqualError(t, err, "subpolicy number 0 type *policies_test.inconvertiblePolicy of policy mypolicy is not convertible")
+	assert.Nil(t, spe)
 }
 
 type convertFailurePolicy struct{}
@@ -889,6 +897,7 @@ func (i *convertFailurePolicy) Convert() (*cb.SignaturePolicyEnvelope, error) {
 }
 
 func TestImplicitMetaPolicy_Convert8(t *testing.T) {
+
 	// Scenario: we attempt the conversion of a metapolicy
 	// with a subpolicy whose conversion fails
 
@@ -901,6 +910,6 @@ func TestImplicitMetaPolicy_Convert8(t *testing.T) {
 	}
 
 	spe, err := p.Convert()
-	require.EqualError(t, err, "failed to convert subpolicy number 0 of policy mypolicy: nope")
-	require.Nil(t, spe)
+	assert.EqualError(t, err, "failed to convert subpolicy number 0 of policy mypolicy: nope")
+	assert.Nil(t, spe)
 }

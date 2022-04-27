@@ -145,8 +145,7 @@ type gossipChannel struct {
 	pkiID                     common.PKIidType
 	selfOrg                   api.OrgIdentityType
 	stopChan                  chan struct{}
-	selfStateInfoMsg          *proto.GossipMessage
-	selfStateInfoSignedMsg    *protoext.SignedGossipMessage
+	stateInfoMsg              *protoext.SignedGossipMessage
 	orgs                      []api.OrgIdentityType
 	joinMsg                   api.JoinChannelMessage
 	blockMsgStore             msgstore.MessageStore
@@ -273,11 +272,6 @@ func NewGossipChannel(pkiID common.PKIidType, org api.OrgIdentityType, mcs api.M
 	}
 	gc.stateInfoMsgStore = newStateInfoCache(gc.GetConf().StateInfoCacheSweepInterval, hashPeerExpiredInMembership, verifyStateInfoMsg)
 
-	// Setup a plain state info message at startup, just to have all required fields populated
-	// when this gossip channel is created
-	gc.updateProperties(1, nil, false)
-	gc.setupSignedStateInfoMessage()
-
 	ttl := adapter.GetConf().MsgExpirationTimeout
 	pol := protoext.NewGossipMessageComparator(0)
 
@@ -337,7 +331,7 @@ func (gc *gossipChannel) periodicalInvocation(fn func(), c <-chan time.Time) {
 func (gc *gossipChannel) Self() *protoext.SignedGossipMessage {
 	gc.RLock()
 	defer gc.RUnlock()
-	return gc.selfStateInfoSignedMsg
+	return gc.stateInfoMsg
 }
 
 // LeaveChannel makes the peer leave the channel
@@ -349,12 +343,11 @@ func (gc *gossipChannel) LeaveChannel() {
 
 	var chaincodes []*proto.Chaincode
 	var height uint64
-	if prevMsg := gc.selfStateInfoMsg; prevMsg != nil {
+	if prevMsg := gc.stateInfoMsg; prevMsg != nil {
 		chaincodes = prevMsg.GetStateInfo().Properties.Chaincodes
 		height = prevMsg.GetStateInfo().Properties.LedgerHeight
 	}
 	gc.updateProperties(height, chaincodes, true)
-	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(1))
 }
 
 func (gc *gossipChannel) hasLeftChannel() bool {
@@ -408,42 +401,13 @@ func (gc *gossipChannel) publishStateInfo() {
 	if atomic.LoadInt32(&gc.shouldGossipStateInfo) == int32(0) {
 		return
 	}
-
-	if len(gc.GetMembership()) == 0 {
-		gc.logger.Debugf("Empty membership, no one to publish state info to")
-		return
-	}
-
-	gc.publishSignedStateInfoMessage()
-	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(0))
-}
-
-func (gc *gossipChannel) publishSignedStateInfoMessage() {
-	stateInfoMsg, err := gc.setupSignedStateInfoMessage()
-	if err != nil {
-		gc.logger.Errorf("Failed creating signed state info message: %v", err)
-		return
-	}
-	gc.stateInfoMsgStore.Add(stateInfoMsg)
-	gc.Gossip(stateInfoMsg)
-}
-
-func (gc *gossipChannel) setupSignedStateInfoMessage() (*protoext.SignedGossipMessage, error) {
 	gc.RLock()
-	msg := gc.selfStateInfoMsg
+	stateInfoMsg := gc.stateInfoMsg
 	gc.RUnlock()
-
-	stateInfoMsg, err := gc.Sign(msg)
-	if err != nil {
-		gc.logger.Error("Failed signing message:", err)
-		return nil, err
+	gc.Gossip(stateInfoMsg)
+	if len(gc.GetMembership()) > 0 {
+		atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(0))
 	}
-
-	gc.Lock()
-	gc.selfStateInfoSignedMsg = stateInfoMsg
-	gc.Unlock()
-
-	return stateInfoMsg, nil
 }
 
 func (gc *gossipChannel) createBlockPuller() pull.Mediator {
@@ -552,7 +516,10 @@ func (gc *gossipChannel) EligibleForChannel(member discovery.NetworkMember) bool
 		return false
 	}
 	msg := gc.stateInfoMsgStore.MsgByID(member.PKIid)
-	return msg != nil
+	if msg == nil {
+		return false
+	}
+	return true
 }
 
 // AddToMsgStore adds a given GossipMessage to the message store
@@ -921,43 +888,35 @@ func (gc *gossipChannel) UpdateLedgerHeight(height uint64) {
 
 	var chaincodes []*proto.Chaincode
 	var leftChannel bool
-	if prevMsg := gc.selfStateInfoMsg; prevMsg != nil {
+	if prevMsg := gc.stateInfoMsg; prevMsg != nil {
 		leftChannel = prevMsg.GetStateInfo().Properties.LeftChannel
 		chaincodes = prevMsg.GetStateInfo().Properties.Chaincodes
 	}
 	gc.updateProperties(height, chaincodes, leftChannel)
-	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(1))
 }
 
 // UpdateChaincodes updates the chaincodes the peer publishes
 // to other peers in the channel
 func (gc *gossipChannel) UpdateChaincodes(chaincodes []*proto.Chaincode) {
-	// Always publish the signed state info message regardless.
-	// We do this because we have to update our data structures
-	// with the new chaincodes installed/instantiated, to be able to
-	// respond to discovery requests, no matter if we see other peers
-	// in the membership, or do not see them.
-
-	defer gc.publishSignedStateInfoMessage()
-
 	gc.Lock()
 	defer gc.Unlock()
 
 	var ledgerHeight uint64 = 1
 	var leftChannel bool
-	if prevMsg := gc.selfStateInfoMsg; prevMsg != nil {
+	if prevMsg := gc.stateInfoMsg; prevMsg != nil {
 		ledgerHeight = prevMsg.GetStateInfo().Properties.LedgerHeight
 		leftChannel = prevMsg.GetStateInfo().Properties.LeftChannel
 	}
 	gc.updateProperties(ledgerHeight, chaincodes, leftChannel)
-	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(1))
 }
 
 // UpdateStateInfo updates this channel's StateInfo message
 // that is periodically published
-func (gc *gossipChannel) updateStateInfo(msg *proto.GossipMessage) {
+func (gc *gossipChannel) updateStateInfo(msg *protoext.SignedGossipMessage) {
+	gc.stateInfoMsgStore.Add(msg)
 	gc.ledgerHeight = msg.GetStateInfo().Properties.LedgerHeight
-	gc.selfStateInfoMsg = msg
+	gc.stateInfoMsg = msg
+	atomic.StoreInt32(&gc.shouldGossipStateInfo, int32(1))
 }
 
 func (gc *gossipChannel) updateProperties(ledgerHeight uint64, chaincodes []*proto.Chaincode, leftChannel bool) {
@@ -982,7 +941,12 @@ func (gc *gossipChannel) updateProperties(ledgerHeight uint64, chaincodes []*pro
 		},
 	}
 
-	gc.updateStateInfo(m)
+	msg, err := gc.Sign(m)
+	if err != nil {
+		gc.logger.Error("Failed signing message:", err)
+		return
+	}
+	gc.updateStateInfo(msg)
 }
 
 func newStateInfoCache(sweepInterval time.Duration, hasExpired func(interface{}) bool, verifyFunc membershipPredicate) *stateInfoCache {
@@ -1077,7 +1041,7 @@ func GenerateMAC(pkiID common.PKIidType, channelID common.ChannelID) []byte {
 	return common_utils.ComputeSHA256(preImage)
 }
 
-// membershipTracker is a struct for tracking changes in peers of the channel
+//membershipTracker is a struct for tracking changes in peers of the channel
 type membershipTracker struct {
 	getPeersToTrack func() []discovery.NetworkMember
 	report          func(...interface{})
@@ -1087,7 +1051,7 @@ type membershipTracker struct {
 	chainID         common.ChannelID
 }
 
-// endpoints return all peers by their endpoints
+//endpoints return all peers by their endpoints
 func endpoints(members discovery.Members) [][]string {
 	var currView [][]string
 	for _, member := range members {
@@ -1104,7 +1068,7 @@ func endpoints(members discovery.Members) [][]string {
 	return currView
 }
 
-// checkIfPeersChanged checks which peers are offline and which are online for channel
+//checkIfPeersChanged checks which peers are offline and which are online for channel
 func (mt *membershipTracker) checkIfPeersChanged(prevPeers discovery.Members, currPeers discovery.Members,
 	prevSetPeers map[string]struct{}, currSetPeers map[string]struct{}) {
 	var currView [][]string
@@ -1143,7 +1107,7 @@ func (mt *membershipTracker) trackMembershipChanges() {
 	prev := mt.getPeersToTrack()
 	prevSetPeers := mt.createSetOfPeers(prev)
 	for {
-		// timeout to check changes in peers
+		//timeout to check changes in peers
 		select {
 		case <-mt.stopChan:
 			return

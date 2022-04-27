@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hyperledger/fabric-protos-go/peer"
+	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/protoutil"
 )
@@ -111,7 +112,7 @@ type CollectionStore interface {
 	// RetrieveReadWritePermission retrieves the read-write persmission of the creator of the
 	// signedProposal for a given collection using collection access policy and flags such as
 	// memberOnlyRead & memberOnlyWrite
-	RetrieveReadWritePermission(CollectionCriteria, *peer.SignedProposal, ledger.QueryExecutor) (bool, bool, error)
+	RetrieveReadWritePermission(CollectionCriteria, *pb.SignedProposal, ledger.QueryExecutor) (bool, bool, error)
 
 	CollectionFilter
 }

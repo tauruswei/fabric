@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hyperledger/fabric/integration/helpers"
+
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gexec"
 )
@@ -50,6 +52,9 @@ func (s *BuildServer) Shutdown() {
 
 func (s *BuildServer) Components() *Components {
 	Expect(s.lis).NotTo(BeNil())
+
+	helpers.AssertImagesExist(RequiredImages...)
+
 	return &Components{
 		ServerAddress: s.lis.Addr().String(),
 	}

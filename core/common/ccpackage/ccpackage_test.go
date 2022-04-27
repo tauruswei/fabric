@@ -32,8 +32,7 @@ func ownerCreateCCDepSpec(codepackage []byte, sigpolicy *common.SignaturePolicyE
 func createInstantiationPolicy(mspid string, role mspprotos.MSPRole_MSPRoleType) *common.SignaturePolicyEnvelope {
 	principals := []*mspprotos.MSPPrincipal{{
 		PrincipalClassification: mspprotos.MSPPrincipal_ROLE,
-		Principal:               protoutil.MarshalOrPanic(&mspprotos.MSPRole{Role: role, MspIdentifier: mspid}),
-	}}
+		Principal:               protoutil.MarshalOrPanic(&mspprotos.MSPRole{Role: role, MspIdentifier: mspid})}}
 	sigspolicy := []*common.SignaturePolicy{policydsl.SignedBy(int32(0))}
 
 	// create the policy: it requires exactly 1 signature from any of the principals
@@ -64,7 +63,7 @@ func TestAddSignature(t *testing.T) {
 		t.Fatalf("error owner creating package %s", err)
 		return
 	}
-	// add one more with the same signer (we don't have another signer to test with)
+	//add one more with the same signer (we don't have another signer to test with)
 	env, err = SignExistingPackage(env, signer)
 	if err != nil || env == nil {
 		t.Fatalf("error signing existing package %s", err)
@@ -278,11 +277,9 @@ func TestMismatchedSigPolicy(t *testing.T) {
 	}
 }
 
-var (
-	localmsp         msp.MSP
-	signer           msp.SigningIdentity
-	signerSerialized []byte
-)
+var localmsp msp.MSP
+var signer msp.SigningIdentity
+var signerSerialized []byte
 
 func TestMain(m *testing.M) {
 	// setup the MSP manager so that we can sign/verify

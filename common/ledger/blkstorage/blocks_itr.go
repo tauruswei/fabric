@@ -23,21 +23,21 @@ type blocksItr struct {
 }
 
 func newBlockItr(mgr *blockfileMgr, startBlockNum uint64) *blocksItr {
-	mgr.blkfilesInfoCond.L.Lock()
-	defer mgr.blkfilesInfoCond.L.Unlock()
-	return &blocksItr{mgr, mgr.blockfilesInfo.lastPersistedBlock, startBlockNum, nil, false, &sync.Mutex{}}
+	mgr.cpInfoCond.L.Lock()
+	defer mgr.cpInfoCond.L.Unlock()
+	return &blocksItr{mgr, mgr.cpInfo.lastBlockNumber, startBlockNum, nil, false, &sync.Mutex{}}
 }
 
 func (itr *blocksItr) waitForBlock(blockNum uint64) uint64 {
-	itr.mgr.blkfilesInfoCond.L.Lock()
-	defer itr.mgr.blkfilesInfoCond.L.Unlock()
-	for itr.mgr.blockfilesInfo.lastPersistedBlock < blockNum && !itr.shouldClose() {
+	itr.mgr.cpInfoCond.L.Lock()
+	defer itr.mgr.cpInfoCond.L.Unlock()
+	for itr.mgr.cpInfo.lastBlockNumber < blockNum && !itr.shouldClose() {
 		logger.Debugf("Going to wait for newer blocks. maxAvailaBlockNumber=[%d], waitForBlockNum=[%d]",
-			itr.mgr.blockfilesInfo.lastPersistedBlock, blockNum)
-		itr.mgr.blkfilesInfoCond.Wait()
-		logger.Debugf("Came out of wait. maxAvailaBlockNumber=[%d]", itr.mgr.blockfilesInfo.lastPersistedBlock)
+			itr.mgr.cpInfo.lastBlockNumber, blockNum)
+		itr.mgr.cpInfoCond.Wait()
+		logger.Debugf("Came out of wait. maxAvailaBlockNumber=[%d]", itr.mgr.cpInfo.lastBlockNumber)
 	}
-	return itr.mgr.blockfilesInfo.lastPersistedBlock
+	return itr.mgr.cpInfo.lastBlockNumber
 }
 
 func (itr *blocksItr) initStream() error {
@@ -84,12 +84,12 @@ func (itr *blocksItr) Next() (ledger.QueryResult, error) {
 
 // Close releases any resources held by the iterator
 func (itr *blocksItr) Close() {
-	itr.mgr.blkfilesInfoCond.L.Lock()
-	defer itr.mgr.blkfilesInfoCond.L.Unlock()
+	itr.mgr.cpInfoCond.L.Lock()
+	defer itr.mgr.cpInfoCond.L.Unlock()
 	itr.closeMarkerLock.Lock()
 	defer itr.closeMarkerLock.Unlock()
 	itr.closeMarker = true
-	itr.mgr.blkfilesInfoCond.Broadcast()
+	itr.mgr.cpInfoCond.Broadcast()
 	if itr.stream != nil {
 		itr.stream.close()
 	}

@@ -109,7 +109,7 @@ func (s *MSPMessageCryptoService) GetPKIidOfCert(peerIdentity api.PeerIdentityTy
 	raw := append(mspIDRaw, sid.IdBytes...)
 
 	// Hash
-	digest, err := s.hasher.Hash(raw, &bccsp.SHA256Opts{})
+	digest, err := s.hasher.Hash(raw, &bccsp.GMSM3Opts{})
 	if err != nil {
 		mcsLogger.Errorf("Failed computing digest of serialized identity %s: [%s]", peerIdentity, err)
 		return nil
@@ -259,6 +259,7 @@ func (s *MSPMessageCryptoService) Expiration(peerIdentity api.PeerIdentityType) 
 		return time.Time{}, errors.Wrap(err, "Unable to extract msp.Identity from peer Identity")
 	}
 	return id.ExpiresAt(), nil
+
 }
 
 func (s *MSPMessageCryptoService) getValidatedIdentity(peerIdentity api.PeerIdentityType) (msp.Identity, common.ChannelID, error) {

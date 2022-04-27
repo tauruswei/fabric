@@ -15,7 +15,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("discovery.acl")
+var (
+	logger = flogging.MustGetLogger("discovery.acl")
+)
 
 // ChannelConfigGetter enables to retrieve the channel config resources
 type ChannelConfigGetter interface {

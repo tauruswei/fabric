@@ -8,13 +8,11 @@ package lscc
 
 import (
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric-protos-go/ledger/queryresult"
 	"github.com/hyperledger/fabric-protos-go/ledger/rwset/kvrwset"
 	"github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/privdata"
 	"github.com/hyperledger/fabric/core/ledger"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/pkg/errors"
 )
 
@@ -23,7 +21,8 @@ const (
 )
 
 // DeployedCCInfoProvider implements interface ledger.DeployedChaincodeInfoProvider
-type DeployedCCInfoProvider struct{}
+type DeployedCCInfoProvider struct {
+}
 
 // Namespaces implements function in interface ledger.DeployedChaincodeInfoProvider
 func (p *DeployedCCInfoProvider) Namespaces() []string {
@@ -37,7 +36,7 @@ func (p *DeployedCCInfoProvider) UpdatedChaincodes(stateUpdates map[string][]*kv
 	updatedCCNames := map[string]bool{}
 
 	for _, kvWrite := range lsccUpdates {
-		if rwsetutil.IsKVWriteDelete(kvWrite) {
+		if kvWrite.IsDelete {
 			// lscc namespace is not expected to have deletes
 			continue
 		}
@@ -62,11 +61,6 @@ func (p *DeployedCCInfoProvider) ImplicitCollections(channelName, chaincodeName 
 	return nil, nil
 }
 
-// GenerateImplicitCollectionForOrg is not implemented for legacy chaincodes
-func (p *DeployedCCInfoProvider) GenerateImplicitCollectionForOrg(mspid string) *peer.StaticCollectionConfig {
-	return nil
-}
-
 // ChaincodeInfo implements function in interface ledger.DeployedChaincodeInfoProvider
 func (p *DeployedCCInfoProvider) ChaincodeInfo(channelName, chaincodeName string, qe ledger.SimpleQueryExecutor) (*ledger.DeployedChaincodeInfo, error) {
 	chaincodeDataBytes, err := qe.GetState(lsccNamespace, chaincodeName)
@@ -88,36 +82,6 @@ func (p *DeployedCCInfoProvider) ChaincodeInfo(channelName, chaincodeName string
 		ExplicitCollectionConfigPkg: collConfigPkg,
 		IsLegacy:                    true,
 	}, nil
-}
-
-// AllChaincodesInfo returns the mapping of chaincode name to DeployedChaincodeInfo for legacy chaincodes
-func (p *DeployedCCInfoProvider) AllChaincodesInfo(channelName string, qe ledger.SimpleQueryExecutor) (map[string]*ledger.DeployedChaincodeInfo, error) {
-	iter, err := qe.GetStateRangeScanIterator(lsccNamespace, "", "")
-	if err != nil {
-		return nil, err
-	}
-	defer iter.Close()
-
-	result := make(map[string]*ledger.DeployedChaincodeInfo)
-	for {
-		entry, err := iter.Next()
-		if err != nil {
-			return nil, err
-		}
-		if entry == nil {
-			break
-		}
-
-		kv := entry.(*queryresult.KV)
-		if !privdata.IsCollectionConfigKey(kv.Key) {
-			deployedccInfo, err := p.ChaincodeInfo(channelName, kv.Key, qe)
-			if err != nil {
-				return nil, err
-			}
-			result[kv.Key] = deployedccInfo
-		}
-	}
-	return result, nil
 }
 
 // AllCollectionsConfigPkg implements function in interface ledger.DeployedChaincodeInfoProvider

@@ -41,6 +41,11 @@ type txAndPvtdata struct {
 
 //go:generate counterfeiter -o fakes/signer.go --fake-name Signer . signer
 
+type signer interface {
+	Sign(msg []byte) ([]byte, error)
+	Serialize() ([]byte, error)
+}
+
 func convertToCollConfigProtoBytes(collConfs []*collConf) ([]byte, error) {
 	var protoConfArray []*protopeer.CollectionConfig
 	for _, c := range collConfs {
@@ -138,6 +143,7 @@ func constructUnsignedTxEnv(
 	visibility []byte,
 	headerType common.HeaderType,
 ) (*common.Envelope, string, error) {
+
 	sigID := &fakes.Signer{}
 	sigID.SerializeReturns([]byte("signer"), nil)
 	sigID.SignReturns([]byte("signature"), nil)
@@ -160,13 +166,10 @@ func constructUnsignedTxEnv(
 			},
 			ss,
 		)
-		if err != nil {
-			return nil, "", err
-		}
+
 	} else {
 		// if txid is set, we should not generate a txid instead reuse the given txid
-		var nonce []byte
-		nonce, err = crypto.GetRandomNonce()
+		nonce, err := crypto.GetRandomNonce()
 		if err != nil {
 			return nil, "", err
 		}
@@ -183,9 +186,9 @@ func constructUnsignedTxEnv(
 			ss,
 			nil,
 		)
-		if err != nil {
-			return nil, "", err
-		}
+	}
+	if err != nil {
+		return nil, "", err
 	}
 
 	presp, err := protoutil.CreateProposalResponse(

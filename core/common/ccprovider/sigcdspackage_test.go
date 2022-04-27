@@ -16,7 +16,7 @@ import (
 	"github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric/core/common/ccpackage"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func processSignedCDS(cds *pb.ChaincodeDeploymentSpec, policy *common.SignaturePolicyEnvelope, tofs bool) (*SignedCDSPackage, []byte, *ChaincodeData, error) {
@@ -68,10 +68,8 @@ func TestPutSignedCDSErrorPaths(t *testing.T) {
 	ccdir := setupccdir()
 	defer os.RemoveAll(ccdir)
 
-	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{
-		Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
-		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}},
-	}, CodePackage: []byte("code")}
+	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
+		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}}}, CodePackage: []byte("code")}
 
 	ccpack, b, _, err := processSignedCDS(cds, &common.SignaturePolicyEnvelope{Version: 1}, true)
 	if err != nil {
@@ -82,93 +80,91 @@ func TestPutSignedCDSErrorPaths(t *testing.T) {
 	// remove the buffer
 	ccpack.buf = nil
 	err = ccpack.PutChaincodeToFS()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "uninitialized package", "Unexpected error putting package on the FS")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "uninitialized package", "Unexpected error putting package on the FS")
 
 	// put back the buffer
 	ccpack.buf = b
 	id := ccpack.id
 	ccpack.id = nil // remove the id
 	err = ccpack.PutChaincodeToFS()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "id cannot be nil if buf is not nil", "Unexpected error putting package on the FS")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "id cannot be nil if buf is not nil", "Unexpected error putting package on the FS")
 
-	require.Panics(t, func() {
+	assert.Panics(t, func() {
 		ccpack.GetId()
 	}, "GetId should have paniced if chaincode package ID is nil")
 
 	// put back the id
 	ccpack.id = id
 	id1 := ccpack.GetId()
-	require.Equal(t, id, id1)
+	assert.Equal(t, id, id1)
 
 	savDepSpec := ccpack.sDepSpec
 	ccpack.sDepSpec = nil // remove the signed chaincode deployment spec
 	err = ccpack.PutChaincodeToFS()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "depspec cannot be nil if buf is not nil", "Unexpected error putting package on the FS")
-	require.Panics(t, func() {
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "depspec cannot be nil if buf is not nil", "Unexpected error putting package on the FS")
+	assert.Panics(t, func() {
 		ccpack.GetInstantiationPolicy()
 	}, "GetChaincodeData should have paniced if signed chaincode deployment spec is nil")
-	require.Panics(t, func() {
+	assert.Panics(t, func() {
 		ccpack.GetDepSpecBytes()
 	}, "GetDepSpecBytes should have paniced if signed chaincode deployment spec is nil")
 	ccpack.sDepSpec = savDepSpec // put back dep spec
 	sdepspec1 := ccpack.GetInstantiationPolicy()
-	require.NotNil(t, sdepspec1)
+	assert.NotNil(t, sdepspec1)
 	depspecBytes := ccpack.GetDepSpecBytes()
-	require.NotNil(t, depspecBytes)
+	assert.NotNil(t, depspecBytes)
 
 	// put back the signed chaincode deployment spec
 	depSpec := ccpack.depSpec
 	ccpack.depSpec = nil // remove the chaincode deployment spec
-	require.Panics(t, func() {
+	assert.Panics(t, func() {
 		ccpack.GetDepSpec()
 	}, "GetDepSec should have paniced if chaincode deployment spec is nil")
-	require.Panics(t, func() {
+	assert.Panics(t, func() {
 		ccpack.GetChaincodeData()
 	}, "GetChaincodeData should have paniced if chaincode deployment spec is nil")
 	ccpack.depSpec = depSpec // put back the chaincode deployment spec
 	depSpec1 := ccpack.GetDepSpec()
-	require.NotNil(t, depSpec1)
+	assert.NotNil(t, depSpec1)
 
 	env := ccpack.env
 	ccpack.env = nil // remove the envelope
 	err = ccpack.PutChaincodeToFS()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "env cannot be nil if buf and depspec are not nil", "Unexpected error putting package on the FS")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "env cannot be nil if buf and depspec are not nil", "Unexpected error putting package on the FS")
 	ccpack.env = env // put back the envelope
 	env1 := ccpack.GetPackageObject()
-	require.Equal(t, env, env1)
+	assert.Equal(t, env, env1)
 
 	data := ccpack.data
 	ccpack.data = nil // remove the data
 	err = ccpack.PutChaincodeToFS()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "nil data", "Unexpected error putting package on the FS")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "nil data", "Unexpected error putting package on the FS")
 	ccpack.data = data // put back the data
 
 	datab := ccpack.datab
 	ccpack.datab = nil // remove the data bytes
 	err = ccpack.PutChaincodeToFS()
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "nil data bytes", "Unexpected error putting package on the FS")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "nil data bytes", "Unexpected error putting package on the FS")
 	ccpack.datab = datab // put back the data bytes
 
 	// remove the chaincode directory
 	os.RemoveAll(ccdir)
 	err = ccpack.PutChaincodeToFS()
-	require.Error(t, err, "Expected error putting package on the FS")
+	assert.Error(t, err, "Expected error putting package on the FS")
 }
 
 func TestGetCDSDataErrorPaths(t *testing.T) {
 	ccdir := setupccdir()
 	defer os.RemoveAll(ccdir)
 
-	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{
-		Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
-		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}},
-	}, CodePackage: []byte("code")}
+	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
+		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}}}, CodePackage: []byte("code")}
 
 	ccpack, _, _, err := processSignedCDS(cds, &common.SignaturePolicyEnvelope{Version: 1}, true)
 	if err != nil {
@@ -177,37 +173,35 @@ func TestGetCDSDataErrorPaths(t *testing.T) {
 	}
 
 	// Error case 1: signed chaincode deployment spec passed to getCDSData is nil
-	require.Panics(t, func() {
+	assert.Panics(t, func() {
 		_, _, _, err = ccpack.getCDSData(nil)
 	}, "getCDSData should have paniced when called with nil signed chaincode deployment spec")
 
 	// Error case 2: bad chaincode deployment spec
 	scdp := &pb.SignedChaincodeDeploymentSpec{ChaincodeDeploymentSpec: []byte("bad spec")}
 	_, _, _, err = ccpack.getCDSData(scdp)
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// Error case 3: instantiation policy is nil
 	instPolicy := ccpack.sDepSpec.InstantiationPolicy
 	ccpack.sDepSpec.InstantiationPolicy = nil
 	_, _, _, err = ccpack.getCDSData(ccpack.sDepSpec)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "instantiation policy cannot be nil for chaincode", "Unexpected error returned by getCDSData")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "instantiation policy cannot be nil for chaincode", "Unexpected error returned by getCDSData")
 	ccpack.sDepSpec.InstantiationPolicy = instPolicy
 
 	ccpack.sDepSpec.OwnerEndorsements = make([]*pb.Endorsement, 1)
 	ccpack.sDepSpec.OwnerEndorsements[0] = &pb.Endorsement{}
 	_, _, _, err = ccpack.getCDSData(ccpack.sDepSpec)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 }
 
 func TestInitFromBufferErrorPaths(t *testing.T) {
 	ccdir := setupccdir()
 	defer os.RemoveAll(ccdir)
 
-	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{
-		Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
-		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}},
-	}, CodePackage: []byte("code")}
+	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
+		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}}}, CodePackage: []byte("code")}
 
 	ccpack, _, _, err := processSignedCDS(cds, &common.SignaturePolicyEnvelope{Version: 1}, true)
 	if err != nil {
@@ -216,18 +210,16 @@ func TestInitFromBufferErrorPaths(t *testing.T) {
 	}
 
 	_, err = ccpack.InitFromBuffer([]byte("bad buffer"))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "failed to unmarshal envelope from bytes", "Unexpected error returned by InitFromBuffer")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to unmarshal envelope from bytes", "Unexpected error returned by InitFromBuffer")
 }
 
 func TestValidateSignedCCErrorPaths(t *testing.T) {
 	ccdir := setupccdir()
 	defer os.RemoveAll(ccdir)
 
-	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{
-		Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
-		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}},
-	}, CodePackage: []byte("code")}
+	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"},
+		Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}}}, CodePackage: []byte("code")}
 
 	ccpack, _, _, err := processSignedCDS(cds, &common.SignaturePolicyEnvelope{Version: 1}, true)
 	if err != nil {
@@ -235,37 +227,37 @@ func TestValidateSignedCCErrorPaths(t *testing.T) {
 		return
 	}
 
-	// validate with invalid name
+	//validate with invalid name
 	cd := &ChaincodeData{Name: "invalname", Version: "0"}
 	err = ccpack.ValidateCC(cd)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid chaincode data", "Unexpected error validating package")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid chaincode data", "Unexpected error validating package")
 
 	savDepSpec := ccpack.sDepSpec
 	ccpack.sDepSpec = nil
 	err = ccpack.ValidateCC(cd)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "uninitialized package", "Unexpected error validating package")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "uninitialized package", "Unexpected error validating package")
 	ccpack.sDepSpec = savDepSpec
 
 	cdspec := ccpack.sDepSpec.ChaincodeDeploymentSpec
 	ccpack.sDepSpec.ChaincodeDeploymentSpec = nil
 	err = ccpack.ValidateCC(cd)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "signed chaincode deployment spec cannot be nil in a package", "Unexpected error validating package")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "signed chaincode deployment spec cannot be nil in a package", "Unexpected error validating package")
 	ccpack.sDepSpec.ChaincodeDeploymentSpec = cdspec
 
 	depspec := ccpack.depSpec
 	ccpack.depSpec = nil
 	err = ccpack.ValidateCC(cd)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "chaincode deployment spec cannot be nil in a package", "Unexpected error validating package")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "chaincode deployment spec cannot be nil in a package", "Unexpected error validating package")
 	ccpack.depSpec = depspec
 
 	cd = &ChaincodeData{Name: "\027", Version: "0"}
 	err = ccpack.ValidateCC(cd)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), `invalid chaincode name: "\x17"`)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), `invalid chaincode name: "\x17"`)
 }
 
 func TestSigCDSGetCCPackage(t *testing.T) {
@@ -280,7 +272,7 @@ func TestSigCDSGetCCPackage(t *testing.T) {
 	b := protoutil.MarshalOrPanic(env)
 
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	ccpack, err := GetCCPackage(b, cryptoProvider)
 	if err != nil {
@@ -317,7 +309,7 @@ func TestInvalidSigCDSGetCCPackage(t *testing.T) {
 
 	b := protoutil.MarshalOrPanic(cds)
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	ccpack, err := GetCCPackage(b, cryptoProvider)
 	if err != nil {
 		t.Fatalf("failed to get CCPackage %s", err)
@@ -329,22 +321,22 @@ func TestInvalidSigCDSGetCCPackage(t *testing.T) {
 	}
 }
 
-// switch the chaincodes on the FS and validate
+//switch the chaincodes on the FS and validate
 func TestSignedCDSSwitchChaincodes(t *testing.T) {
 	ccdir := setupccdir()
 	defer os.RemoveAll(ccdir)
 
-	// someone modifyed the code on the FS with "badcode"
+	//someone modifyed the code on the FS with "badcode"
 	cds := &pb.ChaincodeDeploymentSpec{ChaincodeSpec: &pb.ChaincodeSpec{Type: 1, ChaincodeId: &pb.ChaincodeID{Name: "testcc", Version: "0"}, Input: &pb.ChaincodeInput{Args: [][]byte{[]byte("")}}}, CodePackage: []byte("badcode")}
 
-	// write the bad code to the fs
+	//write the bad code to the fs
 	badccpack, _, _, err := processSignedCDS(cds, &common.SignaturePolicyEnvelope{Version: 1}, true)
 	if err != nil {
 		t.Fatalf("error putting CDS to FS %s", err)
 		return
 	}
 
-	// mimic the good code ChaincodeData from the instantiate...
+	//mimic the good code ChaincodeData from the instantiate...
 	cds.CodePackage = []byte("goodcode")
 
 	//...and generate the CD for it (don't overwrite the bad code)

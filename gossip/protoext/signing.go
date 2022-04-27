@@ -9,7 +9,6 @@ package protoext
 import (
 	"errors"
 	"fmt"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/gossip"
 )
@@ -103,6 +102,7 @@ func (m *SignedGossipMessage) Sign(signer Signer) (*gossip.Envelope, error) {
 	if err != nil {
 		return nil, err
 	}
+	/*1fmt.Printf("type.signer-----,%v", reflect.TypeOf(signer))*/
 	sig, err := signer(payload)
 	if err != nil {
 		return nil, err

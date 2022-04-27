@@ -62,6 +62,7 @@ func ExtractStatedbArtifactsFromCCPackage(ccpackage CCPackage) (statedbArtifacts
 // An empty string will have the effect of returning all statedb metadata.  This is useful in validating an
 // archive in the future with multiple database types
 func ExtractFileEntries(tarBytes []byte, databaseType string) (map[string][]*TarFileEntry, error) {
+
 	indexArtifacts := map[string][]*TarFileEntry{}
 	tarReader := tar.NewReader(bytes.NewReader(tarBytes))
 	for {
@@ -77,9 +78,9 @@ func ExtractFileEntries(tarBytes []byte, databaseType string) (map[string][]*Tar
 			continue
 		}
 
-		// split the directory from the full name
+		//split the directory from the full name
 		dir, _ := filepath.Split(hdr.Name)
-		// remove the ending slash
+		//remove the ending slash
 		if strings.HasPrefix(hdr.Name, "META-INF/statedb/"+databaseType) {
 			fileContent, err := ioutil.ReadAll(tarReader)
 			if err != nil {

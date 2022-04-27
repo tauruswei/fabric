@@ -12,14 +12,15 @@ import (
 	"github.com/hyperledger/fabric/core/handlers/decoration"
 	"github.com/hyperledger/fabric/core/handlers/decoration/decorator"
 	endorsement "github.com/hyperledger/fabric/core/handlers/endorsement/api"
-	eb "github.com/hyperledger/fabric/core/handlers/endorsement/builtin"
+	"github.com/hyperledger/fabric/core/handlers/endorsement/builtin"
 	validation "github.com/hyperledger/fabric/core/handlers/validation/api"
-	vb "github.com/hyperledger/fabric/core/handlers/validation/builtin"
+	. "github.com/hyperledger/fabric/core/handlers/validation/builtin"
 )
 
 // HandlerLibrary is used to assert
 // how to create the various handlers
-type HandlerLibrary struct{}
+type HandlerLibrary struct {
+}
 
 // DefaultAuth creates a default auth.Filter
 // that doesn't do any access control checks - simply
@@ -44,9 +45,9 @@ func (r *HandlerLibrary) DefaultDecorator() decoration.Decorator {
 }
 
 func (r *HandlerLibrary) DefaultEndorsement() endorsement.PluginFactory {
-	return &eb.DefaultEndorsementFactory{}
+	return &builtin.DefaultEndorsementFactory{}
 }
 
 func (r *HandlerLibrary) DefaultValidation() validation.PluginFactory {
-	return &vb.DefaultValidationFactory{}
+	return &DefaultValidationFactory{}
 }

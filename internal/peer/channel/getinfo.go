@@ -37,7 +37,6 @@ func getinfoCmd(cf *ChannelCmdFactory) *cobra.Command {
 
 	return getinfoCmd
 }
-
 func (cc *endorserClient) getBlockChainInfo() (*cb.BlockchainInfo, error) {
 	var err error
 
@@ -78,10 +77,11 @@ func (cc *endorserClient) getBlockChainInfo() (*cb.BlockchainInfo, error) {
 	}
 
 	return blockChainInfo, nil
+
 }
 
 func getinfo(cmd *cobra.Command, cf *ChannelCmdFactory) error {
-	// the global chainID filled by the "-c" command
+	//the global chainID filled by the "-c" command
 	if channelID == common.UndefinedParamValue {
 		return errors.New("Must supply channel ID")
 	}

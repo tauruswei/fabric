@@ -18,7 +18,9 @@ import (
 )
 
 var _ = Describe("LedgerShims", func() {
-	var fakeStub *mock.ChaincodeStub
+	var (
+		fakeStub *mock.ChaincodeStub
+	)
 
 	BeforeEach(func() {
 		fakeStub = &mock.ChaincodeStub{}
@@ -67,6 +69,7 @@ var _ = Describe("LedgerShims", func() {
 				It("wraps and returns the error", func() {
 					_, err := cls.GetStateRange("fake-prefix")
 					Expect(err).To(MatchError("could not get state iterator: error-by-range"))
+
 				})
 			})
 
@@ -78,13 +81,16 @@ var _ = Describe("LedgerShims", func() {
 				It("wraps and returns the error", func() {
 					_, err := cls.GetStateRange("fake-prefix")
 					Expect(err).To(MatchError("could not iterate over range: fake-iterator-error"))
+
 				})
 			})
 		})
 	})
 
 	Describe("ChaincodePrivateLedgerShim", func() {
-		var cls *lifecycle.ChaincodePrivateLedgerShim
+		var (
+			cls *lifecycle.ChaincodePrivateLedgerShim
+		)
 
 		BeforeEach(func() {
 			cls = &lifecycle.ChaincodePrivateLedgerShim{
@@ -213,7 +219,9 @@ var _ = Describe("LedgerShims", func() {
 		})
 
 		Describe("GetStateRange", func() {
-			var resItr *mock.ResultsIterator
+			var (
+				resItr *mock.ResultsIterator
+			)
 
 			BeforeEach(func() {
 				resItr = &mock.ResultsIterator{}

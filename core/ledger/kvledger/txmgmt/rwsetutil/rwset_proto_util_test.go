@@ -23,9 +23,8 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/ledger/rwset/kvrwset"
 	"github.com/hyperledger/fabric/core/ledger/internal/version"
-	"github.com/hyperledger/fabric/core/ledger/util"
 	"github.com/kr/pretty"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestTxRWSetMarshalUnmarshal(t *testing.T) {
@@ -61,33 +60,33 @@ func TestTxRWSetMarshalUnmarshal(t *testing.T) {
 	}
 
 	protoBytes, err := txRwSet.ToProtoBytes()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	txRwSet1 := &TxRwSet{}
-	require.NoError(t, txRwSet1.FromProtoBytes(protoBytes))
+	assert.NoError(t, txRwSet1.FromProtoBytes(protoBytes))
 	t.Logf("txRwSet=%s, txRwSet1=%s", spew.Sdump(txRwSet), spew.Sdump(txRwSet1))
-	require.Equal(t, len(txRwSet1.NsRwSets), len(txRwSet.NsRwSets))
+	assert.Equal(t, len(txRwSet1.NsRwSets), len(txRwSet.NsRwSets))
 	for i, rwset := range txRwSet.NsRwSets {
-		require.Equal(t, txRwSet1.NsRwSets[i].NameSpace, rwset.NameSpace)
-		require.True(t, proto.Equal(txRwSet1.NsRwSets[i].KvRwSet, rwset.KvRwSet), "proto messages are not equal")
-		require.Equal(t, txRwSet1.NsRwSets[i].CollHashedRwSets, rwset.CollHashedRwSets)
+		assert.Equal(t, txRwSet1.NsRwSets[i].NameSpace, rwset.NameSpace)
+		assert.True(t, proto.Equal(txRwSet1.NsRwSets[i].KvRwSet, rwset.KvRwSet), "proto messages are not equal")
+		assert.Equal(t, txRwSet1.NsRwSets[i].CollHashedRwSets, rwset.CollHashedRwSets)
 	}
 }
 
 func TestTxRwSetConversion(t *testing.T) {
 	txRwSet := sampleTxRwSet()
 	protoMsg, err := txRwSet.toProtoMsg()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	txRwSet1, err := TxRwSetFromProtoMsg(protoMsg)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	t.Logf("txRwSet=%s, txRwSet1=%s", spew.Sdump(txRwSet), spew.Sdump(txRwSet1))
-	require.Equal(t, len(txRwSet1.NsRwSets), len(txRwSet.NsRwSets))
+	assert.Equal(t, len(txRwSet1.NsRwSets), len(txRwSet.NsRwSets))
 	for i, rwset := range txRwSet.NsRwSets {
-		require.Equal(t, txRwSet1.NsRwSets[i].NameSpace, rwset.NameSpace)
-		require.True(t, proto.Equal(txRwSet1.NsRwSets[i].KvRwSet, rwset.KvRwSet), "proto messages are not equal")
+		assert.Equal(t, txRwSet1.NsRwSets[i].NameSpace, rwset.NameSpace)
+		assert.True(t, proto.Equal(txRwSet1.NsRwSets[i].KvRwSet, rwset.KvRwSet), "proto messages are not equal")
 		for j, hashedRwSet := range rwset.CollHashedRwSets {
-			require.Equal(t, txRwSet1.NsRwSets[i].CollHashedRwSets[j].CollectionName, hashedRwSet.CollectionName)
-			require.True(t, proto.Equal(txRwSet1.NsRwSets[i].CollHashedRwSets[j].HashedRwSet, hashedRwSet.HashedRwSet), "proto messages are not equal")
-			require.Equal(t, txRwSet1.NsRwSets[i].CollHashedRwSets[j].PvtRwSetHash, hashedRwSet.PvtRwSetHash)
+			assert.Equal(t, txRwSet1.NsRwSets[i].CollHashedRwSets[j].CollectionName, hashedRwSet.CollectionName)
+			assert.True(t, proto.Equal(txRwSet1.NsRwSets[i].CollHashedRwSets[j].HashedRwSet, hashedRwSet.HashedRwSet), "proto messages are not equal")
+			assert.Equal(t, txRwSet1.NsRwSets[i].CollHashedRwSets[j].PvtRwSetHash, hashedRwSet.PvtRwSetHash)
 		}
 	}
 }
@@ -95,42 +94,42 @@ func TestTxRwSetConversion(t *testing.T) {
 func TestNsRwSetConversion(t *testing.T) {
 	nsRwSet := sampleNsRwSet("ns-1")
 	protoMsg, err := nsRwSet.toProtoMsg()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	nsRwSet1, err := nsRwSetFromProtoMsg(protoMsg)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	t.Logf("nsRwSet=%s, nsRwSet1=%s", spew.Sdump(nsRwSet), spew.Sdump(nsRwSet1))
-	require.Equal(t, nsRwSet1.NameSpace, nsRwSet.NameSpace)
-	require.True(t, proto.Equal(nsRwSet1.KvRwSet, nsRwSet.KvRwSet), "proto messages are not equal")
+	assert.Equal(t, nsRwSet1.NameSpace, nsRwSet.NameSpace)
+	assert.True(t, proto.Equal(nsRwSet1.KvRwSet, nsRwSet.KvRwSet), "proto messages are not equal")
 	for j, hashedRwSet := range nsRwSet.CollHashedRwSets {
-		require.Equal(t, nsRwSet1.CollHashedRwSets[j].CollectionName, hashedRwSet.CollectionName)
-		require.True(t, proto.Equal(nsRwSet1.CollHashedRwSets[j].HashedRwSet, hashedRwSet.HashedRwSet), "proto messages are not equal")
-		require.Equal(t, nsRwSet1.CollHashedRwSets[j].PvtRwSetHash, hashedRwSet.PvtRwSetHash)
+		assert.Equal(t, nsRwSet1.CollHashedRwSets[j].CollectionName, hashedRwSet.CollectionName)
+		assert.True(t, proto.Equal(nsRwSet1.CollHashedRwSets[j].HashedRwSet, hashedRwSet.HashedRwSet), "proto messages are not equal")
+		assert.Equal(t, nsRwSet1.CollHashedRwSets[j].PvtRwSetHash, hashedRwSet.PvtRwSetHash)
 	}
 }
 
 func TestNsRWSetConversionNoCollHashedRWs(t *testing.T) {
 	nsRwSet := sampleNsRwSetWithNoCollHashedRWs("ns-1")
 	protoMsg, err := nsRwSet.toProtoMsg()
-	require.NoError(t, err)
-	require.Nil(t, protoMsg.CollectionHashedRwset)
+	assert.NoError(t, err)
+	assert.Nil(t, protoMsg.CollectionHashedRwset)
 }
 
 func TestCollHashedRwSetConversion(t *testing.T) {
 	collHashedRwSet := sampleCollHashedRwSet("coll-1")
 	protoMsg, err := collHashedRwSet.toProtoMsg()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	collHashedRwSet1, err := collHashedRwSetFromProtoMsg(protoMsg)
-	require.NoError(t, err)
-	require.Equal(t, collHashedRwSet.CollectionName, collHashedRwSet1.CollectionName)
-	require.True(t, proto.Equal(collHashedRwSet.HashedRwSet, collHashedRwSet1.HashedRwSet), "proto messages are not equal")
-	require.Equal(t, collHashedRwSet.PvtRwSetHash, collHashedRwSet1.PvtRwSetHash)
+	assert.NoError(t, err)
+	assert.Equal(t, collHashedRwSet.CollectionName, collHashedRwSet1.CollectionName)
+	assert.True(t, proto.Equal(collHashedRwSet.HashedRwSet, collHashedRwSet1.HashedRwSet), "proto messages are not equal")
+	assert.Equal(t, collHashedRwSet.PvtRwSetHash, collHashedRwSet1.PvtRwSetHash)
 }
 
 func TestNumCollections(t *testing.T) {
 	var txRwSet *TxRwSet
-	require.Equal(t, 0, txRwSet.NumCollections())         // nil TxRwSet
-	require.Equal(t, 0, (&TxRwSet{}).NumCollections())    // empty TxRwSet
-	require.Equal(t, 4, sampleTxRwSet().NumCollections()) // sample TxRwSet
+	assert.Equal(t, 0, txRwSet.NumCollections())         // nil TxRwSet
+	assert.Equal(t, 0, (&TxRwSet{}).NumCollections())    // empty TxRwSet
+	assert.Equal(t, 4, sampleTxRwSet().NumCollections()) // sample TxRwSet
 }
 
 func sampleTxRwSet() *TxRwSet {
@@ -194,17 +193,17 @@ func sampleCollHashedRwSet(collectionName string) *CollHashedRwSet {
 
 func TestTxPvtRwSetConversion(t *testing.T) {
 	txPvtRwSet := sampleTxPvtRwSet()
-	protoMsg, err := txPvtRwSet.ToProtoMsg()
-	require.NoError(t, err)
+	protoMsg, err := txPvtRwSet.toProtoMsg()
+	assert.NoError(t, err)
 	txPvtRwSet1, err := TxPvtRwSetFromProtoMsg(protoMsg)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	t.Logf("txPvtRwSet=%s, txPvtRwSet1=%s, Diff:%s", spew.Sdump(txPvtRwSet), spew.Sdump(txPvtRwSet1), pretty.Diff(txPvtRwSet, txPvtRwSet1))
-	require.Equal(t, len(txPvtRwSet1.NsPvtRwSet), len(txPvtRwSet.NsPvtRwSet))
+	assert.Equal(t, len(txPvtRwSet1.NsPvtRwSet), len(txPvtRwSet.NsPvtRwSet))
 	for i, rwset := range txPvtRwSet.NsPvtRwSet {
-		require.Equal(t, txPvtRwSet1.NsPvtRwSet[i].NameSpace, rwset.NameSpace)
+		assert.Equal(t, txPvtRwSet1.NsPvtRwSet[i].NameSpace, rwset.NameSpace)
 		for j, hashedRwSet := range rwset.CollPvtRwSets {
-			require.Equal(t, txPvtRwSet1.NsPvtRwSet[i].CollPvtRwSets[j].CollectionName, hashedRwSet.CollectionName)
-			require.True(t, proto.Equal(txPvtRwSet1.NsPvtRwSet[i].CollPvtRwSets[j].KvRwSet, hashedRwSet.KvRwSet), "proto messages are not equal")
+			assert.Equal(t, txPvtRwSet1.NsPvtRwSet[i].CollPvtRwSets[j].CollectionName, hashedRwSet.CollectionName)
+			assert.True(t, proto.Equal(txPvtRwSet1.NsPvtRwSet[i].CollPvtRwSets[j].KvRwSet, hashedRwSet.KvRwSet), "proto messages are not equal")
 		}
 	}
 }
@@ -224,53 +223,21 @@ func sampleNsPvtRwSet(ns string) *NsPvtRwSet {
 }
 
 func sampleCollPvtRwSet(collectionName string) *CollPvtRwSet {
-	return &CollPvtRwSet{
-		CollectionName: collectionName,
+	return &CollPvtRwSet{CollectionName: collectionName,
 		KvRwSet: &kvrwset.KVRWSet{
 			Reads:  []*kvrwset.KVRead{{Key: "key1", Version: &kvrwset.Version{BlockNum: 1, TxNum: 1}}},
 			Writes: []*kvrwset.KVWrite{{Key: "key2", IsDelete: false, Value: []byte("value2")}},
-		},
-	}
+		}}
 }
 
 func TestVersionConversion(t *testing.T) {
 	protoVer := &kvrwset.Version{BlockNum: 5, TxNum: 2}
 	internalVer := version.NewHeight(5, 2)
 	// convert proto to internal
-	require.Nil(t, NewVersion(nil))
-	require.Equal(t, internalVer, NewVersion(protoVer))
+	assert.Nil(t, NewVersion(nil))
+	assert.Equal(t, internalVer, NewVersion(protoVer))
 
 	// convert internal to proto
-	require.Nil(t, newProtoVersion(nil))
-	require.Equal(t, protoVer, newProtoVersion(internalVer))
-}
-
-func TestIsDelete(t *testing.T) {
-	t.Run("kvWrite", func(t *testing.T) {
-		kvWritesToBeInterpretedAsDelete := []*kvrwset.KVWrite{
-			{Value: nil, IsDelete: true},
-			{Value: nil, IsDelete: false},
-			{Value: []byte{}, IsDelete: true},
-			{Value: []byte{}, IsDelete: false},
-		}
-
-		for _, k := range kvWritesToBeInterpretedAsDelete {
-			require.True(t, IsKVWriteDelete(k))
-		}
-	})
-
-	t.Run("kvhashwrite", func(t *testing.T) {
-		kvHashesWritesToBeInterpretedAsDelete := []*kvrwset.KVWriteHash{
-			{ValueHash: nil, IsDelete: true},
-			{ValueHash: nil, IsDelete: false},
-			{ValueHash: []byte{}, IsDelete: true},
-			{ValueHash: []byte{}, IsDelete: false},
-			{ValueHash: util.ComputeHash([]byte{}), IsDelete: true},
-			{ValueHash: util.ComputeHash([]byte{}), IsDelete: false},
-		}
-
-		for _, k := range kvHashesWritesToBeInterpretedAsDelete {
-			require.True(t, IsKVWriteHashDelete(k))
-		}
-	})
+	assert.Nil(t, newProtoVersion(nil))
+	assert.Equal(t, protoVer, newProtoVersion(internalVer))
 }

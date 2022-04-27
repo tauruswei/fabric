@@ -12,10 +12,9 @@ package main
 // the Identity Mixer MSP
 
 import (
-	"crypto/ecdsa"
-	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/tjfoc/gmsm/sm2"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -63,11 +62,12 @@ func main() {
 
 		revocationKey, err := idemix.GenerateLongTermRevocationKey()
 		handleError(err)
-		encodedRevocationSK, err := x509.MarshalECPrivateKey(revocationKey)
+		//TODO
+		encodedRevocationSK, err := sm2.MarshalSm2UnecryptedPrivateKey(revocationKey)
 		handleError(err)
 		pemEncodedRevocationSK := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: encodedRevocationSK})
 		handleError(err)
-		encodedRevocationPK, err := x509.MarshalPKIXPublicKey(revocationKey.Public())
+		encodedRevocationPK, err := sm2.MarshalPKIXPublicKey(revocationKey.Public())
 		handleError(err)
 		pemEncodedRevocationPK := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: encodedRevocationPK})
 
@@ -79,8 +79,8 @@ func main() {
 		checkDirectoryNotExists(path, fmt.Sprintf("Directory %s already exists", path))
 
 		// write private and public keys to the file
-		handleError(os.MkdirAll(filepath.Join(*outputDir, IdemixDirIssuer), 0o770))
-		handleError(os.MkdirAll(filepath.Join(*outputDir, msp.IdemixConfigDirMsp), 0o770))
+		handleError(os.MkdirAll(filepath.Join(*outputDir, IdemixDirIssuer), 0770))
+		handleError(os.MkdirAll(filepath.Join(*outputDir, msp.IdemixConfigDirMsp), 0770))
 		writeFile(filepath.Join(*outputDir, IdemixDirIssuer, IdemixConfigIssuerSecretKey), isk)
 		writeFile(filepath.Join(*outputDir, IdemixDirIssuer, IdemixConfigRevocationKey), pemEncodedRevocationSK)
 		writeFile(filepath.Join(*outputDir, IdemixDirIssuer, msp.IdemixConfigFileIssuerPublicKey), ipk)
@@ -114,12 +114,12 @@ func main() {
 		checkDirectoryNotExists(path, fmt.Sprintf("This MSP config already contains a directory \"%s\"", path))
 
 		// Write config to file
-		handleError(os.MkdirAll(filepath.Join(*outputDir, msp.IdemixConfigDirUser), 0o770))
+		handleError(os.MkdirAll(filepath.Join(*outputDir, msp.IdemixConfigDirUser), 0770))
 		writeFile(filepath.Join(*outputDir, msp.IdemixConfigDirUser, msp.IdemixConfigFileSigner), config)
 
 		// Write CA public info in case genCAInput != outputDir
 		if *genCAInput != *outputDir {
-			handleError(os.MkdirAll(filepath.Join(*outputDir, msp.IdemixConfigDirMsp), 0o770))
+			handleError(os.MkdirAll(filepath.Join(*outputDir, msp.IdemixConfigDirMsp), 0770))
 			writeFile(filepath.Join(*outputDir, msp.IdemixConfigDirMsp, msp.IdemixConfigFileRevocationPublicKey), rpk)
 			writeFile(filepath.Join(*outputDir, msp.IdemixConfigDirMsp, msp.IdemixConfigFileIssuerPublicKey), ipkRaw)
 		}
@@ -136,7 +136,7 @@ func printVersion() {
 
 // writeFile writes bytes to a file and panics in case of an error
 func writeFile(path string, contents []byte) {
-	handleError(ioutil.WriteFile(path, contents, 0o640))
+	handleError(ioutil.WriteFile(path, contents, 0640))
 }
 
 // readIssuerKey reads the issuer key from the current directory
@@ -158,7 +158,7 @@ func readIssuerKey() (*idemix.IssuerKey, []byte) {
 	return key, ipkBytes
 }
 
-func readRevocationKey() *ecdsa.PrivateKey {
+func readRevocationKey() *sm2.PrivateKey {
 	path := filepath.Join(*genCAInput, IdemixDirIssuer, IdemixConfigRevocationKey)
 	keyBytes, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -169,7 +169,7 @@ func readRevocationKey() *ecdsa.PrivateKey {
 	if block == nil {
 		handleError(errors.Errorf("failed to decode ECDSA private key"))
 	}
-	key, err := x509.ParseECPrivateKey(block.Bytes)
+	key, err := sm2.ParseSm2PrivateKey(block.Bytes)
 	handleError(err)
 
 	return key
@@ -192,8 +192,6 @@ func checkDirectoryNotExists(path string, errorMessage string) {
 		handleError(errors.New(errorMessage))
 	}
 }
-
-//lint:file-ignore SA5011 handleError is unconventional
 
 func handleError(err error) {
 	if err != nil {

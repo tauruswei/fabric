@@ -97,7 +97,7 @@ func (p *Platform) ValidateCodePackage(code []byte) error {
 
 		// only files and directories; no links or special files
 		mode := header.FileInfo().Mode()
-		if mode&^(os.ModeDir|0o777) != 0 {
+		if mode&^(os.ModeDir|0777) != 0 {
 			return fmt.Errorf("illegal file mode in payload: %s", header.Name)
 		}
 	}
@@ -106,7 +106,7 @@ func (p *Platform) ValidateCodePackage(code []byte) error {
 }
 
 // Directory constant copied from tar package.
-const c_ISDIR = 0o40000
+const c_ISDIR = 040000
 
 // Default compression to use for production. Test packages disable compression.
 var gzipCompressionLevel = gzip.DefaultCompression
@@ -159,7 +159,7 @@ func (p *Platform) GetDeploymentPayload(codepath string) ([]byte, error) {
 		err := tw.WriteHeader(&tar.Header{
 			Typeflag: tar.TypeDir,
 			Name:     dirname + "/",
-			Mode:     c_ISDIR | 0o755,
+			Mode:     c_ISDIR | 0755,
 			Uid:      500,
 			Gid:      500,
 		})
@@ -194,10 +194,8 @@ func (p *Platform) GenerateDockerfile() (string, error) {
 	return strings.Join(buf, "\n"), nil
 }
 
-const (
-	staticLDFlagsOpts  = "-ldflags \"-linkmode external -extldflags '-static'\""
-	dynamicLDFlagsOpts = ""
-)
+const staticLDFlagsOpts = "-ldflags \"-linkmode external -extldflags '-static'\""
+const dynamicLDFlagsOpts = ""
 
 func getLDFlagsOpts() string {
 	if viper.GetBool("chaincode.golang.dynamicLink") {
@@ -492,11 +490,11 @@ func distributions() []dist {
 	// pre-populate linux architecutures
 	dists := map[dist]bool{
 		{goos: "linux", goarch: "amd64"}: true,
+		{goos: "linux", goarch: "s390x"}: true,
 	}
 
-	// add local OS and ARCH, linux and current ARCH
+	// add local OS and ARCH
 	dists[dist{goos: runtime.GOOS, goarch: runtime.GOARCH}] = true
-	dists[dist{goos: "linux", goarch: runtime.GOARCH}] = true
 
 	var list []dist
 	for d := range dists {

@@ -25,8 +25,7 @@ func LogSanityChecks(res Resources) {
 		for _, policyName := range []string{
 			policies.ChannelApplicationReaders,
 			policies.ChannelApplicationWriters,
-			policies.ChannelApplicationAdmins,
-		} {
+			policies.ChannelApplicationAdmins} {
 			_, ok := pm.GetPolicy(policyName)
 			if !ok {
 				logger.Warningf("Current configuration has no policy '%s', this will likely cause problems in production systems", policyName)
@@ -40,8 +39,7 @@ func LogSanityChecks(res Resources) {
 			policies.BlockValidation,
 			policies.ChannelOrdererAdmins,
 			policies.ChannelOrdererWriters,
-			policies.ChannelOrdererReaders,
-		} {
+			policies.ChannelOrdererReaders} {
 			_, ok := pm.GetPolicy(policyName)
 			if !ok {
 				logger.Warningf("Current configuration has no policy '%s', this will likely cause problems in production systems", policyName)

@@ -7,9 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package util
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+
+	credentials "github.com/tjfoc/gmtls/gmcredentials"
 	"fmt"
+	"github.com/tjfoc/gmsm/sm2"
+	tls "github.com/tjfoc/gmtls"
 	"net"
 	"strconv"
 	"time"
@@ -19,7 +21,6 @@ import (
 	"github.com/hyperledger/fabric/gossip/common"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 )
 
 // CA that generates TLS key-pairs
@@ -36,6 +37,7 @@ func createCAOrPanic() tlsgen.CA {
 // CreateGRPCLayer returns a new gRPC server with associated port, TLS certificates, SecureDialOpts and DialOption
 func CreateGRPCLayer() (port int, gRPCServer *comm.GRPCServer, certs *common.TLSCertificates,
 	secureDialOpts api.PeerSecureDialOpts, dialOpts []grpc.DialOption) {
+
 	serverKeyPair, err := ca.NewServerCertKeyPair("127.0.0.1")
 	if err != nil {
 		panic(err)
@@ -57,7 +59,7 @@ func CreateGRPCLayer() (port int, gRPCServer *comm.GRPCServer, certs *common.TLS
 	tlsConf := &tls.Config{
 		Certificates: []tls.Certificate{tlsClientCert},
 		ClientAuth:   tls.RequestClientCert,
-		RootCAs:      x509.NewCertPool(),
+		RootCAs:      sm2.NewCertPool(),
 	}
 
 	tlsConf.RootCAs.AppendCertsFromPEM(ca.CertBytes())
@@ -78,7 +80,8 @@ func CreateGRPCLayer() (port int, gRPCServer *comm.GRPCServer, certs *common.TLS
 		SecOpts: comm.SecureOptions{
 			Key:         serverKeyPair.Key,
 			Certificate: serverKeyPair.Cert,
-			UseTLS:      true,
+			//TODO useTLS
+			UseTLS:      false,
 		},
 	}
 	gRPCServer, err = comm.NewGRPCServer("127.0.0.1:", srvConfig)

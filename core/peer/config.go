@@ -20,8 +20,8 @@ SPDX-License-Identifier: Apache-2.0
 package peer
 
 import (
-	"crypto/tls"
 	"fmt"
+	tls "github.com/tjfoc/gmtls"
 	"io/ioutil"
 	"net"
 	"path/filepath"
@@ -30,7 +30,6 @@ import (
 
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
-	"github.com/hyperledger/fabric/internal/pkg/gateway"
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 )
@@ -38,11 +37,7 @@ import (
 // ExternalBuilder represents the configuration structure of
 // a chaincode external builder
 type ExternalBuilder struct {
-	// TODO: Remove Environment in 3.0
-	// Deprecated: Environment is retained for backwards compatibility.
-	// New deployments should use the new PropagateEnvironment field
-	Environment          []string `yaml:"environmentWhitelist"`
-	PropagateEnvironment []string `yaml:"propagateEnvironment"`
+	EnvironmentWhitelist []string `yaml:"environmentWhitelist"`
 	Name                 string   `yaml:"name"`
 	Path                 string   `yaml:"path"`
 }
@@ -207,13 +202,6 @@ type Config struct {
 	DockerKey string
 	// DockerCA is the path to the PEM encoded CA certificate for the docker daemon.
 	DockerCA string
-
-	// ----- Gateway config -----
-
-	// The gateway service is used by client SDKs to
-	// interact with fabric networks
-
-	GatewayOptions gateway.Options
 }
 
 // GlobalConfig obtains a set of configuration from viper, build and returns
@@ -273,8 +261,6 @@ func (c *Config) load() error {
 		c.DeliverClientKeepaliveOptions.ClientTimeout = viper.GetDuration("peer.keepalive.deliveryClient.timeout")
 	}
 
-	c.GatewayOptions = gateway.GetOptions(viper.GetViper())
-
 	c.VMEndpoint = viper.GetString("vm.endpoint")
 	c.VMDockerTLSEnabled = viper.GetBool("vm.docker.tls.enabled")
 	c.VMDockerAttachStdout = viper.GetBool("vm.docker.attachStdout")
@@ -290,18 +276,15 @@ func (c *Config) load() error {
 	if err != nil {
 		return err
 	}
-	c.ExternalBuilders = externalBuilders
-	for builderIndex, builder := range c.ExternalBuilders {
+	for _, builder := range externalBuilders {
 		if builder.Path == "" {
 			return fmt.Errorf("invalid external builder configuration, path attribute missing in one or more builders")
 		}
 		if builder.Name == "" {
 			return fmt.Errorf("external builder at path %s has no name attribute", builder.Path)
 		}
-		if builder.Environment != nil && builder.PropagateEnvironment == nil {
-			c.ExternalBuilders[builderIndex].PropagateEnvironment = builder.Environment
-		}
 	}
+	c.ExternalBuilders = externalBuilders
 
 	c.OperationsListenAddress = viper.GetString("operations.listenAddress")
 	c.OperationsTLSEnabled = viper.GetBool("operations.tls.enabled")
@@ -337,7 +320,7 @@ func getLocalAddress() (string, error) {
 		return "", errors.Errorf("peer.address isn't in host:port format: %s", peerAddress)
 	}
 
-	localIP, err := getLocalIP()
+	localIP, err := comm.GetLocalIP()
 	if err != nil {
 		peerLogger.Errorf("local IP address not auto-detectable: %s", err)
 		return "", err
@@ -357,23 +340,7 @@ func getLocalAddress() (string, error) {
 	}
 	peerLogger.Info("Returning", peerAddress)
 	return peerAddress, nil
-}
 
-// getLocalIP returns the a loopback local IP of the host.
-func getLocalIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "", err
-	}
-	for _, address := range addrs {
-		// check the address type and if it is not a loopback then display it
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
-			}
-		}
-	}
-	return "", errors.Errorf("no non-loopback, IPv4 interface detected")
 }
 
 // GetServerConfig returns the gRPC server configuration for the peer

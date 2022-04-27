@@ -8,6 +8,7 @@ package blocksprovider
 
 import (
 	"context"
+	"github.com/tjfoc/gmsm/sm2"
 	"math"
 	"time"
 
@@ -73,7 +74,7 @@ type OrdererConnectionSource interface {
 
 //go:generate counterfeiter -o fake/dialer.go --fake-name Dialer . Dialer
 type Dialer interface {
-	Dial(address string, rootCerts [][]byte) (*grpc.ClientConn, error)
+	Dial(address string, certPool *sm2.CertPool) (*grpc.ClientConn, error)
 }
 
 //go:generate counterfeiter -o fake/deliver_streamer.go --fake-name DeliverStreamer . DeliverStreamer
@@ -283,7 +284,7 @@ func (d *Deliverer) connect(seekInfoEnv *common.Envelope) (orderer.AtomicBroadca
 		return nil, nil, nil, errors.WithMessage(err, "could not get orderer endpoints")
 	}
 
-	conn, err := d.Dialer.Dial(endpoint.Address, endpoint.RootCerts)
+	conn, err := d.Dialer.Dial(endpoint.Address, endpoint.CertPool)
 	if err != nil {
 		return nil, nil, nil, errors.WithMessagef(err, "could not dial endpoint '%s'", endpoint.Address)
 	}

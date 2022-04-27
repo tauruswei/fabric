@@ -5,8 +5,8 @@
 ARG GO_VER
 ARG ALPINE_VER
 FROM golang:${GO_VER}-alpine${ALPINE_VER}
+RUN echo -e http://mirrors.tuna.tsinghua.edu.cn/alpine/v3.11/main/ > /etc/apk/repositories
 RUN apk add --no-cache \
-	binutils-gold \
 	g++ \
 	gcc \
 	git \

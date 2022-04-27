@@ -69,6 +69,7 @@ func CreateStorage(
 	snapDir string,
 	ram MemoryStorage,
 ) (*RaftStorage, error) {
+
 	sn, err := createSnapshotter(lg, snapDir)
 	if err != nil {
 		return nil, err
@@ -138,7 +139,7 @@ func ListSnapshots(logger *flogging.FabricLogger, snapDir string) []uint64 {
 			snapfiles = append(snapfiles, filenames[i])
 		}
 	}
-	sort.Strings(snapfiles)
+	sort.Sort(sort.StringSlice(snapfiles))
 
 	var snapshots []uint64
 	for _, snapfile := range snapfiles {

@@ -60,8 +60,10 @@ func (h *Height) Compare(h1 *Height) int {
 	switch {
 	case h.BlockNum != h1.BlockNum:
 		res = int(h.BlockNum - h1.BlockNum)
+		break
 	case h.TxNum != h1.TxNum:
 		res = int(h.TxNum - h1.TxNum)
+		break
 	default:
 		return 0
 	}
@@ -73,9 +75,6 @@ func (h *Height) Compare(h1 *Height) int {
 
 // String returns string for printing
 func (h *Height) String() string {
-	if h == nil {
-		return "<nil>"
-	}
 	return fmt.Sprintf("{BlockNum: %d, TxNum: %d}", h.BlockNum, h.TxNum)
 }
 

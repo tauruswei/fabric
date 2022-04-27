@@ -39,7 +39,7 @@ type expiryInfoKey struct {
 	expiryBlk     uint64
 }
 
-func newExpiryKeeper(ledgerid string, provider *bookkeeping.Provider) *expiryKeeper {
+func newExpiryKeeper(ledgerid string, provider bookkeeping.Provider) *expiryKeeper {
 	return &expiryKeeper{provider.GetDBHandle(ledgerid, bookkeeping.PvtdataExpiry)}
 }
 
@@ -56,7 +56,7 @@ func newExpiryKeeper(ledgerid string, provider *bookkeeping.Provider) *expiryKee
 // at the time of the commit of the block number 45 and the second entry was created at the time of the commit of the block number 40, however
 // both are expiring with the commit of block number 50.
 func (ek *expiryKeeper) update(toTrack []*expiryInfo, toClear []*expiryInfoKey) error {
-	updateBatch := ek.db.NewUpdateBatch()
+	updateBatch := leveldbhelper.NewUpdateBatch()
 	for _, expinfo := range toTrack {
 		k, v, err := encodeKV(expinfo)
 		if err != nil {
@@ -74,10 +74,7 @@ func (ek *expiryKeeper) update(toTrack []*expiryInfo, toClear []*expiryInfoKey) 
 func (ek *expiryKeeper) retrieve(expiringAtBlkNum uint64) ([]*expiryInfo, error) {
 	startKey := encodeExpiryInfoKey(&expiryInfoKey{expiryBlk: expiringAtBlkNum, committingBlk: 0})
 	endKey := encodeExpiryInfoKey(&expiryInfoKey{expiryBlk: expiringAtBlkNum + 1, committingBlk: 0})
-	itr, err := ek.db.GetIterator(startKey, endKey)
-	if err != nil {
-		return nil, err
-	}
+	itr := ek.db.GetIterator(startKey, endKey)
 	defer itr.Release()
 
 	var listExpinfo []*expiryInfo
@@ -131,7 +128,6 @@ func decodeExpiryInfo(key []byte, value []byte) (*expiryInfo, error) {
 	}
 	return &expiryInfo{
 			expiryInfoKey: &expiryInfoKey{committingBlk: committingBlk, expiryBlk: expiryBlk},
-			pvtdataKeys:   pvtdataKeys,
-		},
+			pvtdataKeys:   pvtdataKeys},
 		nil
 }

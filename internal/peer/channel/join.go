@@ -40,14 +40,14 @@ func joinCmd(cf *ChannelCmdFactory) *cobra.Command {
 	return joinCmd
 }
 
-// GBFileNotFoundErr genesis block file not found
+//GBFileNotFoundErr genesis block file not found
 type GBFileNotFoundErr string
 
 func (e GBFileNotFoundErr) Error() string {
 	return fmt.Sprintf("genesis block file not found %s", string(e))
 }
 
-// ProposalFailedErr proposal failed
+//ProposalFailedErr proposal failed
 type ProposalFailedErr string
 
 func (e ProposalFailedErr) Error() string {
@@ -75,7 +75,12 @@ func getJoinCCSpec() (*pb.ChaincodeSpec, error) {
 	return spec, nil
 }
 
-func executeJoin(cf *ChannelCmdFactory, spec *pb.ChaincodeSpec) (err error) {
+func executeJoin(cf *ChannelCmdFactory) (err error) {
+	spec, err := getJoinCCSpec()
+	if err != nil {
+		return err
+	}
+
 	// Build the ChaincodeInvocationSpec message
 	invocation := &pb.ChaincodeInvocationSpec{ChaincodeSpec: spec}
 
@@ -127,11 +132,5 @@ func join(cmd *cobra.Command, args []string, cf *ChannelCmdFactory) error {
 			return err
 		}
 	}
-
-	spec, err := getJoinCCSpec()
-	if err != nil {
-		return err
-	}
-
-	return executeJoin(cf, spec)
+	return executeJoin(cf)
 }

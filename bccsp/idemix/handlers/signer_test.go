@@ -16,7 +16,9 @@ import (
 )
 
 var _ = Describe("Signature", func() {
+
 	Describe("when creating a signature", func() {
+
 		var (
 			Signer              *handlers.Signer
 			fakeSignatureScheme *mock.SignatureScheme
@@ -35,7 +37,9 @@ var _ = Describe("Signature", func() {
 		})
 
 		Context("and the underlying cryptographic algorithm succeed", func() {
-			var fakeSignature []byte
+			var (
+				fakeSignature []byte
+			)
 			BeforeEach(func() {
 				fakeSignature = []byte("fake signature")
 				fakeSignatureScheme.SignReturns(fakeSignature, nil)
@@ -52,6 +56,7 @@ var _ = Describe("Signature", func() {
 				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(signature).To(BeEquivalentTo(fakeSignature))
+
 			})
 		})
 
@@ -75,6 +80,7 @@ var _ = Describe("Signature", func() {
 		})
 
 		Context("and the parameters are not well formed", func() {
+
 			Context("and the user secret key is nil", func() {
 				It("returns error", func() {
 					signature, err := Signer.Sign(
@@ -190,6 +196,7 @@ var _ = Describe("Signature", func() {
 	})
 
 	Describe("when verifying a signature", func() {
+
 		var (
 			Verifier            *handlers.Verifier
 			fakeSignatureScheme *mock.SignatureScheme
@@ -239,6 +246,7 @@ var _ = Describe("Signature", func() {
 		})
 
 		Context("and the parameters are not well formed", func() {
+
 			Context("and the issuer public key is nil", func() {
 				It("returns error", func() {
 					valid, err := Verifier.Verify(

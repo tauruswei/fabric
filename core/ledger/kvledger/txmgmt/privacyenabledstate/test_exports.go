@@ -15,10 +15,9 @@ import (
 	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/bookkeeping"
-	testmock "github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate/mock"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/statecouchdb"
 	"github.com/hyperledger/fabric/core/ledger/mock"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestEnv - an interface that a test environment implements
@@ -26,7 +25,6 @@ type TestEnv interface {
 	StartExternalResource()
 	Init(t testing.TB)
 	GetDBHandle(id string) *DB
-	GetProvider() *DBProvider
 	GetName() string
 	Cleanup()
 	StopExternalResource()
@@ -63,7 +61,7 @@ func (env *LevelDBTestEnv) Init(t testing.TB) {
 		},
 		[]string{"lscc", "_lifecycle"},
 	)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	env.t = t
 	env.provider = dbProvider
 	env.dbPath = dbPath
@@ -81,14 +79,9 @@ func (env *LevelDBTestEnv) StopExternalResource() {
 
 // GetDBHandle implements corresponding function from interface TestEnv
 func (env *LevelDBTestEnv) GetDBHandle(id string) *DB {
-	db, err := env.provider.GetDBHandle(id, nil)
-	require.NoError(env.t, err)
+	db, err := env.provider.GetDBHandle(id)
+	assert.NoError(env.t, err)
 	return db
-}
-
-// GetProvider returns DBProvider
-func (env *LevelDBTestEnv) GetProvider() *DBProvider {
-	return env.provider
 }
 
 // GetName implements corresponding function from interface TestEnv
@@ -143,11 +136,11 @@ func (env *CouchDBTestEnv) Init(t testing.TB) {
 
 	stateDBConfig := &StateDBConfig{
 		StateDBConfig: &ledger.StateDBConfig{
-			StateDatabase: ledger.CouchDB,
+			StateDatabase: "CouchDB",
 			CouchDB: &ledger.CouchDBConfig{
 				Address:             env.couchAddress,
-				Username:            "admin",
-				Password:            "adminpw",
+				Username:            "",
+				Password:            "",
 				MaxRetries:          3,
 				MaxRetriesOnStartup: 20,
 				RequestTimeout:      35 * time.Second,
@@ -167,7 +160,7 @@ func (env *CouchDBTestEnv) Init(t testing.TB) {
 		stateDBConfig,
 		[]string{"lscc", "_lifecycle"},
 	)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	env.provider = dbProvider
 	env.redoPath = redoPath
 	env.couchDBConfig = stateDBConfig.CouchDB
@@ -175,14 +168,9 @@ func (env *CouchDBTestEnv) Init(t testing.TB) {
 
 // GetDBHandle implements corresponding function from interface TestEnv
 func (env *CouchDBTestEnv) GetDBHandle(id string) *DB {
-	db, err := env.provider.GetDBHandle(id, &testmock.ChannelInfoProvider{})
-	require.NoError(env.t, err)
+	db, err := env.provider.GetDBHandle(id)
+	assert.NoError(env.t, err)
 	return db
-}
-
-// GetProvider returns DBProvider
-func (env *CouchDBTestEnv) GetProvider() *DBProvider {
-	return env.provider
 }
 
 // GetName implements corresponding function from interface TestEnv
@@ -193,7 +181,7 @@ func (env *CouchDBTestEnv) GetName() string {
 // Cleanup implements corresponding function from interface TestEnv
 func (env *CouchDBTestEnv) Cleanup() {
 	if env.provider != nil {
-		require.NoError(env.t, statecouchdb.DropApplicationDBs(env.couchDBConfig))
+		assert.NoError(env.t, statecouchdb.DropApplicationDBs(env.couchDBConfig))
 	}
 	os.RemoveAll(env.redoPath)
 	env.bookkeeperTestEnv.Cleanup()

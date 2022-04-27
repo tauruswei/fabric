@@ -9,7 +9,6 @@ package statecouchdb
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"unicode/utf8"
 
@@ -67,64 +66,58 @@ func (v jsonValue) toBytes() ([]byte, error) {
 }
 
 func couchDocToKeyValue(doc *couchDoc) (*keyValue, error) {
-	docFields, err := validateAndRetrieveFields(doc)
-	if err != nil {
-		return nil, err
-	}
-	version, metadata, err := decodeVersionAndMetadata(docFields.versionAndMetadata)
-	if err != nil {
-		return nil, err
-	}
-	return &keyValue{
-		docFields.id, docFields.revision,
-		&statedb.VersionedValue{
-			Value:    docFields.value,
-			Version:  version,
-			Metadata: metadata,
-		},
-	}, nil
-}
-
-type couchDocFields struct {
-	id                 string
-	revision           string
-	value              []byte
-	versionAndMetadata string
-}
-
-func validateAndRetrieveFields(doc *couchDoc) (*couchDocFields, error) {
-	jsonDoc := make(jsonValue)
+	// initialize the return value
+	var returnValue []byte
+	var err error
+	// create a generic map unmarshal the json
+	jsonResult := make(map[string]interface{})
 	decoder := json.NewDecoder(bytes.NewBuffer(doc.jsonValue))
 	decoder.UseNumber()
-	if err := decoder.Decode(&jsonDoc); err != nil {
+	if err = decoder.Decode(&jsonResult); err != nil {
 		return nil, err
 	}
-
-	docFields := &couchDocFields{}
-	docFields.id = jsonDoc[idField].(string)
-	if jsonDoc[revField] != nil {
-		docFields.revision = jsonDoc[revField].(string)
+	// verify the version field exists
+	if _, fieldFound := jsonResult[versionField]; !fieldFound {
+		return nil, errors.Errorf("version field %s was not found", versionField)
 	}
-	if jsonDoc[versionField] == nil {
-		return nil, fmt.Errorf("version field %s was not found", versionField)
-	}
-	docFields.versionAndMetadata = jsonDoc[versionField].(string)
+	key := jsonResult[idField].(string)
+	// create the return version from the version field in the JSON
 
-	delete(jsonDoc, idField)
-	delete(jsonDoc, revField)
-	delete(jsonDoc, versionField)
-
-	var err error
-	if doc.attachments == nil {
-		docFields.value, err = json.Marshal(jsonDoc)
-		return docFields, err
+	returnVersion, returnMetadata, err := decodeVersionAndMetadata(jsonResult[versionField].(string))
+	if err != nil {
+		return nil, err
 	}
-	for _, attachment := range doc.attachments {
-		if attachment.Name == binaryWrapper {
-			docFields.value = attachment.AttachmentBytes
+	var revision string
+	if jsonResult[revField] != nil {
+		revision = jsonResult[revField].(string)
+	}
+
+	// remove the _id, _rev and version fields
+	delete(jsonResult, idField)
+	delete(jsonResult, revField)
+	delete(jsonResult, versionField)
+
+	// handle binary or json data
+	if doc.attachments != nil { // binary attachment
+		// get binary data from attachment
+		for _, attachment := range doc.attachments {
+			if attachment.Name == binaryWrapper {
+				returnValue = attachment.AttachmentBytes
+			}
+		}
+	} else {
+		// marshal the returned JSON data.
+		if returnValue, err = json.Marshal(jsonResult); err != nil {
+			return nil, err
 		}
 	}
-	return docFields, err
+	return &keyValue{
+		key, revision,
+		&statedb.VersionedValue{
+			Value:    returnValue,
+			Metadata: returnMetadata,
+			Version:  returnVersion},
+	}, nil
 }
 
 func keyValToCouchDoc(kv *keyValue) (*couchDoc, error) {
@@ -191,17 +184,6 @@ type couchSavepointData struct {
 	TxNum    uint64 `json:"TxNum"`
 }
 
-type channelMetadata struct {
-	ChannelName string `json:"ChannelName"`
-	// namespace to namespaceDBInfo mapping
-	NamespaceDBsInfo map[string]*namespaceDBInfo `json:"NamespaceDBsInfo"`
-}
-
-type namespaceDBInfo struct {
-	Namespace string `json:"Namespace"`
-	DBName    string `json:"DBName"`
-}
-
 func encodeSavepoint(height *version.Height) (*couchDoc, error) {
 	var err error
 	var savepointDoc couchSavepointData
@@ -225,26 +207,6 @@ func decodeSavepoint(couchDoc *couchDoc) (*version.Height, error) {
 		return nil, err
 	}
 	return &version.Height{BlockNum: savepointDoc.BlockNum, TxNum: savepointDoc.TxNum}, nil
-}
-
-func encodeChannelMetadata(metadataDoc *channelMetadata) (*couchDoc, error) {
-	metadataJSON, err := json.Marshal(metadataDoc)
-	if err != nil {
-		err = errors.Wrap(err, "failed to marshal channel metadata")
-		logger.Errorf("%+v", err)
-		return nil, err
-	}
-	return &couchDoc{jsonValue: metadataJSON, attachments: nil}, nil
-}
-
-func decodeChannelMetadata(couchDoc *couchDoc) (*channelMetadata, error) {
-	metadataDoc := &channelMetadata{}
-	if err := json.Unmarshal(couchDoc.jsonValue, &metadataDoc); err != nil {
-		err = errors.Wrap(err, "failed to unmarshal channel metadata")
-		logger.Errorf("%+v", err)
-		return nil, err
-	}
-	return metadataDoc, nil
 }
 
 type dataformatInfo struct {

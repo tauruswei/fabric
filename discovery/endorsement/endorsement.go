@@ -18,11 +18,13 @@ import (
 	"github.com/hyperledger/fabric/common/policies/inquire"
 	"github.com/hyperledger/fabric/gossip/api"
 	"github.com/hyperledger/fabric/gossip/common"
-	gossipdiscovery "github.com/hyperledger/fabric/gossip/discovery"
+	. "github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/pkg/errors"
 )
 
-var logger = flogging.MustGetLogger("discovery.endorsement")
+var (
+	logger = flogging.MustGetLogger("discovery.endorsement")
+)
 
 type principalEvaluator interface {
 	// SatisfiesPrincipal returns whether a given peer identity satisfies a certain principal
@@ -48,15 +50,15 @@ type gossipSupport interface {
 
 	// PeersOfChannel returns the NetworkMembers considered alive
 	// and also subscribed to the channel given
-	PeersOfChannel(common.ChannelID) gossipdiscovery.Members
+	PeersOfChannel(common.ChannelID) Members
 
 	// Peers returns the NetworkMembers considered alive
-	Peers() gossipdiscovery.Members
+	Peers() Members
 }
 
 type membersChaincodeMapping struct {
-	members          gossipdiscovery.Members
-	chaincodeMapping map[string]gossipdiscovery.NetworkMember
+	members          Members
+	chaincodeMapping map[string]NetworkMember
 }
 
 type endorsementAnalyzer struct {
@@ -76,7 +78,7 @@ func NewEndorsementAnalyzer(gs gossipSupport, pf policyFetcher, pe principalEval
 	}
 }
 
-type peerPrincipalEvaluator func(member gossipdiscovery.NetworkMember, principal *msp.MSPPrincipal) bool
+type peerPrincipalEvaluator func(member NetworkMember, principal *msp.MSPPrincipal) bool
 
 // PeersForEndorsement returns an EndorsementDescriptor for a given set of peers, channel, and chaincode
 func (ea *endorsementAnalyzer) PeersForEndorsement(channelID common.ChannelID, interest *discovery.ChaincodeInterest) (*discovery.EndorsementDescriptor, error) {
@@ -107,7 +109,7 @@ func (ea *endorsementAnalyzer) PeersForEndorsement(channelID common.ChannelID, i
 	})
 }
 
-func (ea *endorsementAnalyzer) PeersAuthorizedByCriteria(channelID common.ChannelID, interest *discovery.ChaincodeInterest) (gossipdiscovery.Members, error) {
+func (ea *endorsementAnalyzer) PeersAuthorizedByCriteria(channelID common.ChannelID, interest *discovery.ChaincodeInterest) (Members, error) {
 	res, err := ea.peersByCriteria(channelID, interest, true)
 	return res.members, err
 }
@@ -148,11 +150,11 @@ func (ea *endorsementAnalyzer) peersByCriteria(channelID common.ChannelID, inter
 type context struct {
 	chaincode           string
 	channel             string
-	aliveMembership     gossipdiscovery.Members
+	aliveMembership     Members
 	principalsSets      []policies.PrincipalSet
-	channelMembersById  map[string]gossipdiscovery.NetworkMember
+	channelMembersById  map[string]NetworkMember
 	identitiesOfMembers memberIdentities
-	chaincodeMapping    map[string]gossipdiscovery.NetworkMember
+	chaincodeMapping    map[string]NetworkMember
 }
 
 func (ea *endorsementAnalyzer) computeEndorsementResponse(ctx *context) (*discovery.EndorsementDescriptor, error) {
@@ -223,7 +225,10 @@ func (ea *endorsementAnalyzer) computePrincipalSets(channelID common.ChannelID, 
 			sessionLogger.Debug("Policy for chaincode '", chaincode, "'doesn't exist")
 			return nil, errors.New("policy not found")
 		}
-		inquireablePolicies = append(inquireablePolicies, policies...)
+
+		for _, pol := range policies {
+			inquireablePolicies = append(inquireablePolicies, pol)
+		}
 	}
 
 	var cpss []inquire.ComparablePrincipalSets
@@ -321,10 +326,10 @@ type identityFilter func(api.PeerIdentityType) bool
 type identityFilters []identityFilter
 
 // memberFilter accepts or rejects NetworkMembers
-type memberFilter func(member gossipdiscovery.NetworkMember) bool
+type memberFilter func(member NetworkMember) bool
 
 // noopMemberFilter accepts every NetworkMember
-func noopMemberFilter(_ gossipdiscovery.NetworkMember) bool {
+func noopMemberFilter(_ NetworkMember) bool {
 	return true
 }
 
@@ -344,7 +349,7 @@ func (filters identityFilters) combine() identityFilter {
 // toMemberFilter converts this identityFilter to a memberFilter based on the given mapping
 // from PKI-ID as strings, to PeerIdentityInfo which holds the peer identities
 func (idf identityFilter) toMemberFilter(identityInfoByID map[string]api.PeerIdentityInfo) memberFilter {
-	return func(member gossipdiscovery.NetworkMember) bool {
+	return func(member NetworkMember) bool {
 		identity, exists := identityInfoByID[string(member.PKIid)]
 		if !exists {
 			return false
@@ -354,7 +359,7 @@ func (idf identityFilter) toMemberFilter(identityInfoByID map[string]api.PeerIde
 }
 
 func (ea *endorsementAnalyzer) satisfiesPrincipal(channel string, identitiesOfMembers memberIdentities) peerPrincipalEvaluator {
-	return func(member gossipdiscovery.NetworkMember, principal *msp.MSPPrincipal) bool {
+	return func(member NetworkMember, principal *msp.MSPPrincipal) bool {
 		err := ea.SatisfiesPrincipal(channel, identitiesOfMembers.identityByPKIID(member.PKIid), principal)
 		if err == nil {
 			// TODO: log the principals in a human readable form
@@ -369,9 +374,9 @@ func (ea *endorsementAnalyzer) satisfiesPrincipal(channel string, identitiesOfMe
 type peerMembershipCriteria struct {
 	satGraph         *principalPeerGraph
 	idOfMembers      memberIdentities
-	chanMemberById   map[string]gossipdiscovery.NetworkMember
+	chanMemberById   map[string]NetworkMember
 	possibleLayouts  layouts
-	chaincodeMapping map[string]gossipdiscovery.NetworkMember
+	chaincodeMapping map[string]NetworkMember
 }
 
 // endorsersByGroup computes a map from groups to peers.
@@ -397,7 +402,7 @@ func endorsersByGroup(criteria *peerMembershipCriteria) map[string]*discovery.Pe
 		}
 		peerList := &discovery.Peers{}
 		for _, peerVertex := range principalVertex.Neighbors() {
-			member := peerVertex.Data.(gossipdiscovery.NetworkMember)
+			member := peerVertex.Data.(NetworkMember)
 			// Check if this peer has the chaincode installed
 			stateInfo := chanMemberById[string(member.PKIid)]
 			_, hasChaincodeInstalled := criteria.chaincodeMapping[string(stateInfo.PKIid)]
@@ -470,7 +475,7 @@ type principalPeerGraph struct {
 }
 
 type principalAndPeerData struct {
-	members gossipdiscovery.Members
+	members Members
 	pGrps   principalGroupMapper
 }
 
@@ -492,7 +497,7 @@ func principalsToPeersGraph(data principalAndPeerData, satisfiesPrincipal peerPr
 		for _, peerVertex := range peerVertices {
 			// If the current peer satisfies the principal, connect their corresponding vertices with an edge
 			principal := principalVertex.Data.(*msp.MSPPrincipal)
-			member := peerVertex.Data.(gossipdiscovery.NetworkMember)
+			member := peerVertex.Data.(NetworkMember)
 			if satisfiesPrincipal(member, principal) {
 				peerVertex.AddNeighbor(principalVertex)
 			}
@@ -527,7 +532,7 @@ func (m memberIdentities) identityByPKIID(id common.PKIidType) api.PeerIdentityT
 	return m[string(id)]
 }
 
-func computeIdentitiesOfMembers(identitySet api.PeerIdentitySet, members map[string]gossipdiscovery.NetworkMember) memberIdentities {
+func computeIdentitiesOfMembers(identitySet api.PeerIdentitySet, members map[string]NetworkMember) memberIdentities {
 	identitiesByPKIID := make(map[string]api.PeerIdentityType)
 	identitiesOfMembers := make(map[string]api.PeerIdentityType, len(members))
 	for _, identity := range identitySet {
@@ -579,8 +584,8 @@ func (l layouts) groupsSet() map[string]struct{} {
 	return m
 }
 
-func peersWithChaincode(metadata ...*chaincode.Metadata) func(member gossipdiscovery.NetworkMember) bool {
-	return func(member gossipdiscovery.NetworkMember) bool {
+func peersWithChaincode(metadata ...*chaincode.Metadata) func(member NetworkMember) bool {
+	return func(member NetworkMember) bool {
 		if member.Properties == nil {
 			return false
 		}

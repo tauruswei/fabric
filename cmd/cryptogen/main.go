@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"github.com/hyperledger/fabric/internal/cryptogen/csp"
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"text/template"
 
 	"github.com/hyperledger/fabric/internal/cryptogen/ca"
-	"github.com/hyperledger/fabric/internal/cryptogen/csp"
 	"github.com/hyperledger/fabric/internal/cryptogen/metadata"
 	"github.com/hyperledger/fabric/internal/cryptogen/msp"
 
@@ -199,7 +199,7 @@ PeerOrgs:
       Count: 1
 `
 
-// command line flags
+//command line flags
 var (
 	app = kingpin.New("cryptogen", "Utility for generating Hyperledger Fabric key material")
 
@@ -207,7 +207,7 @@ var (
 	outputDir     = gen.Flag("output", "The output directory in which to place artifacts").Default("crypto-config").String()
 	genConfigFile = gen.Flag("config", "The configuration template to use").File()
 
-	showtemplate = app.Command("showtemplate", "Show the default configuration template")
+	showtemplate  = app.Command("showtemplate", "Show the default configuration template")
 
 	version       = app.Command("version", "Show version information")
 	ext           = app.Command("extend", "Extend existing network")
@@ -235,6 +235,7 @@ func main() {
 	case version.FullCommand():
 		printVersion()
 	}
+
 }
 
 func getConfig() (*Config, error) {
@@ -291,6 +292,7 @@ func extend() {
 		}
 		extendOrdererOrg(orgSpec)
 	}
+
 }
 
 func extendPeerOrg(orgSpec OrgSpec) {
@@ -380,6 +382,7 @@ func extendOrdererOrg(orgSpec OrgSpec) {
 }
 
 func generate() {
+
 	config, err := getConfig()
 	if err != nil {
 		fmt.Printf("Error reading config: %s", err)
@@ -406,6 +409,7 @@ func generate() {
 }
 
 func parseTemplate(input string, data interface{}) (string, error) {
+
 	t, err := template.New("parse").Parse(input)
 	if err != nil {
 		return "", fmt.Errorf("Error parsing template: %s", err)
@@ -421,6 +425,7 @@ func parseTemplate(input string, data interface{}) (string, error) {
 }
 
 func parseTemplateWithDefault(input, defaultInput string, data interface{}) (string, error) {
+
 	// Use the default if the input is an empty string
 	if len(input) == 0 {
 		input = defaultInput
@@ -507,6 +512,7 @@ func renderOrgSpec(orgSpec *OrgSpec, prefix string) error {
 }
 
 func generatePeerOrg(baseDir string, orgSpec OrgSpec) {
+
 	orgName := orgSpec.Domain
 
 	fmt.Println(orgName)
@@ -519,18 +525,21 @@ func generatePeerOrg(baseDir string, orgSpec OrgSpec) {
 	usersDir := filepath.Join(orgDir, "users")
 	adminCertsDir := filepath.Join(mspDir, "admincerts")
 	// generate signing CA
+	//TODO
 	signCA, err := ca.NewCA(caDir, orgName, orgSpec.CA.CommonName, orgSpec.CA.Country, orgSpec.CA.Province, orgSpec.CA.Locality, orgSpec.CA.OrganizationalUnit, orgSpec.CA.StreetAddress, orgSpec.CA.PostalCode)
 	if err != nil {
 		fmt.Printf("Error generating signCA for org %s:\n%v\n", orgName, err)
 		os.Exit(1)
 	}
 	// generate TLS CA
+	//TODO
 	tlsCA, err := ca.NewCA(tlsCADir, orgName, "tls"+orgSpec.CA.CommonName, orgSpec.CA.Country, orgSpec.CA.Province, orgSpec.CA.Locality, orgSpec.CA.OrganizationalUnit, orgSpec.CA.StreetAddress, orgSpec.CA.PostalCode)
 	if err != nil {
 		fmt.Printf("Error generating tlsCA for org %s:\n%v\n", orgName, err)
 		os.Exit(1)
 	}
 
+	//TODO
 	err = msp.GenerateVerifyingMSP(mspDir, signCA, tlsCA, orgSpec.EnableNodeOUs)
 	if err != nil {
 		fmt.Printf("Error generating MSP for org %s:\n%v\n", orgName, err)
@@ -593,7 +602,7 @@ func copyAdminCert(usersDir, adminCertsDir, adminUserName string) error {
 		return err
 	}
 	// recreate the admincerts directory
-	err = os.MkdirAll(adminCertsDir, 0o755)
+	err = os.MkdirAll(adminCertsDir, 0755)
 	if err != nil {
 		return err
 	}
@@ -614,6 +623,7 @@ func generateNodes(baseDir string, nodes []NodeSpec, signCA *ca.CA, tlsCA *ca.CA
 			if node.isAdmin && nodeOUs {
 				currentNodeType = msp.ADMIN
 			}
+			//TODO
 			err := msp.GenerateLocalMSP(nodeDir, node.CommonName, node.SANS, signCA, tlsCA, currentNodeType, nodeOUs)
 			if err != nil {
 				fmt.Printf("Error generating local MSP for %v:\n%v\n", node, err)
@@ -624,6 +634,7 @@ func generateNodes(baseDir string, nodes []NodeSpec, signCA *ca.CA, tlsCA *ca.CA
 }
 
 func generateOrdererOrg(baseDir string, orgSpec OrgSpec) {
+
 	orgName := orgSpec.Domain
 
 	// generate CAs
@@ -689,6 +700,7 @@ func generateOrdererOrg(baseDir string, orgSpec OrgSpec) {
 			os.Exit(1)
 		}
 	}
+
 }
 
 func copyFile(src, dst string) error {
@@ -715,18 +727,20 @@ func printVersion() {
 }
 
 func getCA(caDir string, spec OrgSpec, name string) *ca.CA {
+	//TODO
 	priv, _ := csp.LoadPrivateKey(caDir)
-	cert, _ := ca.LoadCertificateECDSA(caDir)
+	cert, _ := ca.LoadCertificateGMSM2(caDir)
 
 	return &ca.CA{
 		Name:               name,
 		Signer:             priv,
-		SignCert:           cert,
+		SignSm2Cert:        cert,
 		Country:            spec.CA.Country,
 		Province:           spec.CA.Province,
 		Locality:           spec.CA.Locality,
 		OrganizationalUnit: spec.CA.OrganizationalUnit,
 		StreetAddress:      spec.CA.StreetAddress,
 		PostalCode:         spec.CA.PostalCode,
+		Sm2Key:             priv,
 	}
 }

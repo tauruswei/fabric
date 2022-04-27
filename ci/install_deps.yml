@@ -14,4 +14,4 @@ steps:
     inputs:
       version: $(GOVER)
       goPath:  $(GOPATH)
-    displayName: Install Go
+    displayName: Install GoLang

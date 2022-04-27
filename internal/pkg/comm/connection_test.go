@@ -7,13 +7,18 @@ SPDX-License-Identifier: Apache-2.0
 package comm
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/require"
+	"github.com/hyperledger/fabric/internal/pkg/comm/testpb"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -21,7 +26,7 @@ const (
 	numChildOrgs = 2
 )
 
-// string for cert filenames
+//string for cert filenames
 var (
 	orgCACert   = filepath.Join("testdata", "certs", "Org%d-cert.pem")
 	childCACert = filepath.Join("testdata", "certs", "Org%d-child%d-cert.pem")
@@ -62,14 +67,14 @@ func TestNewCredentialSupport(t *testing.T) {
 	expected := &CredentialSupport{
 		appRootCAsByChain: make(map[string][][]byte),
 	}
-	require.Equal(t, expected, NewCredentialSupport())
+	assert.Equal(t, expected, NewCredentialSupport())
 
 	rootCAs := [][]byte{
 		[]byte("certificate-one"),
 		[]byte("certificate-two"),
 	}
 	expected.serverRootCAs = rootCAs[:]
-	require.Equal(t, expected, NewCredentialSupport(rootCAs...))
+	assert.Equal(t, expected, NewCredentialSupport(rootCAs...))
 }
 
 func TestCredentialSupport(t *testing.T) {
@@ -85,8 +90,8 @@ func TestCredentialSupport(t *testing.T) {
 	}
 	cert := tls.Certificate{Certificate: [][]byte{}}
 	cs.SetClientCertificate(cert)
-	require.Equal(t, cert, cs.clientCert)
-	require.Equal(t, cert, cs.GetClientCertificate())
+	assert.Equal(t, cert, cs.clientCert)
+	assert.Equal(t, cert, cs.GetClientCertificate())
 
 	cs.appRootCAsByChain["channel1"] = [][]byte{rootCAs[0]}
 	cs.appRootCAsByChain["channel2"] = [][]byte{rootCAs[1]}
@@ -94,13 +99,69 @@ func TestCredentialSupport(t *testing.T) {
 	cs.serverRootCAs = [][]byte{rootCAs[5]}
 
 	creds := cs.GetPeerCredentials()
-	require.Equal(t, "1.2", creds.Info().SecurityVersion,
+	assert.Equal(t, "1.2", creds.Info().SecurityVersion,
 		"Expected Security version to be 1.2")
 
 	// append some bad certs and make sure things still work
 	cs.serverRootCAs = append(cs.serverRootCAs, []byte("badcert"))
 	cs.serverRootCAs = append(cs.serverRootCAs, []byte(badPEM))
 	creds = cs.GetPeerCredentials()
-	require.Equal(t, "1.2", creds.Info().SecurityVersion,
+	assert.Equal(t, "1.2", creds.Info().SecurityVersion,
 		"Expected Security version to be 1.2")
+}
+
+type srv struct {
+	address string
+	*GRPCServer
+	caCert   []byte
+	serviced uint32
+}
+
+func (s *srv) assertServiced(t *testing.T) {
+	assert.Equal(t, uint32(1), atomic.LoadUint32(&s.serviced))
+	atomic.StoreUint32(&s.serviced, 0)
+}
+
+func (s *srv) EmptyCall(context.Context, *testpb.Empty) (*testpb.Empty, error) {
+	atomic.StoreUint32(&s.serviced, 1)
+	return &testpb.Empty{}, nil
+}
+
+func newServer(org string) *srv {
+	certs := map[string][]byte{
+		"ca.crt":     nil,
+		"server.crt": nil,
+		"server.key": nil,
+	}
+	for suffix := range certs {
+		fName := filepath.Join("testdata", "impersonation", org, suffix)
+		cert, err := ioutil.ReadFile(fName)
+		if err != nil {
+			panic(fmt.Errorf("Failed reading %s: %v", fName, err))
+		}
+		certs[suffix] = cert
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic(fmt.Errorf("Failed to create listener: %v", err))
+	}
+	gSrv, err := NewGRPCServerFromListener(l, ServerConfig{
+		ConnectionTimeout: 250 * time.Millisecond,
+		SecOpts: SecureOptions{
+			Certificate: certs["server.crt"],
+			Key:         certs["server.key"],
+			UseTLS:      true,
+		},
+	})
+	if err != nil {
+		panic(fmt.Errorf("Failed starting gRPC server: %v", err))
+	}
+	s := &srv{
+		address:    l.Addr().String(),
+		caCert:     certs["ca.crt"],
+		GRPCServer: gSrv,
+	}
+	testpb.RegisterTestServiceServer(gSrv.Server(), s)
+	go s.Start()
+	return s
 }

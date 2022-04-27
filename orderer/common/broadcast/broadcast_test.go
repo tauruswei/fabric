@@ -166,6 +166,7 @@ var _ = Describe("Broadcast", func() {
 					Expect(fakeProcessedCounter.WithCallCount()).To(Equal(1))
 				})
 			})
+
 		})
 
 		Context("when the receive from the client fails", func() {
@@ -276,7 +277,9 @@ var _ = Describe("Broadcast", func() {
 		})
 
 		Context("when the message is a config message", func() {
-			var fakeConfig *cb.Envelope
+			var (
+				fakeConfig *cb.Envelope
+			)
 
 			BeforeEach(func() {
 				fakeConfig = &cb.Envelope{}

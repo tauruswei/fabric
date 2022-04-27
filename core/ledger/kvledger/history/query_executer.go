@@ -27,10 +27,7 @@ type QueryExecutor struct {
 // GetHistoryForKey implements method in interface `ledger.HistoryQueryExecutor`
 func (q *QueryExecutor) GetHistoryForKey(namespace string, key string) (commonledger.ResultsIterator, error) {
 	rangeScan := constructRangeScan(namespace, key)
-	dbItr, err := q.levelDB.GetIterator(rangeScan.startKey, rangeScan.endKey)
-	if err != nil {
-		return nil, err
-	}
+	dbItr := q.levelDB.GetIterator(rangeScan.startKey, rangeScan.endKey)
 
 	// By default, dbItr is in the orderer of oldest to newest and its cursor is at the beginning of the entries.
 	// Need to call Last() and Next() to move the cursor to the end of the entries so that we can iterate
@@ -41,7 +38,7 @@ func (q *QueryExecutor) GetHistoryForKey(namespace string, key string) (commonle
 	return &historyScanner{rangeScan, namespace, key, dbItr, q.blockStore}, nil
 }
 
-// historyScanner implements ResultsIterator for iterating through history results
+//historyScanner implements ResultsIterator for iterating through history results
 type historyScanner struct {
 	rangeScan  *rangeScan
 	namespace  string
@@ -94,7 +91,7 @@ func (scanner *historyScanner) Close() {
 
 // getTxIDandKeyWriteValueFromTran inspects a transaction for writes to a given key
 func getKeyModificationFromTran(tranEnvelope *common.Envelope, namespace string, key string) (commonledger.QueryResult, error) {
-	logger.Debugf("Entering getKeyModificationFromTran %s:%s", namespace, key)
+	logger.Debugf("Entering getKeyModificationFromTran()\n", namespace, key)
 
 	// extract action from the envelope
 	payload, err := protoutil.UnmarshalPayload(tranEnvelope.Payload)
@@ -134,16 +131,14 @@ func getKeyModificationFromTran(tranEnvelope *common.Envelope, namespace string,
 			// got the correct namespace, now find the key write
 			for _, kvWrite := range nsRWSet.KvRwSet.Writes {
 				if kvWrite.Key == key {
-					return &queryresult.KeyModification{
-						TxId: txID, Value: kvWrite.Value,
-						Timestamp: timestamp, IsDelete: rwsetutil.IsKVWriteDelete(kvWrite),
-					}, nil
+					return &queryresult.KeyModification{TxId: txID, Value: kvWrite.Value,
+						Timestamp: timestamp, IsDelete: kvWrite.IsDelete}, nil
 				}
 			} // end keys loop
 			logger.Debugf("key [%s] not found in namespace [%s]'s writeset", key, namespace)
 			return nil, nil
 		} // end if
-	} // end namespaces loop
+	} //end namespaces loop
 	logger.Debugf("namespace [%s] not found in transaction's ReadWriteSets", namespace)
 	return nil, nil
 }

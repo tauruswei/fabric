@@ -18,17 +18,21 @@ import (
 	"github.com/hyperledger/fabric/internal/configtxgen/genesisconfig"
 	"github.com/hyperledger/fabric/orderer/common/blockcutter"
 	"github.com/hyperledger/fabric/orderer/common/msgprocessor"
-	"github.com/hyperledger/fabric/orderer/common/types"
 	"github.com/hyperledger/fabric/orderer/consensus"
 	"github.com/hyperledger/fabric/protoutil"
 )
 
-type mockChainCluster struct {
-	*mockChain
+type mockConsenter struct {
 }
 
-func (c *mockChainCluster) StatusReport() (types.ConsensusRelation, types.Status) {
-	return types.ConsensusRelationConsenter, types.StatusActive
+func (mc *mockConsenter) HandleChain(support consensus.ConsenterSupport, metadata *cb.Metadata) (consensus.Chain, error) {
+	return &mockChain{
+		queue:    make(chan *cb.Envelope),
+		cutter:   support.BlockCutter(),
+		support:  support,
+		metadata: metadata,
+		done:     make(chan struct{}),
+	}, nil
 }
 
 type mockChain struct {
@@ -170,8 +174,7 @@ func makeConfigTxFromConfigUpdateEnvelope(chainID string, configUpdateEnv *cb.Co
 	}
 	configTx, err := protoutil.CreateSignedEnvelope(cb.HeaderType_CONFIG, chainID, mockCrypto(), &cb.ConfigEnvelope{
 		Config:     &cb.Config{Sequence: 1, ChannelGroup: configtx.UnmarshalConfigUpdateOrPanic(configUpdateEnv.ConfigUpdate).WriteSet},
-		LastUpdate: configUpdateTx,
-	},
+		LastUpdate: configUpdateTx},
 		msgVersion, epoch)
 	if err != nil {
 		panic(err)
@@ -193,28 +196,4 @@ func makeNormalTx(chainID string, i int) *cb.Envelope {
 	return &cb.Envelope{
 		Payload: protoutil.MarshalOrPanic(payload),
 	}
-}
-
-func handleChain(support consensus.ConsenterSupport, metadata *cb.Metadata) (consensus.Chain, error) {
-	chain := &mockChain{
-		queue:    make(chan *cb.Envelope),
-		cutter:   support.BlockCutter(),
-		support:  support,
-		metadata: metadata,
-		done:     make(chan struct{}),
-	}
-
-	return chain, nil
-}
-
-func handleChainCluster(support consensus.ConsenterSupport, metadata *cb.Metadata) (consensus.Chain, error) {
-	chain := &mockChain{
-		queue:    make(chan *cb.Envelope),
-		cutter:   support.BlockCutter(),
-		support:  support,
-		metadata: metadata,
-		done:     make(chan struct{}),
-	}
-
-	return &mockChainCluster{mockChain: chain}, nil
 }

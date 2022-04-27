@@ -181,6 +181,7 @@ func (m MapLedgerShim) GetStateRange(prefix string) (map[string][]byte, error) {
 		if strings.HasPrefix(key, prefix) {
 			result[key] = value
 		}
+
 	}
 	return result, nil
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/queryutil/mock"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	statedbmock "github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/mock"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMain(m *testing.M) {
@@ -50,39 +50,37 @@ func TestCombinerGetState(t *testing.T) {
 			&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: batch1},
 			&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: batch2},
 			&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: batch3},
-		},
-	}
+		}}
 
 	val, err := combiner.GetState("ns1", "key1")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b1_value1"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b1_value1"), val)
 
 	val, err = combiner.GetState("ns1", "key2")
-	require.NoError(t, err)
-	require.Nil(t, val)
+	assert.NoError(t, err)
+	assert.Nil(t, val)
 
 	val, err = combiner.GetState("ns1", "key3")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b1_value3"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b1_value3"), val)
 
 	combiner = &queryutil.QECombiner{
 		QueryExecuters: []queryutil.QueryExecuter{
 			&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: batch3},
 			&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: batch2},
 			&queryutil.UpdateBatchBackedQueryExecuter{UpdateBatch: batch1},
-		},
-	}
+		}}
 	val, err = combiner.GetState("ns1", "key1")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b3_value1"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b3_value1"), val)
 
 	val, err = combiner.GetState("ns1", "key2")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b3_value2"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b3_value2"), val)
 
 	val, err = combiner.GetState("ns1", "key3")
-	require.NoError(t, err)
-	require.Nil(t, val)
+	assert.NoError(t, err)
+	assert.Nil(t, val)
 }
 
 func TestCombinerRangeScan(t *testing.T) {
@@ -114,7 +112,7 @@ func TestCombinerRangeScan(t *testing.T) {
 	}
 
 	itr, err := combiner.GetStateRangeScanIterator("ns1", "key1", "key4")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	expectedResults := []*queryresult.KV{
 		{Namespace: "ns1", Key: "key1", Value: []byte("batch1_value1")},
 		{Namespace: "ns1", Key: "key3", Value: []byte("batch1_value3")},
@@ -122,7 +120,7 @@ func TestCombinerRangeScan(t *testing.T) {
 	testutilCheckIteratorResults(t, itr, expectedResults)
 
 	itr, err = combiner.GetStateRangeScanIterator("ns1", "key0", "key6")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	expectedResults = []*queryresult.KV{
 		{Namespace: "ns1", Key: "key0", Value: []byte("batch3_value0")},
 		{Namespace: "ns1", Key: "key1", Value: []byte("batch1_value1")},
@@ -140,7 +138,7 @@ func TestCombinerRangeScan(t *testing.T) {
 		},
 	}
 	itr, err = combiner.GetStateRangeScanIterator("ns1", "key0", "key6")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	expectedResults = []*queryresult.KV{
 		{Namespace: "ns1", Key: "key0", Value: []byte("batch3_value0")},
 		{Namespace: "ns1", Key: "key1", Value: []byte("batch3_value1")},
@@ -163,7 +161,7 @@ func TestGetStateError(t *testing.T) {
 		},
 	}
 	_, err := combiner1.GetState("ns", "key1")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	combiner2 := &queryutil.QECombiner{
 		QueryExecuters: []queryutil.QueryExecuter{
@@ -171,15 +169,15 @@ func TestGetStateError(t *testing.T) {
 		},
 	}
 	_, err = combiner2.GetState("ns", "key1")
-	require.Error(t, err)
+	assert.Error(t, err)
 }
 
 func TestGetRangeScanError(t *testing.T) {
 	itr1 := &statedbmock.ResultsIterator{}
 	itr1.NextReturns(
 		&statedb.VersionedKV{
-			CompositeKey:   &statedb.CompositeKey{Namespace: "ns", Key: "dummyKey"},
-			VersionedValue: &statedb.VersionedValue{Value: []byte("dummyVal")},
+			CompositeKey:   statedb.CompositeKey{Namespace: "ns", Key: "dummyKey"},
+			VersionedValue: statedb.VersionedValue{Value: []byte("dummyVal")},
 		},
 		nil,
 	)
@@ -194,15 +192,15 @@ func TestGetRangeScanError(t *testing.T) {
 		},
 	}
 	_, err := combiner.GetStateRangeScanIterator("ns", "startKey", "endKey")
-	require.Error(t, err)
+	assert.Error(t, err)
 }
 
 func TestGetRangeScanUnderlyingIteratorReturnsError(t *testing.T) {
 	itr1 := &statedbmock.ResultsIterator{}
 	itr1.NextReturns(
 		&statedb.VersionedKV{
-			CompositeKey:   &statedb.CompositeKey{Namespace: "ns", Key: "dummyKey"},
-			VersionedValue: &statedb.VersionedValue{Value: []byte("dummyVal")},
+			CompositeKey:   statedb.CompositeKey{Namespace: "ns", Key: "dummyKey"},
+			VersionedValue: statedb.VersionedValue{Value: []byte("dummyVal")},
 		},
 		nil,
 	)
@@ -223,7 +221,7 @@ func TestGetRangeScanUnderlyingIteratorReturnsError(t *testing.T) {
 		},
 	}
 	_, err := combiner.GetStateRangeScanIterator("ns", "startKey", "endKey")
-	require.Error(t, err)
+	assert.Error(t, err)
 }
 
 func TestGetPrivateDataHash(t *testing.T) {
@@ -250,39 +248,37 @@ func TestGetPrivateDataHash(t *testing.T) {
 			&queryutil.UpdateBatchBackedQueryExecuter{HashUpdatesBatch: batch1},
 			&queryutil.UpdateBatchBackedQueryExecuter{HashUpdatesBatch: batch2},
 			&queryutil.UpdateBatchBackedQueryExecuter{HashUpdatesBatch: batch3},
-		},
-	}
+		}}
 
 	val, err := combiner.GetPrivateDataHash("ns1", "coll1", "key1")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b1_value1"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b1_value1"), val)
 
 	val, err = combiner.GetPrivateDataHash("ns1", "coll1", "key2")
-	require.NoError(t, err)
-	require.Nil(t, val)
+	assert.NoError(t, err)
+	assert.Nil(t, val)
 
 	val, err = combiner.GetPrivateDataHash("ns1", "coll1", "key3")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b1_value3"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b1_value3"), val)
 
 	combiner = &queryutil.QECombiner{
 		QueryExecuters: []queryutil.QueryExecuter{
 			&queryutil.UpdateBatchBackedQueryExecuter{HashUpdatesBatch: batch3},
 			&queryutil.UpdateBatchBackedQueryExecuter{HashUpdatesBatch: batch2},
 			&queryutil.UpdateBatchBackedQueryExecuter{HashUpdatesBatch: batch1},
-		},
-	}
+		}}
 	val, err = combiner.GetPrivateDataHash("ns1", "coll1", "key1")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b3_value1"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b3_value1"), val)
 
 	val, err = combiner.GetPrivateDataHash("ns1", "coll1", "key2")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b3_value2"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b3_value2"), val)
 
 	val, err = combiner.GetPrivateDataHash("ns1", "coll1", "key3")
-	require.NoError(t, err)
-	require.Equal(t, []byte("b2_value3"), val)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("b2_value3"), val)
 }
 
 func TestGetPrivateDataHashError(t *testing.T) {
@@ -296,7 +292,7 @@ func TestGetPrivateDataHashError(t *testing.T) {
 		},
 	}
 	_, err := combiner1.GetPrivateDataHash("ns", "coll1", "key1")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	combiner2 := &queryutil.QECombiner{
 		QueryExecuters: []queryutil.QueryExecuter{
@@ -304,18 +300,18 @@ func TestGetPrivateDataHashError(t *testing.T) {
 		},
 	}
 	_, err = combiner2.GetPrivateDataHash("ns", "coll1", "key1")
-	require.Error(t, err)
+	assert.Error(t, err)
 }
 
 func testutilCheckIteratorResults(t *testing.T, itr commonledger.ResultsIterator, expectedResults []*queryresult.KV) {
 	results := []*queryresult.KV{}
 	for {
 		result, err := itr.Next()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		if result == nil {
 			break
 		}
 		results = append(results, result.(*queryresult.KV))
 	}
-	require.Equal(t, expectedResults, results)
+	assert.Equal(t, expectedResults, results)
 }

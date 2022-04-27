@@ -26,8 +26,8 @@ import (
 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
 	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
 	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 //go:generate counterfeiter -o mocks/capabilities.go -fake-name Capabilities . capabilities
@@ -90,6 +90,7 @@ func newValidationInstance(state map[string]map[string][]byte) *Validator {
 	vs.GetStateMultipleKeysStub = func(namespace string, keys []string) ([][]byte, error) {
 		if ns, ok := state[namespace]; ok {
 			return [][]byte{ns[keys[0]]}, nil
+
 		} else {
 			return nil, fmt.Errorf("could not retrieve namespace %s", namespace)
 		}
@@ -154,19 +155,19 @@ func TestStateBasedValidationFailure(t *testing.T) {
 	// bad path: policy validation error
 	sbvm.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&commonerrors.VSCCEndorsementPolicyError{Err: fmt.Errorf("some sbe validation err")}).Once()
 	err = v.Validate(b, "foo", 0, 0, policy)
-	require.Error(t, err)
-	require.IsType(t, &commonerrors.VSCCEndorsementPolicyError{}, err)
+	assert.Error(t, err)
+	assert.IsType(t, &commonerrors.VSCCEndorsementPolicyError{}, err)
 
 	// bad path: execution error
 	sbvm.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&commonerrors.VSCCExecutionFailureError{Err: fmt.Errorf("some sbe validation err")}).Once()
 	err = v.Validate(b, "foo", 0, 0, policy)
-	require.Error(t, err)
-	require.IsType(t, &commonerrors.VSCCExecutionFailureError{}, err)
+	assert.Error(t, err)
+	assert.IsType(t, &commonerrors.VSCCExecutionFailureError{}, err)
 
 	// good path: signed by the right MSP
 	sbvm.On("Validate", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	err = v.Validate(b, "foo", 0, 0, policy)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 }
 
 func TestInvoke(t *testing.T) {
@@ -176,18 +177,18 @@ func TestInvoke(t *testing.T) {
 	var err error
 	b := &common.Block{Data: &common.BlockData{Data: [][]byte{[]byte("a")}}, Header: &common.BlockHeader{}}
 	err = v.Validate(b, "foo", 0, 0, []byte("a"))
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// (still) broken Envelope
 	b = &common.Block{Data: &common.BlockData{Data: [][]byte{protoutil.MarshalOrPanic(&common.Envelope{Payload: []byte("barf")})}}, Header: &common.BlockHeader{}}
 	err = v.Validate(b, "foo", 0, 0, []byte("a"))
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// (still) broken Envelope
 	e := protoutil.MarshalOrPanic(&common.Envelope{Payload: protoutil.MarshalOrPanic(&common.Payload{Header: &common.Header{ChannelHeader: []byte("barf")}})})
 	b = &common.Block{Data: &common.BlockData{Data: [][]byte{e}}, Header: &common.BlockHeader{}}
 	err = v.Validate(b, "foo", 0, 0, []byte("a"))
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	tx, err := createTx(false)
 	if err != nil {
@@ -208,46 +209,58 @@ func TestInvoke(t *testing.T) {
 	e = protoutil.MarshalOrPanic(&common.Envelope{Payload: protoutil.MarshalOrPanic(&common.Payload{Header: &common.Header{ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{Type: int32(common.HeaderType_ORDERER_TRANSACTION)})}})})
 	b = &common.Block{Data: &common.BlockData{Data: [][]byte{e}}, Header: &common.BlockHeader{}}
 	err = v.Validate(b, "foo", 0, 0, policy)
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// broken tx payload
 	e = protoutil.MarshalOrPanic(&common.Envelope{Payload: protoutil.MarshalOrPanic(&common.Payload{Header: &common.Header{ChannelHeader: protoutil.MarshalOrPanic(&common.ChannelHeader{Type: int32(common.HeaderType_ORDERER_TRANSACTION)})}})})
 	b = &common.Block{Data: &common.BlockData{Data: [][]byte{e}}, Header: &common.BlockHeader{}}
 	err = v.Validate(b, "foo", 0, 0, policy)
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// good path: signed by the right MSP
 	b = &common.Block{Data: &common.BlockData{Data: [][]byte{envBytes}}, Header: &common.BlockHeader{}}
 	err = v.Validate(b, "foo", 0, 0, policy)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 }
 
 func TestToApplicationPolicyTranslator_Translate(t *testing.T) {
 	tr := &toApplicationPolicyTranslator{}
 	res, err := tr.Translate(nil)
-	require.NoError(t, err)
-	require.Nil(t, res)
+	assert.NoError(t, err)
+	assert.Nil(t, res)
 
 	res, err = tr.Translate([]byte("barf"))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "could not unmarshal signature policy envelope: unexpected EOF")
-	require.Nil(t, res)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "could not unmarshal signature policy envelope: unexpected EOF")
+	assert.Nil(t, res)
 
 	res, err = tr.Translate(protoutil.MarshalOrPanic(policydsl.SignedByMspMember("the right honourable member for Ipswich")))
-	require.NoError(t, err)
-	require.Equal(t, res, protoutil.MarshalOrPanic(&peer.ApplicationPolicy{
+	assert.NoError(t, err)
+	assert.Equal(t, res, protoutil.MarshalOrPanic(&peer.ApplicationPolicy{
 		Type: &peer.ApplicationPolicy_SignaturePolicy{
 			SignaturePolicy: policydsl.SignedByMspMember("the right honourable member for Ipswich"),
 		},
 	}))
 }
 
-var (
-	id        msp.SigningIdentity
-	sid       []byte
-	mspid     string
-	channelID string = "testchannelid"
-)
+var id msp.SigningIdentity
+var sid []byte
+var mspid string
+var channelID string = "testchannelid"
+
+type mockPolicyChecker struct{}
+
+func (c *mockPolicyChecker) CheckPolicy(channelID, policyName string, signedProp *peer.SignedProposal) error {
+	return nil
+}
+
+func (c *mockPolicyChecker) CheckPolicyBySignedData(channelID, policyName string, sd []*protoutil.SignedData) error {
+	return nil
+}
+
+func (c *mockPolicyChecker) CheckPolicyNoChannel(policyName string, signedProp *peer.SignedProposal) error {
+	return nil
+}
 
 func TestMain(m *testing.M) {
 	code := -1
@@ -273,7 +286,7 @@ func TestMain(m *testing.M) {
 
 	id, err = mspmgmt.GetLocalMSP(cryptoProvider).GetDefaultSigningIdentity()
 	if err != nil {
-		fmt.Printf("GetDefaultSigningIdentity failed with err %s", err)
+		fmt.Printf("GetSigningIdentity failed with err %s", err)
 		return
 	}
 

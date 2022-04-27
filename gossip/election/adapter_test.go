@@ -22,7 +22,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/metrics/mocks"
 	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -118,6 +118,7 @@ func TestAdapterImpl_Peers(t *testing.T) {
 			}
 		}
 	}
+
 }
 
 func TestAdapterImpl_Stop(t *testing.T) {
@@ -175,7 +176,9 @@ func TestAdapterImpl_Gossip(t *testing.T) {
 				totalMsg++
 			}
 		}
+
 	}
+
 }
 
 type mockAcceptor struct {
@@ -242,6 +245,7 @@ func (g *peerMockGossip) Gossip(msg *proto.GossipMessage) {
 	}
 	g.clusterLock.RUnlock()
 	peersLock.RUnlock()
+
 }
 
 func (g *peerMockGossip) putToAcceptors(msg *proto.GossipMessage) {
@@ -254,6 +258,7 @@ func (g *peerMockGossip) putToAcceptors(msg *proto.GossipMessage) {
 		}
 	}
 	g.acceptorLock.RUnlock()
+
 }
 
 func (g *peerMockGossip) IsInMyOrg(member discovery.NetworkMember) bool {
@@ -292,6 +297,7 @@ func (cop *clusterOfPeers) addPeer(peerID string, gossip *peerMockGossip) {
 	gossip.cluster = cop
 	gossip.clusterLock.Unlock()
 	cop.peersLock.Unlock()
+
 }
 
 func newClusterOfPeers(id string) *clusterOfPeers {
@@ -300,6 +306,7 @@ func newClusterOfPeers(id string) *clusterOfPeers {
 		peersGossip: make(map[string]*peerMockGossip),
 		peersLock:   &sync.RWMutex{},
 	}
+
 }
 
 func createCluster(pki2org map[string]string, peers ...int) (*clusterOfPeers, map[string]*adapterImpl) {
@@ -325,6 +332,7 @@ func createCluster(pki2org map[string]string, peers ...int) (*clusterOfPeers, ma
 }
 
 func TestReportMetrics(t *testing.T) {
+
 	testMetricProvider := mocks.TestUtilConstructMetricProvider()
 	electionMetrics := metrics.NewGossipMetrics(testMetricProvider.FakeProvider).ElectionMetrics
 
@@ -333,23 +341,24 @@ func TestReportMetrics(t *testing.T) {
 
 	adapter.ReportMetrics(true)
 
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", "channel0"},
 		testMetricProvider.FakeDeclarationGauge.WithArgsForCall(0),
 	)
-	require.EqualValues(t,
+	assert.EqualValues(t,
 		1,
 		testMetricProvider.FakeDeclarationGauge.SetArgsForCall(0),
 	)
 
 	adapter.ReportMetrics(false)
 
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", "channel0"},
 		testMetricProvider.FakeDeclarationGauge.WithArgsForCall(1),
 	)
-	require.EqualValues(t,
+	assert.EqualValues(t,
 		0,
 		testMetricProvider.FakeDeclarationGauge.SetArgsForCall(1),
 	)
+
 }

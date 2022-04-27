@@ -33,6 +33,7 @@ func computeSKI(serialise func() ([]byte, error)) ([]byte, error) {
 	hash := sha256.New()
 	hash.Write(raw)
 	return hash.Sum(nil), nil
+
 }
 
 func NewNymSecretKey(sk Big, pk Ecp, exportable bool) (*nymSecretKey, error) {

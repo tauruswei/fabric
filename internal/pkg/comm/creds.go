@@ -8,12 +8,12 @@ package comm
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
+	"github.com/tjfoc/gmsm/sm2"
+	tls "github.com/tjfoc/gmtls"
+	"github.com/tjfoc/gmtls/gmcredentials"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/hyperledger/fabric/common/flogging"
 	"google.golang.org/grpc/credentials"
@@ -26,9 +26,6 @@ var (
 
 	// alpnProtoStr are the specified application level protocols for gRPC.
 	alpnProtoStr = []string{"h2"}
-
-	// Logger for TLS client connections
-	tlsClientLogger = flogging.MustGetLogger("comm.tls")
 )
 
 // NewServerTransportCredentials returns a new initialized
@@ -40,15 +37,9 @@ func NewServerTransportCredentials(
 	// clone the tls.Config which allows us to update it dynamically
 	serverConfig.config.NextProtos = alpnProtoStr
 	serverConfig.config.MinVersion = tls.VersionTLS12
-
-	if logger == nil {
-		logger = tlsClientLogger
-	}
-
 	return &serverCreds{
 		serverConfig: serverConfig,
-		logger:       logger,
-	}
+		logger:       logger}
 }
 
 // serverCreds is an implementation of grpc/credentials.TransportCredentials.
@@ -79,14 +70,14 @@ func (t *TLSConfig) Config() tls.Config {
 	return tls.Config{}
 }
 
-func (t *TLSConfig) AddClientRootCA(cert *x509.Certificate) {
+func (t *TLSConfig) AddClientRootCA(cert *sm2.Certificate) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.config.ClientCAs.AddCert(cert)
 }
 
-func (t *TLSConfig) SetClientCAs(certPool *x509.CertPool) {
+func (t *TLSConfig) SetClientCAs(certPool *sm2.CertPool) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -94,7 +85,8 @@ func (t *TLSConfig) SetClientCAs(certPool *x509.CertPool) {
 }
 
 // ClientHandShake is not implemented for `serverCreds`.
-func (sc *serverCreds) ClientHandshake(context.Context, string, net.Conn) (net.Conn, credentials.AuthInfo, error) {
+func (sc *serverCreds) ClientHandshake(context.Context,
+	string, net.Conn) (net.Conn, credentials.AuthInfo, error) {
 	return nil, nil, ErrClientHandshakeNotImplemented
 }
 
@@ -103,14 +95,14 @@ func (sc *serverCreds) ServerHandshake(rawConn net.Conn) (net.Conn, credentials.
 	serverConfig := sc.serverConfig.Config()
 
 	conn := tls.Server(rawConn, &serverConfig)
-	l := sc.logger.With("remote address", conn.RemoteAddr().String())
-	start := time.Now()
 	if err := conn.Handshake(); err != nil {
-		l.Errorf("Server TLS handshake failed in %s with error %s", time.Since(start), err)
+		if sc.logger != nil {
+			sc.logger.With("remote address",
+				conn.RemoteAddr().String()).Errorf("TLS handshake failed with error %s", err)
+		}
 		return nil, nil, err
 	}
-	l.Debugf("Server TLS handshake completed in %s", time.Since(start))
-	return conn, credentials.TLSInfo{State: conn.ConnectionState()}, nil
+	return conn, gmcredentials.TLSInfo{State: conn.ConnectionState()}, nil
 }
 
 // Info provides the ProtocolInfo of this TransportCredentials.
@@ -135,24 +127,20 @@ func (sc *serverCreds) OverrideServerName(string) error {
 }
 
 type DynamicClientCredentials struct {
-	TLSConfig *tls.Config
+	TLSConfig  *tls.Config
+	TLSOptions []TLSOption
 }
 
 func (dtc *DynamicClientCredentials) latestConfig() *tls.Config {
-	return dtc.TLSConfig.Clone()
+	tlsConfigCopy := dtc.TLSConfig.Clone()
+	for _, tlsOption := range dtc.TLSOptions {
+		tlsOption(tlsConfigCopy)
+	}
+	return tlsConfigCopy
 }
 
 func (dtc *DynamicClientCredentials) ClientHandshake(ctx context.Context, authority string, rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
-	l := tlsClientLogger.With("remote address", rawConn.RemoteAddr().String())
-	creds := credentials.NewTLS(dtc.latestConfig())
-	start := time.Now()
-	conn, auth, err := creds.ClientHandshake(ctx, authority, rawConn)
-	if err != nil {
-		l.Errorf("Client TLS handshake failed after %s with error: %s", time.Since(start), err)
-	} else {
-		l.Debugf("Client TLS handshake completed in %s", time.Since(start))
-	}
-	return conn, auth, err
+	return gmcredentials.NewTLS(dtc.latestConfig()).ClientHandshake(ctx, authority, rawConn)
 }
 
 func (dtc *DynamicClientCredentials) ServerHandshake(rawConn net.Conn) (net.Conn, credentials.AuthInfo, error) {
@@ -160,11 +148,11 @@ func (dtc *DynamicClientCredentials) ServerHandshake(rawConn net.Conn) (net.Conn
 }
 
 func (dtc *DynamicClientCredentials) Info() credentials.ProtocolInfo {
-	return credentials.NewTLS(dtc.latestConfig()).Info()
+	return gmcredentials.NewTLS(dtc.latestConfig()).Info()
 }
 
 func (dtc *DynamicClientCredentials) Clone() credentials.TransportCredentials {
-	return credentials.NewTLS(dtc.latestConfig())
+	return gmcredentials.NewTLS(dtc.latestConfig())
 }
 
 func (dtc *DynamicClientCredentials) OverrideServerName(name string) error {

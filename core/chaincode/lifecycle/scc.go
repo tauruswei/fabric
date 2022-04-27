@@ -19,7 +19,6 @@ import (
 	"github.com/hyperledger/fabric/common/chaincode"
 	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/core/aclmgmt"
-	"github.com/hyperledger/fabric/core/chaincode/implicitcollection"
 	"github.com/hyperledger/fabric/core/chaincode/persistence"
 	"github.com/hyperledger/fabric/core/dispatcher"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -364,7 +363,7 @@ func (i *Invocation) ApproveChaincodeDefinitionForMyOrg(input *lb.ApproveChainco
 	if err := i.validateInput(input.Name, input.Version, input.Collections); err != nil {
 		return nil, errors.WithMessage(err, "error validating chaincode definition")
 	}
-	collectionName := implicitcollection.NameForOrg(i.SCC.OrgMSPID)
+	collectionName := ImplicitCollectionNameForOrg(i.SCC.OrgMSPID)
 	var collectionConfig []*pb.CollectionConfig
 	if input.Collections != nil {
 		collectionConfig = input.Collections.Config
@@ -424,7 +423,7 @@ func (i *Invocation) QueryApprovedChaincodeDefinition(input *lb.QueryApprovedCha
 		i.Stub.GetChannelID(),
 		input.Name,
 	)
-	collectionName := implicitcollection.NameForOrg(i.SCC.OrgMSPID)
+	collectionName := ImplicitCollectionNameForOrg(i.SCC.OrgMSPID)
 
 	ca, err := i.SCC.Functions.QueryApprovedChaincodeDefinition(
 		i.Stub.GetChannelID(),
@@ -511,7 +510,7 @@ func (i *Invocation) CommitChaincodeDefinition(input *lb.CommitChaincodeDefiniti
 	var myOrg string
 	for _, org := range orgs {
 		opaqueStates = append(opaqueStates, &ChaincodePrivateLedgerShim{
-			Collection: implicitcollection.NameForOrg(org.MSPID()),
+			Collection: ImplicitCollectionNameForOrg(org.MSPID()),
 			Stub:       i.Stub,
 		})
 		if org.MSPID() == i.SCC.OrgMSPID {
@@ -895,7 +894,7 @@ func (i *Invocation) createOpaqueStates() ([]OpaqueState, error) {
 	opaqueStates := make([]OpaqueState, 0, len(orgs))
 	for _, org := range orgs {
 		opaqueStates = append(opaqueStates, &ChaincodePrivateLedgerShim{
-			Collection: implicitcollection.NameForOrg(org.MSPID()),
+			Collection: ImplicitCollectionNameForOrg(org.MSPID()),
 			Stub:       i.Stub,
 		})
 	}

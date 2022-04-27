@@ -8,6 +8,7 @@ package txvalidator
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -59,8 +60,8 @@ type ChannelResources interface {
 // LedgerResources provides access to ledger artefacts or
 // functions to interact with them
 type LedgerResources interface {
-	// TxIDExists returns true if the specified txID is already present in one of the already committed blocks
-	TxIDExists(txID string) (bool, error)
+	// GetTransactionByID retrieves a transaction by id
+	GetTransactionByID(txID string) (*peer.ProcessedTransaction, error)
 
 	// NewQueryExecutor gives handle to a query executor.
 	// A client can obtain more than one 'QueryExecutor's for parallel execution.
@@ -72,7 +73,7 @@ type LedgerResources interface {
 // and plugin dispatcher
 type Dispatcher interface {
 	// Dispatch invokes the appropriate validation plugin for the supplied transaction in the block
-	Dispatch(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (peer.TxValidationCode, error)
+	Dispatch(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode)
 }
 
 //go:generate mockery -dir . -name ChannelResources -case underscore -output mocks/
@@ -370,7 +371,7 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 
 			// Validate tx with plugins
 			logger.Debug("Validating transaction with plugins")
-			cde, err := v.Dispatcher.Dispatch(tIdx, payload, d, block)
+			err, cde := v.Dispatcher.Dispatch(tIdx, payload, d, block)
 			if err != nil {
 				logger.Errorf("Dispatch for transaction txId = %s returned error: %s", txID, err)
 				switch err.(type) {
@@ -457,26 +458,39 @@ func (v *TxValidator) validateTx(req *blockValidationRequest, results chan<- *bl
 // the function returns nil if it has ensured that there is no such duplicate, such
 // that its consumer can proceed with the transaction processing
 func (v *TxValidator) checkTxIdDupsLedger(tIdx int, chdr *common.ChannelHeader, ldgr LedgerResources) *blockValidationResult {
+
 	// Retrieve the transaction identifier of the input header
 	txID := chdr.TxId
 
 	// Look for a transaction with the same identifier inside the ledger
-	exists, err := ldgr.TxIDExists(txID)
-	if err != nil {
+	_, err := ldgr.GetTransactionByID(txID)
+
+	switch err.(type) {
+	case nil:
+		// invalid case, returned error is nil. It means that there is already a tx in the ledger with the same id
+		logger.Error("Duplicate transaction found, ", txID, ", skipping")
+		return &blockValidationResult{
+			tIdx:           tIdx,
+			validationCode: peer.TxValidationCode_DUPLICATE_TXID,
+		}
+	case ledger.NotFoundInIndexErr:
+		// valid case, returned error is of type NotFoundInIndexErr.
+		// It means that no tx with the same id is found in the ledger
+		return nil
+	default:
+		// invalid case, returned error is not of type NotFoundInIndexErr.
+		// It means that we could not verify whether a tx with the supplied id is in the ledger
 		logger.Errorf("Ledger failure while attempting to detect duplicate status for txid %s: %s", txID, err)
 		return &blockValidationResult{
 			tIdx: tIdx,
 			err:  err,
 		}
 	}
-	if exists {
-		logger.Error("Duplicate transaction found, ", txID, ", skipping")
-		return &blockValidationResult{
-			tIdx:           tIdx,
-			validationCode: peer.TxValidationCode_DUPLICATE_TXID,
-		}
-	}
-	return nil
+}
+
+// generateCCKey generates a unique identifier for chaincode in specific channel
+func (v *TxValidator) generateCCKey(ccName, chainID string) string {
+	return fmt.Sprintf("%s/%s", ccName, chainID)
 }
 
 type dynamicDeserializer struct {

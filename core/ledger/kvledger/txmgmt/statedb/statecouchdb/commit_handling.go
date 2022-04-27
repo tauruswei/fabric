@@ -187,16 +187,16 @@ func (c *committer) commitUpdates() error {
 	// iterate through the response from CouchDB by document
 	for _, resp := range responses {
 		// If the document returned an error, retry the individual document
-		if resp.Ok {
+		if resp.Ok == true {
 			c.updateRevisionInCacheUpdate(resp.ID, resp.Rev)
 			continue
 		}
 		doc := c.batchUpdateMap[resp.ID]
 
 		var err error
-		// Remove the "_rev" from the JSON before saving
-		// this will allow the CouchDB retry logic to retry revisions without encountering
-		// a mismatch between the "If-Match" and the "_rev" tag in the JSON
+		//Remove the "_rev" from the JSON before saving
+		//this will allow the CouchDB retry logic to retry revisions without encountering
+		//a mismatch between the "If-Match" and the "_rev" tag in the JSON
 		if doc.CouchDoc.jsonValue != nil {
 			err = removeJSONRevision(&doc.CouchDoc.jsonValue)
 			if err != nil {
@@ -304,7 +304,7 @@ func (vdb *VersionedDB) addMissingRevisionsFromDB(ns string, missingKeys []strin
 	return nil
 }
 
-// batchableDocument defines a document for a batch
+//batchableDocument defines a document for a batch
 type batchableDocument struct {
 	CouchDoc couchDoc
 	Deleted  bool

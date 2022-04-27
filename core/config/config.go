@@ -9,12 +9,13 @@ package config
 
 import (
 	"fmt"
+	"github.com/hyperledger/fabric/common/flogging"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/viper"
 )
-
+var logger = flogging.MustGetLogger("orderer.common.server")
 func dirExists(path string) bool {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -88,7 +89,7 @@ const OfficialPath = "/etc/hyperledger/fabric"
 // Viper instance
 //----------------------------------------------------------------------------------
 func InitViper(v *viper.Viper, configName string) error {
-	altPath := os.Getenv("FABRIC_CFG_PATH")
+	var altPath = os.Getenv("FABRIC_CFG_PATH")
 	if altPath != "" {
 		// If the user has overridden the path with an envvar, its the only path
 		// we will consider

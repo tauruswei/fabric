@@ -12,15 +12,15 @@ import (
 
 	"github.com/hyperledger/fabric/core/ledger/internal/version"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetRevision(t *testing.T) {
 	vdbEnv.init(t, nil)
 	defer vdbEnv.cleanup()
 
-	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-get-revisions", nil)
-	require.NoError(t, err)
+	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-get-revisions")
+	assert.NoError(t, err)
 	db := versionedDB.(*VersionedDB)
 
 	// initializing data in couchdb
@@ -28,7 +28,7 @@ func TestGetRevision(t *testing.T) {
 	batch.Put("ns", "key-in-db", []byte("value1"), version.NewHeight(1, 1))
 	batch.Put("ns", "key-in-both-db-cache", []byte("value2"), version.NewHeight(1, 2))
 	savePoint := version.NewHeight(1, 2)
-	require.NoError(t, db.ApplyUpdates(batch, savePoint))
+	assert.NoError(t, db.ApplyUpdates(batch, savePoint))
 
 	// load revision cache with couchDB revision number.
 	keys := []*statedb.CompositeKey{
@@ -37,7 +37,7 @@ func TestGetRevision(t *testing.T) {
 			Key:       "key-in-both-db-cache",
 		},
 	}
-	require.NoError(t, db.LoadCommittedVersions(keys))
+	db.LoadCommittedVersions(keys)
 	// change cache reivision number for test purpose. (makes sure only read from cache but not db)
 	db.committedDataCache.setVerAndRev("ns", "key-in-both-db-cache", version.NewHeight(1, 2), "revision-db-number")
 
@@ -68,24 +68,25 @@ func TestGetRevision(t *testing.T) {
 	}
 
 	revisionsMap, err := db.getRevisions("ns", nsUpdates)
-	require.NoError(t, err)
-	require.Equal(t, "revision-cache-number", revisionsMap["key-in-cache"])
-	require.NotEqual(t, "", revisionsMap["key-in-db"])
-	require.Equal(t, "revision-db-number", revisionsMap["key-in-both-db-cache"])
-	require.Equal(t, "", revisionsMap["bad-key"])
+	assert.NoError(t, err)
+	assert.Equal(t, "revision-cache-number", revisionsMap["key-in-cache"])
+	assert.NotEqual(t, "", revisionsMap["key-in-db"])
+	assert.Equal(t, "revision-db-number", revisionsMap["key-in-both-db-cache"])
+	assert.Equal(t, "", revisionsMap["bad-key"])
 
 	// Get revisions of non-existing nameSpace.
 	revisionsMap, err = db.getRevisions("bad-namespace", nsUpdates)
-	require.NoError(t, err)
-	require.Equal(t, "", revisionsMap["key-in-db"])
+	assert.NoError(t, err)
+	assert.Equal(t, "", revisionsMap["key-in-db"])
+
 }
 
 func TestBuildCommittersForNs(t *testing.T) {
 	vdbEnv.init(t, nil)
 	defer vdbEnv.cleanup()
 
-	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-build-committers-for-ns", nil)
-	require.NoError(t, err)
+	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-build-committers-for-ns")
+	assert.NoError(t, err)
 	db := versionedDB.(*VersionedDB)
 
 	nsUpdates := map[string]*statedb.VersionedValue{
@@ -93,7 +94,7 @@ func TestBuildCommittersForNs(t *testing.T) {
 	}
 
 	_, err = db.buildCommittersForNs("ns", nsUpdates)
-	require.EqualError(t, err, "nil version not supported")
+	assert.EqualError(t, err, "nil version not supported")
 
 	nsUpdates = make(map[string]*statedb.VersionedValue)
 	// populate updates with maxBatchSize + 1.
@@ -107,18 +108,19 @@ func TestBuildCommittersForNs(t *testing.T) {
 	}
 
 	committers, err := db.buildCommittersForNs("ns", nsUpdates)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(committers))
-	require.Equal(t, "ns", committers[0].namespace)
-	require.Equal(t, "ns", committers[1].namespace)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(committers))
+	assert.Equal(t, "ns", committers[0].namespace)
+	assert.Equal(t, "ns", committers[1].namespace)
+
 }
 
 func TestBuildCommitters(t *testing.T) {
 	vdbEnv.init(t, nil)
 	defer vdbEnv.cleanup()
 
-	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-build-committers", nil)
-	require.NoError(t, err)
+	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-build-committers")
+	assert.NoError(t, err)
 	db := versionedDB.(*VersionedDB)
 
 	dummyHeight := version.NewHeight(1, 1)
@@ -133,41 +135,41 @@ func TestBuildCommitters(t *testing.T) {
 	}
 
 	committer, err := db.buildCommitters(batch)
-	require.NoError(t, err)
-	require.Equal(t, 3, len(committer))
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(committer))
 	for _, commit := range committer {
-		require.True(t, namespaceSet[commit.namespace])
+		assert.True(t, namespaceSet[commit.namespace])
 	}
 
 	badBatch := statedb.NewUpdateBatch()
 	badBatch.Put("bad-ns", "bad-key", []byte("bad-value"), nil)
 
-	_, err = db.buildCommitters(badBatch)
-	require.EqualError(t, err, "nil version not supported")
+	committer, err = db.buildCommitters(badBatch)
+	assert.EqualError(t, err, "nil version not supported")
 }
 
 func TestExecuteCommitter(t *testing.T) {
 	vdbEnv.init(t, nil)
 	defer vdbEnv.cleanup()
 
-	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-execute-committer", nil)
-	require.NoError(t, err)
+	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-execute-committer")
+	assert.NoError(t, err)
 	db := versionedDB.(*VersionedDB)
 
 	committerDB, err := db.getNamespaceDBHandle("ns")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	couchDocKey1, err := keyValToCouchDoc(&keyValue{
 		key:            "key1",
 		revision:       "",
 		VersionedValue: &statedb.VersionedValue{Value: []byte("value1"), Metadata: nil, Version: version.NewHeight(1, 1)},
 	})
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	couchDocKey2, err := keyValToCouchDoc(&keyValue{
 		key:            "key2",
 		revision:       "",
 		VersionedValue: &statedb.VersionedValue{Value: nil, Metadata: nil, Version: version.NewHeight(1, 1)},
 	})
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	committers := []*committer{
 		{
@@ -187,11 +189,11 @@ func TestExecuteCommitter(t *testing.T) {
 	}
 
 	err = db.executeCommitter(committers)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	vv, err := db.GetState("ns", "key1")
-	require.NoError(t, err)
-	require.Equal(t, vv.Value, []byte("value1"))
-	require.Equal(t, vv.Version, version.NewHeight(1, 1))
+	assert.NoError(t, err)
+	assert.Equal(t, vv.Value, []byte("value1"))
+	assert.Equal(t, vv.Version, version.NewHeight(1, 1))
 
 	committers = []*committer{
 		{
@@ -203,15 +205,15 @@ func TestExecuteCommitter(t *testing.T) {
 		},
 	}
 	err = db.executeCommitter(committers)
-	require.EqualError(t, err, "error handling CouchDB request. Error:bad_request,  Status Code:400,  Reason:`docs` parameter must be an array.")
+	assert.EqualError(t, err, "error handling CouchDB request. Error:bad_request,  Status Code:400,  Reason:`docs` parameter must be an array.")
 }
 
 func TestCommitUpdates(t *testing.T) {
 	vdbEnv.init(t, nil)
 	defer vdbEnv.cleanup()
 
-	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-commitupdates", nil)
-	require.NoError(t, err)
+	versionedDB, err := vdbEnv.DBProvider.GetDBHandle("test-commitupdates")
+	assert.NoError(t, err)
 	db := versionedDB.(*VersionedDB)
 
 	nsUpdates := map[string]*statedb.VersionedValue{
@@ -228,11 +230,11 @@ func TestCommitUpdates(t *testing.T) {
 	}
 
 	committerDB, err := db.getNamespaceDBHandle("ns")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	couchDoc, err := keyValToCouchDoc(&keyValue{key: "key1", revision: "", VersionedValue: nsUpdates["key1"]})
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
-	tests := []struct {
+	var tests = []struct {
 		committer   *committer
 		expectedErr string
 	}{
@@ -271,14 +273,14 @@ func TestCommitUpdates(t *testing.T) {
 	for _, test := range tests {
 		err := test.committer.commitUpdates()
 		if test.expectedErr == "" {
-			require.NoError(t, err)
+			assert.NoError(t, err)
 		} else {
-			require.EqualError(t, err, test.expectedErr)
+			assert.EqualError(t, err, test.expectedErr)
 		}
 	}
 
 	couchDoc, err = keyValToCouchDoc(&keyValue{key: "key2", revision: "", VersionedValue: nsUpdates["key2"]})
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	committer := &committer{
 		db:             committerDB,
@@ -288,8 +290,8 @@ func TestCommitUpdates(t *testing.T) {
 		cacheEnabled:   true,
 	}
 
-	require.Empty(t, committer.cacheKVs["key2"].AdditionalInfo)
+	assert.Empty(t, committer.cacheKVs["key2"].AdditionalInfo)
 	err = committer.commitUpdates()
-	require.NoError(t, err)
-	require.NotEmpty(t, committer.cacheKVs["key2"].AdditionalInfo)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, committer.cacheKVs["key2"].AdditionalInfo)
 }

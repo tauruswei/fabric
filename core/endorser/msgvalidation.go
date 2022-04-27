@@ -7,11 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package endorser
 
 import (
-	"crypto/sha256"
+	"github.com/tjfoc/gmsm/sm3"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/common"
-	"github.com/hyperledger/fabric-protos-go/peer"
+	cb "github.com/hyperledger/fabric-protos-go/common"
+	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protoutil"
@@ -21,11 +22,11 @@ import (
 // UnpackedProposal contains the interesting artifacts from inside the proposal.
 type UnpackedProposal struct {
 	ChaincodeName   string
-	ChannelHeader   *common.ChannelHeader
-	Input           *peer.ChaincodeInput
-	Proposal        *peer.Proposal
-	SignatureHeader *common.SignatureHeader
-	SignedProposal  *peer.SignedProposal
+	ChannelHeader   *cb.ChannelHeader
+	Input           *pb.ChaincodeInput
+	Proposal        *pb.Proposal
+	SignatureHeader *cb.SignatureHeader
+	SignedProposal  *pb.SignedProposal
 	ProposalHash    []byte
 }
 
@@ -39,7 +40,7 @@ func (up *UnpackedProposal) TxID() string {
 
 // UnpackProposal creates an an *UnpackedProposal which is guaranteed to have
 // no zero-ed fields or it returns an error.
-func UnpackProposal(signedProp *peer.SignedProposal) (*UnpackedProposal, error) {
+func UnpackProposal(signedProp *pb.SignedProposal) (*UnpackedProposal, error) {
 	prop, err := protoutil.UnmarshalProposal(signedProp.ProposalBytes)
 	if err != nil {
 		return nil, err
@@ -91,7 +92,7 @@ func UnpackProposal(signedProp *peer.SignedProposal) (*UnpackedProposal, error) 
 		return nil, errors.Errorf("chaincode input did not contain any input")
 	}
 
-	cppNoTransient := &peer.ChaincodeProposalPayload{Input: cpp.Input, TransientMap: nil}
+	cppNoTransient := &pb.ChaincodeProposalPayload{Input: cpp.Input, TransientMap: nil}
 	ppBytes, err := proto.Marshal(cppNoTransient)
 	if err != nil {
 		return nil, errors.WithMessage(err, "could not marshal non-transient portion of payload")
@@ -104,7 +105,7 @@ func UnpackProposal(signedProp *peer.SignedProposal) (*UnpackedProposal, error) 
 	// 2) The serialized Signature Header object
 	// 3) The hash of the part of the chaincode proposal payload that will go to the tx
 	// (ie, the parts without the transient data)
-	propHash := sha256.New()
+	propHash := sm3.New()
 	propHash.Write(hdr.ChannelHeader)
 	propHash.Write(hdr.SignatureHeader)
 	propHash.Write(ppBytes)
@@ -166,14 +167,20 @@ func (up *UnpackedProposal) Validate(idDeserializer msp.IdentityDeserializer) er
 		return errors.Errorf("empty signature bytes")
 	}
 
+	sId, err := protoutil.UnmarshalSerializedIdentity(up.SignatureHeader.Creator)
+	if err != nil {
+		return errors.Errorf("access denied: channel [%s] creator org unknown, creator is malformed", up.ChannelID())
+	}
+
+	genericAuthError := errors.Errorf("access denied: channel [%s] creator org [%s]", up.ChannelID(), sId.Mspid)
+
 	// get the identity of the creator
 	creator, err := idDeserializer.DeserializeIdentity(up.SignatureHeader.Creator)
 	if err != nil {
 		logger.Warningf("access denied: channel %s", err)
-		return errors.Errorf("access denied: channel [%s] creator org unknown, creator is malformed", up.ChannelID())
+		return genericAuthError
 	}
 
-	genericAuthError := errors.Errorf("access denied: channel [%s] creator org [%s]", up.ChannelID(), creator.GetMSPIdentifier())
 	// ensure that creator is a valid certificate
 	err = creator.Validate()
 	if err != nil {
@@ -184,7 +191,6 @@ func (up *UnpackedProposal) Validate(idDeserializer msp.IdentityDeserializer) er
 	logger = logger.With("mspID", creator.GetMSPIdentifier())
 
 	logger.Debug("creator is valid")
-
 	// validate the signature
 	err = creator.Verify(up.SignedProposal.ProposalBytes, up.SignedProposal.Signature)
 	if err != nil {

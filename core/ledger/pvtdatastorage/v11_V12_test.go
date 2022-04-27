@@ -8,15 +8,16 @@ package pvtdatastorage
 
 import (
 	"io/ioutil"
-	"os"
 	"path/filepath"
+
+	"os"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hyperledger/fabric/common/ledger/testutil"
 	"github.com/hyperledger/fabric/core/ledger"
 	btltestutil "github.com/hyperledger/fabric/core/ledger/pvtdatapolicy/testutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestV11v12 test that we are able to read the mixed format data (for v11 and v12)
@@ -30,7 +31,7 @@ func TestV11v12(t *testing.T) {
 		t.Fatalf("Failed to create private data storage directory: %s", err)
 	}
 	defer os.RemoveAll(testWorkingDir)
-	require.NoError(t, testutil.CopyDir("testdata/v11_v12/ledgersData/pvtdataStore", testWorkingDir, false))
+	testutil.CopyDir("testdata/v11_v12/ledgersData/pvtdataStore", testWorkingDir, false)
 
 	ledgerid := "ch1"
 	btlPolicy := btltestutil.SampleBTLPolicy(
@@ -48,10 +49,10 @@ func TestV11v12(t *testing.T) {
 		StorePath: filepath.Join(testWorkingDir, "pvtdataStore"),
 	}
 	p, err := NewProvider(conf)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	defer p.Close()
 	s, err := p.OpenStore(ledgerid)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	s.Init(btlPolicy)
 
 	for blk := 0; blk < 10; blk++ {
@@ -64,18 +65,19 @@ func TestV11v12(t *testing.T) {
 	checkDataExists(t, s, 14)
 
 	_, err = s.GetPvtDataByBlockNum(uint64(15), nil)
-	require.EqualError(t, err, "last committed block number [14] smaller than the requested block number [15]")
+	_, ok := err.(*ErrOutOfRange)
+	assert.True(t, ok)
 }
 
 func checkDataNotExists(t *testing.T, s *Store, blkNum int) {
 	data, err := s.GetPvtDataByBlockNum(uint64(blkNum), nil)
-	require.NoError(t, err)
-	require.Nil(t, data)
+	assert.NoError(t, err)
+	assert.Nil(t, data)
 }
 
 func checkDataExists(t *testing.T, s *Store, blkNum int) {
 	data, err := s.GetPvtDataByBlockNum(uint64(blkNum), nil)
-	require.NoError(t, err)
-	require.NotNil(t, data)
+	assert.NoError(t, err)
+	assert.NotNil(t, data)
 	t.Logf("pvtdata = %s\n", spew.Sdump(data))
 }

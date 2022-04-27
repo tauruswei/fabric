@@ -227,8 +227,7 @@ func (msp *idemixmsp) Setup(conf1 *m.MSPConfig) error {
 		Cred:           conf.Signer.Cred,
 		UserKey:        UserKey,
 		NymKey:         NymKey,
-		enrollmentId:   enrollmentId,
-	}
+		enrollmentId:   enrollmentId}
 
 	return nil
 }
@@ -244,6 +243,10 @@ func (msp *idemixmsp) GetType() ProviderType {
 
 func (msp *idemixmsp) GetIdentifier() (string, error) {
 	return msp.name, nil
+}
+
+func (msp *idemixmsp) GetSigningIdentity(identifier *IdentityIdentifier) (SigningIdentity, error) {
+	return nil, errors.Errorf("GetSigningIdentity not implemented")
 }
 
 func (msp *idemixmsp) GetDefaultSigningIdentity() (SigningIdentity, error) {

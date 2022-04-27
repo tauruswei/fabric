@@ -57,7 +57,8 @@ func (r *response) Raw() *discovery.Response {
 
 // ClientStub is a stub that communicates with the discovery service
 // using the discovery client implementation
-type ClientStub struct{}
+type ClientStub struct {
+}
 
 // Send sends the request, and receives a response
 func (stub *ClientStub) Send(server string, conf common.Config, req *discoveryclient.Request) (ServiceResponse, error) {
@@ -88,7 +89,8 @@ func (stub *ClientStub) Send(server string, conf common.Config, req *discoverycl
 
 // RawStub is a stub that communicates with the discovery service
 // without any intermediary.
-type RawStub struct{}
+type RawStub struct {
+}
 
 // Send sends the request, and receives a response
 func (stub *RawStub) Send(server string, conf common.Config, req *discoveryclient.Request) (ServiceResponse, error) {
@@ -122,6 +124,7 @@ func (stub *RawStub) Send(server string, conf common.Config, req *discoveryclien
 		Payload:   payload,
 		Signature: sig,
 	})
+
 	if err != nil {
 		return nil, err
 	}

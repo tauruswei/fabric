@@ -171,6 +171,7 @@ func (e *Endorser) callChaincode(txParams *ccprovider.TransactionParams, input *
 	}
 
 	return res, ccevent, err
+
 }
 
 // SimulateProposal simulates the proposal by calling the chaincode
@@ -338,12 +339,11 @@ func (e *Endorser) ProcessProposal(ctx context.Context, signedProp *pb.SignedPro
 
 	pResp, err := e.ProcessProposalSuccessfullyOrError(up)
 	if err != nil {
-		endorserLogger.Warnw("Failed to invoke chaincode", "channel", up.ChannelHeader.ChannelId, "chaincode", up.ChaincodeName, "error", err.Error())
 		return &pb.ProposalResponse{Response: &pb.Response{Status: 500, Message: err.Error()}}, nil
 	}
 
 	if pResp.Endorsement != nil || up.ChannelHeader.ChannelId == "" {
-		// We mark the tx as successful only if it was successfully endorsed, or
+		// We mark the tx as successfull only if it was successfully endorsed, or
 		// if it was a system chaincode on a channel-less channel and therefore
 		// cannot be endorsed.
 		success = true

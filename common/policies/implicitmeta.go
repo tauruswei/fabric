@@ -9,7 +9,6 @@ package policies
 import (
 	"bytes"
 	"fmt"
-
 	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric/msp"

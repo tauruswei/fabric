@@ -40,38 +40,37 @@ func TestV11(t *testing.T) {
 	require.NoError(t, testutil.Unzip("testdata/v11/sample_ledgers/ledgersData.zip", ledgerFSRoot, false))
 
 	require.NoError(t, kvledger.UpgradeDBs(env.initializer.Config))
-	// do not include bookkeeper and confighistory dbs since the v11 ledger doesn't have these dbs
-	rebuildable := rebuildableStatedb | rebuildableHistoryDB | rebuildableBlockIndex
-	env.verifyRebuilableDirEmpty(rebuildable)
+	rebuildable := rebuildableStatedb | rebuildableBookkeeper | rebuildableConfigHistory | rebuildableHistoryDB | rebuildableBlockIndex
+	env.verifyRebuilableDoesNotExist(rebuildable)
 
 	env.initLedgerMgmt()
 
-	l1, l2 := env.openTestLedger("ledger1"), env.openTestLedger("ledger2")
+	h1, h2 := env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
 	dataHelper := &v1xSampleDataHelper{sampleDataVersion: "v1.1", t: t}
 
-	dataHelper.verify(l1)
-	dataHelper.verify(l2)
+	dataHelper.verify(h1)
+	dataHelper.verify(h2)
 
 	// rebuild and verify again
 	env.ledgerMgr.Close()
 	require.NoError(t, kvledger.RebuildDBs(env.initializer.Config))
-	env.verifyRebuilableDirEmpty(rebuildable)
+	env.verifyRebuilableDoesNotExist(rebuildable)
 	env.initLedgerMgmt()
 
-	l1, l2 = env.openTestLedger("ledger1"), env.openTestLedger("ledger2")
-	dataHelper.verify(l1)
-	dataHelper.verify(l2)
+	h1, h2 = env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
+	dataHelper.verify(h1)
+	dataHelper.verify(h2)
 
-	l1.verifyCommitHashNotExists()
-	l2.verifyCommitHashNotExists()
-	l1.simulateDataTx("txid1_with_new_binary", func(s *simulator) {
+	h1.verifyCommitHashNotExists()
+	h2.verifyCommitHashNotExists()
+	h1.simulateDataTx("txid1_with_new_binary", func(s *simulator) {
 		s.setState("cc1", "new_key", "new_value")
 	})
 
 	// add a new block and the new block should not contain a commit hash
 	// because the previously committed block from 1.1 code did not contain commit hash
-	l1.cutBlockAndCommitLegacy()
-	l1.verifyCommitHashNotExists()
+	h1.cutBlockAndCommitLegacy()
+	h1.verifyCommitHashNotExists()
 }
 
 func TestV11CommitHashes(t *testing.T) {
@@ -79,14 +78,14 @@ func TestV11CommitHashes(t *testing.T) {
 		description               string
 		v11SampleDataPath         string
 		preResetCommitHashExists  bool
-		resetFunc                 func(h *testLedger, ledgerFSRoot string)
+		resetFunc                 func(h *testhelper, ledgerFSRoot string)
 		postResetCommitHashExists bool
 	}{
 		{
 			"Reset (no existing CommitHash)",
 			"testdata/v11/sample_ledgers/ledgersData.zip",
 			false,
-			func(h *testLedger, ledgerFSRoot string) {
+			func(h *testhelper, ledgerFSRoot string) {
 				require.NoError(t, kvledger.ResetAllKVLedgers(ledgerFSRoot))
 			},
 			true,
@@ -96,7 +95,7 @@ func TestV11CommitHashes(t *testing.T) {
 			"Rollback to genesis block (no existing CommitHash)",
 			"testdata/v11/sample_ledgers/ledgersData.zip",
 			false,
-			func(h *testLedger, ledgerFSRoot string) {
+			func(h *testhelper, ledgerFSRoot string) {
 				require.NoError(t, kvledger.RollbackKVLedger(ledgerFSRoot, h.lgrid, 0))
 			},
 			true,
@@ -106,7 +105,7 @@ func TestV11CommitHashes(t *testing.T) {
 			"Rollback to block other than genesis block (no existing CommitHash)",
 			"testdata/v11/sample_ledgers/ledgersData.zip",
 			false,
-			func(h *testLedger, ledgerFSRoot string) {
+			func(h *testhelper, ledgerFSRoot string) {
 				require.NoError(t, kvledger.RollbackKVLedger(ledgerFSRoot, h.lgrid, h.currentHeight()/2+1))
 			},
 			false,
@@ -116,7 +115,7 @@ func TestV11CommitHashes(t *testing.T) {
 			"Reset (existing CommitHash)",
 			"testdata/v11/sample_ledgers_with_commit_hashes/ledgersData.zip",
 			true,
-			func(h *testLedger, ledgerFSRoot string) {
+			func(h *testhelper, ledgerFSRoot string) {
 				require.NoError(t, kvledger.ResetAllKVLedgers(ledgerFSRoot))
 			},
 			true,
@@ -126,7 +125,7 @@ func TestV11CommitHashes(t *testing.T) {
 			"Rollback to genesis block (existing CommitHash)",
 			"testdata/v11/sample_ledgers_with_commit_hashes/ledgersData.zip",
 			true,
-			func(h *testLedger, ledgerFSRoot string) {
+			func(h *testhelper, ledgerFSRoot string) {
 				require.NoError(t, kvledger.RollbackKVLedger(ledgerFSRoot, h.lgrid, 0))
 			},
 			true,
@@ -136,7 +135,7 @@ func TestV11CommitHashes(t *testing.T) {
 			"Rollback to block other than genesis block (existing CommitHash)",
 			"testdata/v11/sample_ledgers_with_commit_hashes/ledgersData.zip",
 			true,
-			func(h *testLedger, ledgerFSRoot string) {
+			func(h *testhelper, ledgerFSRoot string) {
 				require.NoError(t, kvledger.RollbackKVLedger(ledgerFSRoot, h.lgrid, h.currentHeight()/2+1))
 			},
 			true,
@@ -161,7 +160,7 @@ func TestV11CommitHashes(t *testing.T) {
 func testV11CommitHashes(t *testing.T,
 	v11DataPath string,
 	preResetCommitHashExists bool,
-	resetFunc func(*testLedger, string),
+	resetFunc func(*testhelper, string),
 	postResetCommitHashExists bool,
 ) {
 	env := newEnv(t)
@@ -172,12 +171,11 @@ func testV11CommitHashes(t *testing.T,
 	require.NoError(t, testutil.Unzip(v11DataPath, ledgerFSRoot, false))
 
 	require.NoError(t, kvledger.UpgradeDBs(env.initializer.Config))
-	// do not include bookkeeper and confighistory dbs since the v11 ledger doesn't have these dbs
-	rebuildable := rebuildableStatedb | rebuildableHistoryDB | rebuildableBlockIndex
-	env.verifyRebuilableDirEmpty(rebuildable)
+	rebuildable := rebuildableStatedb | rebuildableBookkeeper | rebuildableConfigHistory | rebuildableHistoryDB | rebuildableBlockIndex
+	env.verifyRebuilableDoesNotExist(rebuildable)
 
 	env.initLedgerMgmt()
-	h := env.openTestLedger("ledger1")
+	h := env.newTestHelperOpenLgr("ledger1", t)
 	blocksAndPvtData := h.retrieveCommittedBlocksAndPvtdata(0, h.currentHeight()-1)
 
 	var commitHashPreReset []byte
@@ -192,7 +190,7 @@ func testV11CommitHashes(t *testing.T,
 	resetFunc(h, ledgerFSRoot)
 	env.initLedgerMgmt()
 
-	h = env.openTestLedger("ledger1")
+	h = env.newTestHelperOpenLgr("ledger1", t)
 	for i := int(h.currentHeight()); i < len(blocksAndPvtData); i++ {
 		d := blocksAndPvtData[i]
 		// add metadata slot for commit hash, as this would have be missing in the blocks from 1.1 prior to this feature
@@ -243,7 +241,7 @@ func TestV13WithStateCouchdb(t *testing.T) {
 
 	couchdbConfig, cleanup := startCouchDBWithV13Data(t, ledgerFSRoot)
 	defer cleanup()
-	env.initializer.Config.StateDBConfig.StateDatabase = ledger.CouchDB
+	env.initializer.Config.StateDBConfig.StateDatabase = "CouchDB"
 	env.initializer.Config.StateDBConfig.CouchDB = couchdbConfig
 	env.initializer.HealthCheckRegistry = &mock.HealthCheckRegistry{}
 	env.initializer.ChaincodeLifecycleEventProvider = &mock.ChaincodeLifecycleEventProvider{}
@@ -251,11 +249,11 @@ func TestV13WithStateCouchdb(t *testing.T) {
 	require.NoError(t, kvledger.UpgradeDBs(env.initializer.Config))
 	require.True(t, statecouchdb.IsEmpty(t, couchdbConfig))
 	rebuildable := rebuildableBookkeeper | rebuildableConfigHistory | rebuildableHistoryDB | rebuildableBlockIndex
-	env.verifyRebuilableDirEmpty(rebuildable)
+	env.verifyRebuilableDoesNotExist(rebuildable)
 
 	env.initLedgerMgmt()
 
-	h1, h2 := env.openTestLedger("ledger1"), env.openTestLedger("ledger2")
+	h1, h2 := env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
 	dataHelper := &v1xSampleDataHelper{sampleDataVersion: "v1.3", t: t}
 	dataHelper.verify(h1)
 	dataHelper.verify(h2)
@@ -264,10 +262,10 @@ func TestV13WithStateCouchdb(t *testing.T) {
 	env.ledgerMgr.Close()
 	require.NoError(t, kvledger.RebuildDBs(env.initializer.Config))
 	require.True(t, statecouchdb.IsEmpty(t, couchdbConfig))
-	env.verifyRebuilableDirEmpty(rebuildable)
+	env.verifyRebuilableDoesNotExist(rebuildable)
 	env.initLedgerMgmt()
 
-	h1, h2 = env.openTestLedger("ledger1"), env.openTestLedger("ledger2")
+	h1, h2 = env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
 	dataHelper.verify(h1)
 	dataHelper.verify(h2)
 }
@@ -295,7 +293,7 @@ func TestInitLedgerPanicWithV13Data(t *testing.T) {
 
 	couchdbConfig, cleanup := startCouchDBWithV13Data(t, ledgerFSRoot)
 	defer cleanup()
-	env.initializer.Config.StateDBConfig.StateDatabase = ledger.CouchDB
+	env.initializer.Config.StateDBConfig.StateDatabase = "CouchDB"
 	env.initializer.Config.StateDBConfig.CouchDB = couchdbConfig
 	env.initializer.HealthCheckRegistry = &mock.HealthCheckRegistry{}
 	env.initializer.ChaincodeLifecycleEventProvider = &mock.ChaincodeLifecycleEventProvider{}
@@ -354,7 +352,8 @@ func testInitLedgerPanic(t *testing.T, env *env, ledgerFSRoot string, couchdbCon
 		t.Logf("verifying that a panic occurs because statecouchdb has old format and then drop the statedb to proceed")
 		require.PanicsWithValue(
 			t,
-			"Error in instantiating ledger provider: unexpected format. db info = [CouchDB for state database], data format = [], expected format = [2.0]",
+			fmt.Sprintf(
+				"Error in instantiating ledger provider: unexpected format. db info = [CouchDB for state database], data format = [], expected format = [2.0]"),
 			func() { env.initLedgerMgmt() },
 			"A panic should occur because statedb is in format 1.x",
 		)
@@ -371,7 +370,7 @@ func startCouchDBWithV13Data(t *testing.T, ledgerFSRoot string) (*ledger.CouchDB
 	// prepare the local.d mount dir to overwrite the number of shards and nodes so that they match the couchdb data generated from v1.3
 	localdHostDir := filepath.Join(ledgerFSRoot, "local.d")
 	require.NoError(t, os.MkdirAll(localdHostDir, os.ModePerm))
-	require.NoError(t, testutil.CopyDir("testdata/v13_statecouchdb/couchdb_etc/local.d", localdHostDir, true))
+	testutil.CopyDir("testdata/v13_statecouchdb/couchdb_etc/local.d", localdHostDir, true)
 
 	// start couchdb using couchdbDataUnzipDir and localdHostDir as mount dirs
 	couchdbBinds := []string{
@@ -383,8 +382,8 @@ func startCouchDBWithV13Data(t *testing.T, ledgerFSRoot string) (*ledger.CouchDB
 	// set required config data to use state couchdb
 	couchdbConfig := &ledger.CouchDBConfig{
 		Address:             couchAddress,
-		Username:            "admin",
-		Password:            "adminpw",
+		Username:            "",
+		Password:            "",
 		MaxRetries:          3,
 		MaxRetriesOnStartup: 3,
 		RequestTimeout:      10 * time.Second,
@@ -407,7 +406,7 @@ type v1xSampleDataHelper struct {
 	t                 *testing.T
 }
 
-func (d *v1xSampleDataHelper) verify(h *testLedger) {
+func (d *v1xSampleDataHelper) verify(h *testhelper) {
 	d.verifyState(h)
 	d.verifyBlockAndPvtdata(h)
 	d.verifyGetTransactionByID(h)
@@ -415,7 +414,7 @@ func (d *v1xSampleDataHelper) verify(h *testLedger) {
 	d.verifyHistory(h)
 }
 
-func (d *v1xSampleDataHelper) verifyState(h *testLedger) {
+func (d *v1xSampleDataHelper) verifyState(h *testhelper) {
 	lgrid := h.lgrid
 	h.verifyPubState("cc1", "key1", d.sampleVal("value13", lgrid))
 	h.verifyPubState("cc1", "key2", "")
@@ -432,7 +431,7 @@ func (d *v1xSampleDataHelper) verifyState(h *testLedger) {
 	h.verifyPvtState("cc2", "coll2", "key4", d.sampleVal("value12", lgrid))
 }
 
-func (d *v1xSampleDataHelper) verifyHistory(h *testLedger) {
+func (d *v1xSampleDataHelper) verifyHistory(h *testhelper) {
 	lgrid := h.lgrid
 	expectedHistoryCC1Key1 := []string{
 		d.sampleVal("value13", lgrid),
@@ -441,7 +440,7 @@ func (d *v1xSampleDataHelper) verifyHistory(h *testLedger) {
 	h.verifyHistory("cc1", "key1", expectedHistoryCC1Key1)
 }
 
-func (d *v1xSampleDataHelper) verifyConfigHistory(h *testLedger) {
+func (d *v1xSampleDataHelper) verifyConfigHistory(h *testhelper) {
 	lgrid := h.lgrid
 	h.verifyMostRecentCollectionConfigBelow(10, "cc1",
 		&expectedCollConfInfo{5, d.sampleCollConf2(lgrid, "cc1")})
@@ -456,7 +455,12 @@ func (d *v1xSampleDataHelper) verifyConfigHistory(h *testLedger) {
 		&expectedCollConfInfo{3, d.sampleCollConf1(lgrid, "cc2")})
 }
 
-func (d *v1xSampleDataHelper) verifyBlockAndPvtdata(h *testLedger) {
+func (d *v1xSampleDataHelper) verifyConfigHistoryDoesNotExist(h *testhelper) {
+	h.verifyMostRecentCollectionConfigBelow(10, "cc1", nil)
+	h.verifyMostRecentCollectionConfigBelow(10, "cc2", nil)
+}
+
+func (d *v1xSampleDataHelper) verifyBlockAndPvtdata(h *testhelper) {
 	lgrid := h.lgrid
 	h.verifyBlockAndPvtData(2, nil, func(r *retrievedBlockAndPvtdata) {
 		r.hasNumTx(2)
@@ -470,7 +474,7 @@ func (d *v1xSampleDataHelper) verifyBlockAndPvtdata(h *testLedger) {
 	})
 }
 
-func (d *v1xSampleDataHelper) verifyGetTransactionByID(h *testLedger) {
+func (d *v1xSampleDataHelper) verifyGetTransactionByID(h *testhelper) {
 	h.verifyTxValidationCode("txid7", protopeer.TxValidationCode_VALID)
 	h.verifyTxValidationCode("txid8", protopeer.TxValidationCode_MVCC_READ_CONFLICT)
 }

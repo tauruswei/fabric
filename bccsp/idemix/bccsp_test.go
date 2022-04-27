@@ -16,6 +16,7 @@ import (
 )
 
 var _ = Describe("Idemix Bridge", func() {
+
 	Describe("setting up the environment with one issuer and one user", func() {
 		var (
 			CSP             bccsp.BCCSP
@@ -101,6 +102,7 @@ var _ = Describe("Idemix Bridge", func() {
 				&bccsp.IdemixCRISignerOpts{},
 			)
 			Expect(err).NotTo(HaveOccurred())
+
 		})
 
 		It("the environment is properly set", func() {
@@ -198,6 +200,7 @@ var _ = Describe("Idemix Bridge", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(valid).To(BeTrue())
 			})
+
 		})
 
 		Describe("producing an idemix signature with disclosed attributes", func() {
@@ -254,6 +257,7 @@ var _ = Describe("Idemix Bridge", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(valid).To(BeTrue())
 			})
+
 		})
 
 		Describe("producing an idemix nym signature", func() {
@@ -290,6 +294,7 @@ var _ = Describe("Idemix Bridge", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(valid).To(BeTrue())
 			})
+
 		})
 	})
 })

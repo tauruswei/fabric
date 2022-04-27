@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
-	"github.com/onsi/gomega/gstruct"
+	. "github.com/onsi/gomega/gstruct"
 )
 
 type Chaincode struct {
@@ -186,7 +186,7 @@ func InstallChaincode(n *Network, chaincode Chaincode, peers ...*Peer) {
 			ClientAuth:  n.ClientAuthRequired,
 		})
 		ExpectWithOffset(1, err).NotTo(HaveOccurred())
-		EventuallyWithOffset(1, sess, n.EventuallyTimeout).Should(gexec.Exit())
+		EventuallyWithOffset(1, sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 		EnsureInstalled(n, chaincode.Label, chaincode.PackageID, p)
 	}
@@ -246,30 +246,18 @@ func ApproveChaincodeForMyOrg(n *Network, channel string, orderer *Orderer, chai
 			Expect(err).NotTo(HaveOccurred())
 			Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 			approvedOrgs[p.Organization] = true
-			Eventually(sess.Err, n.EventuallyTimeout).Should(gbytes.Say(fmt.Sprintf(`\Qcommitted with status (VALID) at %s\E`, n.PeerAddress(p, ListenPort))))
+			Eventually(sess.Err, n.EventuallyTimeout).Should(gbytes.Say(`\Qcommitted with status (VALID)\E`))
 		}
 	}
 }
 
-func EnsureChaincodeApproved(n *Network, peer *Peer, channel, name, sequence string) {
-	sequenceInt, err := strconv.ParseInt(sequence, 10, 64)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(queryApproved(n, peer, channel, name, sequence), n.EventuallyTimeout).Should(
-		gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
-			"Sequence": Equal(sequenceInt),
-		}),
-	)
-}
-
 func CheckCommitReadinessUntilReady(n *Network, channel string, chaincode Chaincode, checkOrgs []*Organization, peers ...*Peer) {
 	for _, p := range peers {
-		keys := gstruct.Keys{}
+		keys := Keys{}
 		for _, org := range checkOrgs {
 			keys[org.MSPID] = BeTrue()
 		}
-		Eventually(checkCommitReadiness(n, p, channel, chaincode), n.EventuallyTimeout).Should(
-			gstruct.MatchKeys(gstruct.IgnoreExtras, keys),
-		)
+		Eventually(checkCommitReadiness(n, p, channel, chaincode), n.EventuallyTimeout).Should(MatchKeys(IgnoreExtras, keys))
 	}
 }
 
@@ -317,15 +305,15 @@ func EnsureChaincodeCommitted(n *Network, channel, name, version, sequence strin
 	for _, p := range peers {
 		sequenceInt, err := strconv.ParseInt(sequence, 10, 64)
 		Expect(err).NotTo(HaveOccurred())
-		approvedKeys := gstruct.Keys{}
+		approvedKeys := Keys{}
 		for _, org := range checkOrgs {
 			approvedKeys[org.MSPID] = BeTrue()
 		}
 		Eventually(listCommitted(n, p, channel, name), n.EventuallyTimeout).Should(
-			gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{
+			MatchFields(IgnoreExtras, Fields{
 				"Version":   Equal(version),
 				"Sequence":  Equal(sequenceInt),
-				"Approvals": gstruct.MatchKeys(gstruct.IgnoreExtras, approvedKeys),
+				"Approvals": MatchKeys(IgnoreExtras, approvedKeys),
 			}),
 		)
 	}
@@ -417,8 +405,8 @@ func UpgradeChaincodeLegacy(n *Network, channel string, orderer *Orderer, chainc
 func EnsureInstalled(n *Network, label, packageID string, peers ...*Peer) {
 	for _, p := range peers {
 		Eventually(QueryInstalled(n, p), n.EventuallyTimeout).Should(
-			ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras,
-				gstruct.Fields{
+			ContainElement(MatchFields(IgnoreExtras,
+				Fields{
 					"Label":     Equal(label),
 					"PackageId": Equal(packageID),
 				},
@@ -437,18 +425,21 @@ func QueryInstalledReferences(n *Network, channel, label, packageID string, chec
 	}
 
 	Expect(QueryInstalled(n, checkPeer)()).To(
-		ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras,
-			gstruct.Fields{
+		ContainElement(MatchFields(IgnoreExtras,
+			Fields{
 				"Label":     Equal(label),
 				"PackageId": Equal(packageID),
-				"References": HaveKeyWithValue(channel, gstruct.PointTo(gstruct.MatchFields(gstruct.IgnoreExtras,
-					gstruct.Fields{
+				"References": HaveKeyWithValue(channel, PointTo(MatchFields(IgnoreExtras,
+					Fields{
 						"Chaincodes": ConsistOf(chaincodes),
 					},
 				))),
 			},
 		)),
 	)
+}
+
+func QueryInstalledNoReferences(n *Network, channel, label, packageID string, checkPeer *Peer) {
 }
 
 type queryInstalledOutput struct {
@@ -494,34 +485,6 @@ func checkCommitReadiness(n *Network, peer *Peer, channel string, chaincode Chai
 		err = json.Unmarshal(sess.Out.Contents(), output)
 		Expect(err).NotTo(HaveOccurred())
 		return output.Approvals
-	}
-}
-
-type queryApprovedOutput struct {
-	Sequence int64 `json:"sequence"`
-}
-
-// queryApproved returns the result of the queryApproved command.
-// If the command fails for any reason, it will return an empty output object.
-func queryApproved(n *Network, peer *Peer, channel, name, sequence string) func() queryApprovedOutput {
-	return func() queryApprovedOutput {
-		sess, err := n.PeerAdminSession(peer, commands.ChaincodeQueryApproved{
-			ChannelID:     channel,
-			Name:          name,
-			Sequence:      sequence,
-			PeerAddresses: []string{n.PeerAddress(peer, ListenPort)},
-			ClientAuth:    n.ClientAuthRequired,
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit())
-		output := &queryApprovedOutput{}
-		if sess.ExitCode() == 1 {
-			// don't try to unmarshal the output as JSON if the query failed
-			return *output
-		}
-		err = json.Unmarshal(sess.Out.Contents(), output)
-		Expect(err).NotTo(HaveOccurred())
-		return *output
 	}
 }
 
@@ -618,7 +581,7 @@ func GetLedgerHeight(n *Network, peer *Peer, channel string) int {
 	}
 
 	channelInfoStr := strings.TrimPrefix(string(sess.Buffer().Contents()[:]), "Blockchain info:")
-	channelInfo := common.BlockchainInfo{}
+	var channelInfo = common.BlockchainInfo{}
 	json.Unmarshal([]byte(channelInfoStr), &channelInfo)
 	return int(channelInfo.Height)
 }

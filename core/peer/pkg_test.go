@@ -11,26 +11,31 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io/ioutil"
 	"net"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	mspproto "github.com/hyperledger/fabric-protos-go/msp"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	configtxtest "github.com/hyperledger/fabric/common/configtx/test"
-	"github.com/hyperledger/fabric/common/crypto/tlsgen"
 	"github.com/hyperledger/fabric/core/ledger/mock"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"github.com/hyperledger/fabric/internal/pkg/comm/testpb"
 	"github.com/hyperledger/fabric/internal/pkg/txflags"
 	"github.com/hyperledger/fabric/msp"
-	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+// default timeout for grpc connections
+var timeout = time.Second * 1
 
 // test server to be registered with the GRPCServer
 type testServiceServer struct{}
@@ -52,22 +57,21 @@ func createCertPool(rootCAs [][]byte) (*x509.CertPool, error) {
 
 // helper function to invoke the EmptyCall againt the test service
 func invokeEmptyCall(address string, dialOptions []grpc.DialOption) (*testpb.Empty, error) {
-	// add DialOptions
+	//add DialOptions
 	dialOptions = append(dialOptions, grpc.WithBlock())
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-
-	// create GRPC client conn
+	//create GRPC client conn
 	clientConn, err := grpc.DialContext(ctx, address, dialOptions...)
 	if err != nil {
 		return nil, err
 	}
 	defer clientConn.Close()
 
-	// create GRPC client
+	//create GRPC client
 	client := testpb.NewTestServiceClient(clientConn)
 
-	// invoke service
+	//invoke service
 	empty, err := client.EmptyCall(context.Background(), new(testpb.Empty))
 	if err != nil {
 		return nil, err
@@ -77,7 +81,9 @@ func invokeEmptyCall(address string, dialOptions []grpc.DialOption) (*testpb.Emp
 }
 
 // helper function to build an MSPConfig given root certs
-func createMSPConfig(mspID string, rootCerts, tlsRootCerts, tlsIntermediateCerts [][]byte) (*mspproto.MSPConfig, error) {
+func createMSPConfig(rootCerts, tlsRootCerts, tlsIntermediateCerts [][]byte,
+	mspID string) (*mspproto.MSPConfig, error) {
+
 	fmspconf := &mspproto.FabricMSPConfig{
 		RootCerts:            rootCerts,
 		TlsRootCerts:         tlsRootCerts,
@@ -97,10 +103,12 @@ func createMSPConfig(mspID string, rootCerts, tlsRootCerts, tlsIntermediateCerts
 		},
 	}
 
-	return &mspproto.MSPConfig{
-		Config: protoutil.MarshalOrPanic(fmspconf),
-		Type:   int32(msp.FABRIC),
-	}, nil
+	fmpsjs, err := proto.Marshal(fmspconf)
+	if err != nil {
+		return nil, err
+	}
+	mspconf := &mspproto.MSPConfig{Config: fmpsjs, Type: int32(msp.FABRIC)}
+	return mspconf, nil
 }
 
 func createConfigBlock(channelID string, appMSPConf, ordererMSPConf *mspproto.MSPConfig,
@@ -117,34 +125,40 @@ func createConfigBlock(channelID string, appMSPConf, ordererMSPConf *mspproto.MS
 }
 
 func TestUpdateRootsFromConfigBlock(t *testing.T) {
-	org1CA, err := tlsgen.NewCA()
+	// load test certs from testdata
+	org1CA, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-cert.pem"))
 	require.NoError(t, err)
-	org1Server1KeyPair, err := org1CA.NewServerCertKeyPair("localhost", "127.0.0.1", "::1")
+	org1Server1Key, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-server1-key.pem"))
 	require.NoError(t, err)
-
-	org2CA, err := tlsgen.NewCA()
+	org1Server1Cert, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-server1-cert.pem"))
 	require.NoError(t, err)
-	org2Server1KeyPair, err := org2CA.NewServerCertKeyPair("localhost", "127.0.0.1", "::1")
+	org2CA, err := ioutil.ReadFile(filepath.Join("testdata", "Org2-cert.pem"))
 	require.NoError(t, err)
-
-	org2IntermediateCA, err := org2CA.NewIntermediateCA()
+	org2Server1Key, err := ioutil.ReadFile(filepath.Join("testdata", "Org2-server1-key.pem"))
 	require.NoError(t, err)
-	org2IntermediateServer1KeyPair, err := org2IntermediateCA.NewServerCertKeyPair("localhost", "127.0.0.1", "::1")
+	org2Server1Cert, err := ioutil.ReadFile(filepath.Join("testdata", "Org2-server1-cert.pem"))
 	require.NoError(t, err)
-
-	ordererOrgCA, err := tlsgen.NewCA()
+	org2IntermediateCA, err := ioutil.ReadFile(filepath.Join("testdata", "Org2-child1-cert.pem"))
 	require.NoError(t, err)
-	ordererOrgServer1KeyPair, err := ordererOrgCA.NewServerCertKeyPair("localhost", "127.0.0.1", "::1")
+	org2IntermediateServer1Key, err := ioutil.ReadFile(filepath.Join("testdata", "Org2-child1-server1-key.pem"))
+	require.NoError(t, err)
+	org2IntermediateServer1Cert, err := ioutil.ReadFile(filepath.Join("testdata", "Org2-child1-server1-cert.pem"))
+	require.NoError(t, err)
+	ordererOrgCA, err := ioutil.ReadFile(filepath.Join("testdata", "Org3-cert.pem"))
+	require.NoError(t, err)
+	ordererOrgServer1Key, err := ioutil.ReadFile(filepath.Join("testdata", "Org3-server1-key.pem"))
+	require.NoError(t, err)
+	ordererOrgServer1Cert, err := ioutil.ReadFile(filepath.Join("testdata", "Org3-server1-cert.pem"))
 	require.NoError(t, err)
 
 	// create test MSPConfigs
-	org1MSPConf, err := createMSPConfig("Org1MSP", [][]byte{org2CA.CertBytes()}, [][]byte{org1CA.CertBytes()}, [][]byte{})
+	org1MSPConf, err := createMSPConfig([][]byte{org2CA}, [][]byte{org1CA}, [][]byte{}, "Org1MSP")
 	require.NoError(t, err)
-	org2MSPConf, err := createMSPConfig("Org2MSP", [][]byte{org1CA.CertBytes()}, [][]byte{org2CA.CertBytes()}, [][]byte{})
+	org2MSPConf, err := createMSPConfig([][]byte{org1CA}, [][]byte{org2CA}, [][]byte{}, "Org2MSP")
 	require.NoError(t, err)
-	org2IntermediateMSPConf, err := createMSPConfig("Org2IntermediateMSP", [][]byte{org1CA.CertBytes()}, [][]byte{org2CA.CertBytes()}, [][]byte{org2IntermediateCA.CertBytes()})
+	org2IntermediateMSPConf, err := createMSPConfig([][]byte{org1CA}, [][]byte{org2CA}, [][]byte{org2IntermediateCA}, "Org2IntermediateMSP")
 	require.NoError(t, err)
-	ordererOrgMSPConf, err := createMSPConfig("OrdererOrgMSP", [][]byte{org1CA.CertBytes()}, [][]byte{ordererOrgCA.CertBytes()}, [][]byte{})
+	ordererOrgMSPConf, err := createMSPConfig([][]byte{org1CA}, [][]byte{ordererOrgCA}, [][]byte{}, "OrdererOrgMSP")
 	require.NoError(t, err)
 
 	// create test channel create blocks
@@ -158,9 +172,9 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 	serverConfig := comm.ServerConfig{
 		SecOpts: comm.SecureOptions{
 			UseTLS:            true,
-			Certificate:       org1Server1KeyPair.Cert,
-			Key:               org1Server1KeyPair.Key,
-			ServerRootCAs:     [][]byte{org1CA.CertBytes()},
+			Certificate:       org1Server1Cert,
+			Key:               org1Server1Key,
+			ServerRootCAs:     [][]byte{org1CA},
 			RequireClientCert: true,
 		},
 	}
@@ -171,15 +185,17 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 
 	createChannel := func(t *testing.T, cid string, block *cb.Block) {
 		err = peerInstance.CreateChannel(cid, block, &mock.DeployedChaincodeInfoProvider{}, nil, nil)
-		require.NoError(t, err, "failed to create channel from block")
+		if err != nil {
+			t.Fatalf("Failed to create config block (%s)", err)
+		}
 		t.Logf("Channel %s MSPIDs: (%s)", cid, peerInstance.GetMSPIDs(cid))
 	}
 
-	org1CertPool, err := createCertPool([][]byte{org1CA.CertBytes()})
+	org1CertPool, err := createCertPool([][]byte{org1CA})
 	require.NoError(t, err)
 
 	// use server cert as client cert
-	org1ClientCert, err := tls.X509KeyPair(org1Server1KeyPair.Cert, org1Server1KeyPair.Key)
+	org1ClientCert, err := tls.X509KeyPair(org1Server1Cert, org1Server1Key)
 	require.NoError(t, err)
 
 	org1Creds := credentials.NewTLS(&tls.Config{
@@ -187,21 +203,21 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 		RootCAs:      org1CertPool,
 	})
 
-	org2ClientCert, err := tls.X509KeyPair(org2Server1KeyPair.Cert, org2Server1KeyPair.Key)
+	org2ClientCert, err := tls.X509KeyPair(org2Server1Cert, org2Server1Key)
 	require.NoError(t, err)
 	org2Creds := credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{org2ClientCert},
 		RootCAs:      org1CertPool,
 	})
 
-	org2IntermediateClientCert, err := tls.X509KeyPair(org2IntermediateServer1KeyPair.Cert, org2IntermediateServer1KeyPair.Key)
+	org2IntermediateClientCert, err := tls.X509KeyPair(org2IntermediateServer1Cert, org2IntermediateServer1Key)
 	require.NoError(t, err)
 	org2IntermediateCreds := credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{org2IntermediateClientCert},
 		RootCAs:      org1CertPool,
 	})
 
-	ordererOrgClientCert, err := tls.X509KeyPair(ordererOrgServer1KeyPair.Cert, ordererOrgServer1KeyPair.Key)
+	ordererOrgClientCert, err := tls.X509KeyPair(ordererOrgServer1Cert, ordererOrgServer1Key)
 	require.NoError(t, err)
 
 	ordererOrgCreds := credentials.NewTLS(&tls.Config{
@@ -210,7 +226,7 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 	})
 
 	// basic function tests
-	tests := []struct {
+	var tests = []struct {
 		name          string
 		serverConfig  comm.ServerConfig
 		createChannel func(*testing.T)
@@ -259,13 +275,18 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Logf("Running test %s ...", test.name)
 			server, err := comm.NewGRPCServer("localhost:0", test.serverConfig)
-			require.NoError(t, err, "failed to create gRPC server")
-			require.NotNil(t, server)
+			if err != nil {
+				t.Fatalf("NewGRPCServer failed with error [%s]", err)
+				return
+			}
 
 			peerInstance.SetServer(server)
 			peerInstance.ServerConfig = test.serverConfig
 
+			assert.NoError(t, err, "NewGRPCServer should not have returned an error")
+			assert.NotNil(t, server, "NewGRPCServer should have created a server")
 			// register a GRPC test service
 			testpb.RegisterTestServiceServer(server.Server(), &testServiceServer{})
 			go server.Start()
@@ -273,24 +294,28 @@ func TestUpdateRootsFromConfigBlock(t *testing.T) {
 
 			// extract dynamic listen port
 			_, port, err := net.SplitHostPort(server.Listener().Addr().String())
-			require.NoError(t, err, "unable to extract listener port")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("listenAddress: %s", server.Listener().Addr())
 			testAddress := "localhost:" + port
+			t.Logf("testAddress: %s", testAddress)
 
 			// invoke the EmptyCall service with good options but should fail
 			// until channel is created and root CAs are updated
 			_, err = invokeEmptyCall(testAddress, test.goodOptions)
-			require.Error(t, err, "Expected error invoking the EmptyCall service ")
+			assert.Error(t, err, "Expected error invoking the EmptyCall service ")
 
 			// creating channel should update the trusted client roots
 			test.createChannel(t)
 
 			// invoke the EmptyCall service with good options
 			_, err = invokeEmptyCall(testAddress, test.goodOptions)
-			require.NoError(t, err, "Failed to invoke the EmptyCall service")
+			assert.NoError(t, err, "Failed to invoke the EmptyCall service")
 
 			// invoke the EmptyCall service with bad options
 			_, err = invokeEmptyCall(testAddress, test.badOptions)
-			require.Error(t, err, "Expected error using bad dial options")
+			assert.Error(t, err, "Expected error using bad dial options")
 		})
 	}
 }

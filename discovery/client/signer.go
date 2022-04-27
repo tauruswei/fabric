@@ -70,6 +70,7 @@ func (ms *MemoizeSigner) memorize(msg, signature []byte) {
 	ms.Lock()
 	defer ms.Unlock()
 	ms.memory[msgDigest(msg)] = signature
+
 }
 
 // shrinkMemory evicts random messages from memory

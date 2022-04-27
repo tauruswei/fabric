@@ -88,6 +88,7 @@ func (packet *packetMock) Respond(msg *proto.GossipMessage) {
 
 // Ack returns to the sender an acknowledgement for the message
 func (packet *packetMock) Ack(err error) {
+
 }
 
 // GetSourceEnvelope Returns the Envelope the ReceivedMessage was

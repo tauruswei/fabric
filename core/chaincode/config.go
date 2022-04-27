@@ -30,7 +30,7 @@ type Config struct {
 	LogFormat       string
 	LogLevel        string
 	ShimLogLevel    string
-	SCCAllowlist    map[string]bool
+	SCCWhitelist    map[string]bool
 }
 
 func GlobalConfig() *Config {
@@ -58,9 +58,9 @@ func (c *Config) load() {
 		c.StartupTimeout = minimumStartupTimeout
 	}
 
-	c.SCCAllowlist = map[string]bool{}
+	c.SCCWhitelist = map[string]bool{}
 	for k, v := range viper.GetStringMapString("chaincode.system") {
-		c.SCCAllowlist[k] = parseBool(v)
+		c.SCCWhitelist[k] = parseBool(v)
 	}
 
 	c.LogFormat = viper.GetString("chaincode.logging.format")

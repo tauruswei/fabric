@@ -11,11 +11,11 @@ import (
 
 	"github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewConfigGroup(t *testing.T) {
-	require.Equal(t,
+	assert.Equal(t,
 		&common.ConfigGroup{
 			Groups:   make(map[string]*common.ConfigGroup),
 			Values:   make(map[string]*common.ConfigValue),

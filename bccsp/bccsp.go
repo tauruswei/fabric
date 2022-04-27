@@ -13,7 +13,6 @@ import (
 
 // Key represents a cryptographic key
 type Key interface {
-
 	// Bytes converts this key to its byte representation,
 	// if this operation is allowed.
 	Bytes() ([]byte, error)

@@ -15,7 +15,7 @@ import (
 	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/policies/inquire"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 type mockMetadataRetriever struct {
@@ -38,10 +38,8 @@ func TestSupport(t *testing.T) {
 		Rule:       &common.SignaturePolicy{},
 		Identities: []*msp.MSPPrincipal{{Principal: []byte("principal-2")}},
 	}
-	ccmd3 := &chaincode.Metadata{
-		Policy:             protoutil.MarshalOrPanic(notEmptySignaturePolicyEnvelope),
-		CollectionPolicies: map[string][]byte{"col1": protoutil.MarshalOrPanic(notEmptySignaturePolicyEnvelope2)},
-	}
+	ccmd3 := &chaincode.Metadata{Policy: protoutil.MarshalOrPanic(notEmptySignaturePolicyEnvelope),
+		CollectionPolicies: map[string][]byte{"col1": protoutil.MarshalOrPanic(notEmptySignaturePolicyEnvelope2)}}
 
 	tests := []struct {
 		name           string
@@ -86,9 +84,9 @@ func TestSupport(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			sup := NewDiscoverySupport(&mockMetadataRetriever{res: test.input})
 			res := sup.PoliciesByChaincode("", "", test.collNames...)
-			require.Equal(t, len(res), len(test.expectedReturn))
+			assert.Equal(t, len(res), len(test.expectedReturn))
 			for i := 0; i < len(test.expectedReturn); i++ {
-				require.Equal(t, res[i].SatisfiedBy(), test.expectedReturn[i].SatisfiedBy())
+				assert.Equal(t, res[i].SatisfiedBy(), test.expectedReturn[i].SatisfiedBy())
 			}
 		})
 	}

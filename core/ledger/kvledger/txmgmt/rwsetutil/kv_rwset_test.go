@@ -13,7 +13,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/ledger/rwset/kvrwset"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 const kvrwsetV1ProtoBytesFile = "testdata/kvrwsetV1ProtoBytes"
@@ -23,12 +23,12 @@ const kvrwsetV1ProtoBytesFile = "testdata/kvrwsetV1ProtoBytes"
 // v1.0. This is to make sure that any incompatible changes does not go uncaught.
 func TestKVRWSetV1BackwardCompatible(t *testing.T) {
 	protoBytes, err := ioutil.ReadFile(kvrwsetV1ProtoBytesFile)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	kvrwset1 := &kvrwset.KVRWSet{}
-	require.NoError(t, proto.Unmarshal(protoBytes, kvrwset1))
+	assert.NoError(t, proto.Unmarshal(protoBytes, kvrwset1))
 	kvrwset2 := constructSampleKVRWSet()
 	t.Logf("kvrwset1=%s, kvrwset2=%s", spew.Sdump(kvrwset1), spew.Sdump(kvrwset2))
-	require.Equal(t, kvrwset2, kvrwset1)
+	assert.Equal(t, kvrwset2, kvrwset1)
 }
 
 // PrepareBinaryFileSampleKVRWSetV1 constructs a proto message for kvrwset and marshals its bytes to file 'kvrwsetV1ProtoBytes'.
@@ -37,8 +37,8 @@ func TestKVRWSetV1BackwardCompatible(t *testing.T) {
 // using golang test framwork
 func PrepareBinaryFileSampleKVRWSetV1(t *testing.T) {
 	b, err := proto.Marshal(constructSampleKVRWSet())
-	require.NoError(t, err)
-	require.NoError(t, ioutil.WriteFile(kvrwsetV1ProtoBytesFile, b, 0o644))
+	assert.NoError(t, err)
+	assert.NoError(t, ioutil.WriteFile(kvrwsetV1ProtoBytesFile, b, 0644))
 }
 
 func constructSampleKVRWSet() *kvrwset.KVRWSet {

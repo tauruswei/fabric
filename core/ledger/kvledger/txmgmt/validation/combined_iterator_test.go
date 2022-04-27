@@ -12,15 +12,15 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/internal/version"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb/stateleveldb"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCombinedIterator(t *testing.T) {
 	testDBEnv := stateleveldb.NewTestVDBEnv(t)
 	defer testDBEnv.Cleanup()
 
-	db, err := testDBEnv.DBProvider.GetDBHandle("TestDB", nil)
-	require.NoError(t, err)
+	db, err := testDBEnv.DBProvider.GetDBHandle("TestDB")
+	assert.NoError(t, err)
 
 	// populate db with initial data
 	batch := statedb.NewUpdateBatch()
@@ -28,7 +28,7 @@ func TestCombinedIterator(t *testing.T) {
 	batch.Put("ns", "key4", []byte("value4"), version.NewHeight(1, 1))
 	batch.Put("ns", "key6", []byte("value6"), version.NewHeight(1, 1))
 	batch.Put("ns", "key8", []byte("value8"), version.NewHeight(1, 1))
-	require.NoError(t, db.ApplyUpdates(batch, version.NewHeight(1, 5)))
+	db.ApplyUpdates(batch, version.NewHeight(1, 5))
 
 	// prepare batch1
 	batch1 := statedb.NewUpdateBatch()
@@ -98,23 +98,16 @@ func checkItrResults(t *testing.T, testName string, itr statedb.ResultsIterator,
 	t.Run(testName, func(t *testing.T) {
 		for i := 0; i < len(expectedResults); i++ {
 			res, _ := itr.Next()
-			require.Equal(t, expectedResults[i], res)
+			assert.Equal(t, expectedResults[i], res)
 		}
 		lastRes, err := itr.Next()
-		require.NoError(t, err)
-		require.Nil(t, lastRes)
+		assert.NoError(t, err)
+		assert.Nil(t, lastRes)
 	})
 }
 
 func constructVersionedKV(ns string, key string, value []byte, version *version.Height) *statedb.VersionedKV {
 	return &statedb.VersionedKV{
-		CompositeKey: &statedb.CompositeKey{
-			Namespace: ns,
-			Key:       key,
-		},
-		VersionedValue: &statedb.VersionedValue{
-			Value:   value,
-			Version: version,
-		},
-	}
+		CompositeKey:   statedb.CompositeKey{Namespace: ns, Key: key},
+		VersionedValue: statedb.VersionedValue{Value: value, Version: version}}
 }

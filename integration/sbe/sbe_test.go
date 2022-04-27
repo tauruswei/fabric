@@ -51,8 +51,7 @@ var _ = Describe("SBE_E2E", func() {
 			CollectionsConfig: "testdata/collection_config.json",
 		}
 
-		tempDir, err = ioutil.TempDir("", "sbe")
-		Expect(err).NotTo(HaveOccurred())
+		tempDir, err = ioutil.TempDir("", "nwo")
 	})
 
 	AfterEach(func() {
@@ -63,7 +62,6 @@ var _ = Describe("SBE_E2E", func() {
 		if network != nil {
 			network.Cleanup()
 		}
-		os.RemoveAll(tempDir)
 		os.RemoveAll(testDir)
 	})
 
@@ -444,9 +442,8 @@ func getLedgerHeight(n *nwo.Network, peer *nwo.Peer, channelName string) int {
 	Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
 
 	channelInfoStr := strings.TrimPrefix(string(sess.Buffer().Contents()[:]), "Blockchain info:")
-	channelInfo := common.BlockchainInfo{}
-	err = json.Unmarshal([]byte(channelInfoStr), &channelInfo)
-	Expect(err).NotTo(HaveOccurred())
+	var channelInfo = common.BlockchainInfo{}
+	json.Unmarshal([]byte(channelInfoStr), &channelInfo)
 	return int(channelInfo.Height)
 }
 
@@ -457,4 +454,5 @@ func syncLedgerHeights(n *nwo.Network, peer1 *nwo.Peer, peer2 *nwo.Peer) {
 	Eventually(func() int {
 		return getLedgerHeight(n, peer2, "testchannel")
 	}, n.EventuallyTimeout).Should(Equal(height))
+
 }

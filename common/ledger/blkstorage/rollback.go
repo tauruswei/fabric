@@ -9,8 +9,8 @@ package blkstorage
 import (
 	"os"
 
+	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
-	"github.com/hyperledger/fabric/internal/fileutil"
 	"github.com/hyperledger/fabric/protoutil"
 	"github.com/pkg/errors"
 )
@@ -22,7 +22,6 @@ type rollbackMgr struct {
 	dbProvider     *leveldbhelper.Provider
 	indexStore     *blockIndex
 	targetBlockNum uint64
-	reusableBatch  *leveldbhelper.UpdateBatch
 }
 
 // Rollback reverts changes made to the block store beyond a given block number.
@@ -71,13 +70,12 @@ func newRollbackMgr(blockStorageDir, ledgerID string, indexConfig *IndexConfig, 
 	}
 	indexDB := r.dbProvider.GetDBHandle(ledgerID)
 	r.indexStore, err = newBlockIndex(indexConfig, indexDB)
-	r.reusableBatch = r.indexStore.db.NewUpdateBatch()
 	return r, err
 }
 
 func (r *rollbackMgr) rollbackBlockIndex() error {
 	lastBlockNumber, err := r.indexStore.getLastBlockIndexed()
-	if err == errIndexSavePointKeyNotPresent {
+	if err == errIndexEmpty {
 		return nil
 	}
 	if err != nil {
@@ -115,7 +113,7 @@ func (r *rollbackMgr) deleteIndexEntriesRange(startBlkNum, endBlkNum uint64) err
 	// entries. However, if there is more than more than 1 channel, dropping of
 	// index would impact the time taken to recover the peer. We need to analyze
 	// a bit before making a decision on rollback vs drop of index. FAB-15672
-	r.reusableBatch.Reset()
+	batch := leveldbhelper.NewUpdateBatch()
 	lp, err := r.indexStore.getBlockLocByBlockNum(startBlkNum)
 	if err != nil {
 		return err
@@ -137,12 +135,12 @@ func (r *rollbackMgr) deleteIndexEntriesRange(startBlkNum, endBlkNum uint64) err
 		if err != nil {
 			return err
 		}
-		addIndexEntriesToBeDeleted(r.reusableBatch, blockInfo, r.indexStore)
+		addIndexEntriesToBeDeleted(batch, blockInfo, r.indexStore)
 		numberOfBlocksToRetrieve--
 	}
 
-	r.reusableBatch.Put(indexSavePointKey, encodeBlockNum(startBlkNum-1))
-	return r.indexStore.db.WriteBatch(r.reusableBatch, true)
+	batch.Put(indexCheckpointKey, encodeBlockNum(startBlkNum-1))
+	return r.indexStore.db.WriteBatch(batch, true)
 }
 
 func addIndexEntriesToBeDeleted(batch *leveldbhelper.UpdateBatch, blockInfo *serializedBlockInfo, indexStore *blockIndex) error {
@@ -169,7 +167,7 @@ func addIndexEntriesToBeDeleted(batch *leveldbhelper.UpdateBatch, blockInfo *ser
 }
 
 func (r *rollbackMgr) rollbackBlockFiles() error {
-	logger.Infof("Deleting blockfilesInfo")
+	logger.Infof("Deleting checkpointInfo")
 	if err := r.indexStore.db.Delete(blkMgrInfoKey, true); err != nil {
 		return err
 	}
@@ -243,11 +241,12 @@ func ValidateRollbackParams(blockStorageDir, ledgerID string, targetBlockNum uin
 		return err
 	}
 	return nil
+
 }
 
 func validateLedgerID(ledgerDir, ledgerID string) error {
 	logger.Debugf("Validating the existence of ledgerID [%s]", ledgerID)
-	exists, err := fileutil.DirExists(ledgerDir)
+	exists, _, err := util.FileExists(ledgerDir)
 	if err != nil {
 		return err
 	}
@@ -259,13 +258,13 @@ func validateLedgerID(ledgerDir, ledgerID string) error {
 
 func validateTargetBlkNum(ledgerDir string, targetBlockNum uint64) error {
 	logger.Debugf("Validating the given block number [%d] against the ledger block height", targetBlockNum)
-	blkfilesInfo, err := constructBlockfilesInfo(ledgerDir)
+	cpInfo, err := constructCheckpointInfoFromBlockFiles(ledgerDir)
 	if err != nil {
 		return err
 	}
-	if blkfilesInfo.lastPersistedBlock <= targetBlockNum {
+	if cpInfo.lastBlockNumber <= targetBlockNum {
 		return errors.Errorf("target block number [%d] should be less than the biggest block number [%d]",
-			targetBlockNum, blkfilesInfo.lastPersistedBlock)
+			targetBlockNum, cpInfo.lastBlockNumber)
 	}
 	return nil
 }

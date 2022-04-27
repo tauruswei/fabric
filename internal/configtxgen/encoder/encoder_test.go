@@ -228,7 +228,9 @@ var _ = Describe("Encoder", func() {
 	})
 
 	Describe("NewChannelGroup", func() {
-		var conf *genesisconfig.Profile
+		var (
+			conf *genesisconfig.Profile
+		)
 
 		BeforeEach(func() {
 			conf = &genesisconfig.Profile{
@@ -341,7 +343,9 @@ var _ = Describe("Encoder", func() {
 	})
 
 	Describe("NewOrdererGroup", func() {
-		var conf *genesisconfig.Orderer
+		var (
+			conf *genesisconfig.Orderer
+		)
 
 		BeforeEach(func() {
 			conf = &genesisconfig.Orderer{
@@ -467,7 +471,9 @@ var _ = Describe("Encoder", func() {
 	})
 
 	Describe("NewApplicationGroup", func() {
-		var conf *genesisconfig.Application
+		var (
+			conf *genesisconfig.Application
+		)
 
 		BeforeEach(func() {
 			conf = &genesisconfig.Application{
@@ -528,7 +534,9 @@ var _ = Describe("Encoder", func() {
 	})
 
 	Describe("NewConsortiumOrgGroup", func() {
-		var conf *genesisconfig.Organization
+		var (
+			conf *genesisconfig.Organization
+		)
 
 		BeforeEach(func() {
 			conf = &genesisconfig.Organization{
@@ -599,7 +607,9 @@ var _ = Describe("Encoder", func() {
 	})
 
 	Describe("NewOrdererOrgGroup", func() {
-		var conf *genesisconfig.Organization
+		var (
+			conf *genesisconfig.Organization
+		)
 
 		BeforeEach(func() {
 			conf = &genesisconfig.Organization{
@@ -687,7 +697,9 @@ var _ = Describe("Encoder", func() {
 	})
 
 	Describe("NewApplicationOrgGroup", func() {
-		var conf *genesisconfig.Organization
+		var (
+			conf *genesisconfig.Organization
+		)
 
 		BeforeEach(func() {
 			conf = &genesisconfig.Organization{
@@ -966,7 +978,9 @@ var _ = Describe("Encoder", func() {
 		})
 
 		Describe("MakeChannelCreationTransaction", func() {
-			var fakeSigner *fakes.SignerSerializer
+			var (
+				fakeSigner *fakes.SignerSerializer
+			)
 
 			BeforeEach(func() {
 				fakeSigner = &fakes.SignerSerializer{}
@@ -1154,7 +1168,9 @@ var _ = Describe("Encoder", func() {
 		})
 
 		Describe("DefaultConfigTemplate", func() {
-			var conf *genesisconfig.Profile
+			var (
+				conf *genesisconfig.Profile
+			)
 
 			BeforeEach(func() {
 				conf = &genesisconfig.Profile{
@@ -1344,10 +1360,13 @@ var _ = Describe("Encoder", func() {
 					Expect(err).To(MatchError("consortium SampleConsortium does not contain member org Org1"))
 				})
 			})
+
 		})
 
 		Describe("HasSkippedForeignOrgs", func() {
-			var conf *genesisconfig.Profile
+			var (
+				conf *genesisconfig.Profile
+			)
 
 			BeforeEach(func() {
 				conf = &genesisconfig.Profile{
@@ -1428,7 +1447,9 @@ var _ = Describe("Encoder", func() {
 
 	Describe("Bootstrapper", func() {
 		Describe("NewBootstrapper", func() {
-			var conf *genesisconfig.Profile
+			var (
+				conf *genesisconfig.Profile
+			)
 
 			BeforeEach(func() {
 				conf = &genesisconfig.Profile{
@@ -1475,7 +1496,9 @@ var _ = Describe("Encoder", func() {
 		})
 
 		Describe("New", func() {
-			var conf *genesisconfig.Profile
+			var (
+				conf *genesisconfig.Profile
+			)
 
 			BeforeEach(func() {
 				conf = &genesisconfig.Profile{
@@ -1501,10 +1524,13 @@ var _ = Describe("Encoder", func() {
 					Expect(func() { encoder.New(conf) }).To(Panic())
 				})
 			})
+
 		})
 
 		Describe("Functions", func() {
-			var bs *encoder.Bootstrapper
+			var (
+				bs *encoder.Bootstrapper
+			)
 
 			BeforeEach(func() {
 				bs = encoder.New(&genesisconfig.Profile{

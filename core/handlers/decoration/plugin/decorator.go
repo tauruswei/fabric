@@ -16,7 +16,8 @@ func NewDecorator() decoration.Decorator {
 	return &decorator{}
 }
 
-type decorator struct{}
+type decorator struct {
+}
 
 // Decorate decorates a chaincode input by changing it
 func (d *decorator) Decorate(proposal *peer.Proposal, input *peer.ChaincodeInput) *peer.ChaincodeInput {

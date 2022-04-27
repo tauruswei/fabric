@@ -11,7 +11,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestVDBEnv provides a level db backed versioned db for testing
@@ -29,7 +29,7 @@ func NewTestVDBEnv(t testing.TB) *TestVDBEnv {
 		t.Fatalf("Failed to create leveldb directory: %s", err)
 	}
 	dbProvider, err := NewVersionedDBProvider(dbPath)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	return &TestVDBEnv{t, dbProvider, dbPath}
 }
 

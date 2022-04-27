@@ -21,6 +21,7 @@ import (
 )
 
 var _ = Describe("CORS", func() {
+
 	var (
 		sess *gexec.Session
 		req  *http.Request

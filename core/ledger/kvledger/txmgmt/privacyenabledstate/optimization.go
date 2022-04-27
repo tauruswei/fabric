@@ -15,26 +15,23 @@ type metadataHint struct {
 	bookkeeper *leveldbhelper.DBHandle
 }
 
-func newMetadataHint(bookkeeper *leveldbhelper.DBHandle) (*metadataHint, error) {
+func newMetadataHint(bookkeeper *leveldbhelper.DBHandle) *metadataHint {
 	cache := map[string]bool{}
-	itr, err := bookkeeper.GetIterator(nil, nil)
-	if err != nil {
-		return nil, err
-	}
+	itr := bookkeeper.GetIterator(nil, nil)
 	defer itr.Release()
 	for itr.Next() {
 		namespace := string(itr.Key())
 		cache[namespace] = true
 	}
-	return &metadataHint{cache, bookkeeper}, nil
+	return &metadataHint{cache, bookkeeper}
 }
 
 func (h *metadataHint) metadataEverUsedFor(namespace string) bool {
 	return h.cache[namespace]
 }
 
-func (h *metadataHint) setMetadataUsedFlag(updates *UpdateBatch) error {
-	batch := h.bookkeeper.NewUpdateBatch()
+func (h *metadataHint) setMetadataUsedFlag(updates *UpdateBatch) {
+	batch := leveldbhelper.NewUpdateBatch()
 	for ns := range filterNamespacesThatHasMetadata(updates) {
 		if h.cache[ns] {
 			continue
@@ -42,15 +39,7 @@ func (h *metadataHint) setMetadataUsedFlag(updates *UpdateBatch) error {
 		h.cache[ns] = true
 		batch.Put([]byte(ns), []byte{})
 	}
-	return h.bookkeeper.WriteBatch(batch, true)
-}
-
-func (h *metadataHint) importNamespacesThatUseMetadata(namespaces map[string]struct{}) error {
-	batch := h.bookkeeper.NewUpdateBatch()
-	for ns := range namespaces {
-		batch.Put([]byte(ns), []byte{})
-	}
-	return h.bookkeeper.WriteBatch(batch, true)
+	h.bookkeeper.WriteBatch(batch, true)
 }
 
 func filterNamespacesThatHasMetadata(updates *UpdateBatch) map[string]bool {

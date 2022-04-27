@@ -17,7 +17,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -46,7 +46,7 @@ var (
 
 func TestProtolatorDecode(t *testing.T) {
 	data, err := proto.Marshal(testProto)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	url := fmt.Sprintf("/protolator/decode/%s", proto.MessageName(testProto))
 
@@ -55,15 +55,16 @@ func TestProtolatorDecode(t *testing.T) {
 	r := NewRouter()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Remove all the whitespace
 	compactJSON := strings.Replace(strings.Replace(strings.Replace(rec.Body.String(), "\n", "", -1), "\t", "", -1), " ", "", -1)
 
-	require.Equal(t, testOutput, compactJSON)
+	assert.Equal(t, testOutput, compactJSON)
 }
 
 func TestProtolatorEncode(t *testing.T) {
+
 	url := fmt.Sprintf("/protolator/encode/%s", proto.MessageName(testProto))
 
 	req, _ := http.NewRequest("POST", url, bytes.NewReader([]byte(testOutput)))
@@ -71,13 +72,13 @@ func TestProtolatorEncode(t *testing.T) {
 	r := NewRouter()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, http.StatusOK, rec.Code)
 
 	outputMsg := &cb.Block{}
 
 	err := proto.Unmarshal(rec.Body.Bytes(), outputMsg)
-	require.NoError(t, err)
-	require.True(t, proto.Equal(testProto, outputMsg))
+	assert.NoError(t, err)
+	assert.True(t, proto.Equal(testProto, outputMsg))
 }
 
 func TestProtolatorDecodeNonExistantProto(t *testing.T) {
@@ -86,7 +87,7 @@ func TestProtolatorDecodeNonExistantProto(t *testing.T) {
 	r := NewRouter()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestProtolatorEncodeNonExistantProto(t *testing.T) {
@@ -95,7 +96,7 @@ func TestProtolatorEncodeNonExistantProto(t *testing.T) {
 	r := NewRouter()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestProtolatorDecodeBadData(t *testing.T) {
@@ -107,7 +108,7 @@ func TestProtolatorDecodeBadData(t *testing.T) {
 	r := NewRouter()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
 func TestProtolatorEncodeBadData(t *testing.T) {
@@ -119,5 +120,5 @@ func TestProtolatorEncodeBadData(t *testing.T) {
 	r := NewRouter()
 	r.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }

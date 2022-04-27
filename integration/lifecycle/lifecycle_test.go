@@ -15,13 +15,13 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric-config/protolator"
-	"github.com/hyperledger/fabric-config/protolator/protoext/ordererext"
 	"github.com/hyperledger/fabric-protos-go/common"
+	"github.com/hyperledger/fabric/common/tools/protolator"
+	"github.com/hyperledger/fabric/common/tools/protolator/protoext/ordererext"
 	"github.com/hyperledger/fabric/integration/nwo"
 	"github.com/hyperledger/fabric/integration/nwo/commands"
 	"github.com/hyperledger/fabric/integration/nwo/fabricconfig"
-	"github.com/hyperledger/fabric/integration/nwo/runner"
+	"github.com/hyperledger/fabric/integration/runner"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/tedsuo/ifrit"
@@ -72,7 +72,7 @@ var _ = Describe("Lifecycle", func() {
 			os.Setenv(envKey, termFile)
 			for i, e := range externalBuilders {
 				if e.Name == "binary" {
-					e.PropagateEnvironment = append(e.PropagateEnvironment, envKey)
+					e.EnvironmentWhitelist = append(e.EnvironmentWhitelist, envKey)
 					externalBuilders[i] = e
 				}
 			}

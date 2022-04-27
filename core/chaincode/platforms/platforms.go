@@ -49,12 +49,9 @@ func (pw PackageWriterWrapper) Write(name string, payload []byte, tw *tar.Writer
 	return pw(name, payload, tw)
 }
 
-type BuildFunc func(util.DockerBuildOptions, *docker.Client) error
-
 type Registry struct {
 	Platforms     map[string]Platform
 	PackageWriter PackageWriter
-	DockerBuild   BuildFunc
 }
 
 var logger = flogging.MustGetLogger("chaincode.platform")
@@ -70,7 +67,6 @@ func NewRegistry(platformTypes ...Platform) *Registry {
 	return &Registry{
 		Platforms:     platforms,
 		PackageWriter: PackageWriterWrapper(writeBytesToPackage),
-		DockerBuild:   util.DockerBuild,
 	}
 }
 
@@ -95,7 +91,7 @@ func (r *Registry) GenerateDockerfile(ccType string) (string, error) {
 	// ----------------------------------------------------------------------------------------------------
 	// Then augment it with any general options
 	// ----------------------------------------------------------------------------------------------------
-	// append version so chaincode build version can be compared against peer build version
+	//append version so chaincode build version can be compared against peer build version
 	buf = append(buf, fmt.Sprintf("ENV CORE_CHAINCODE_BUILDLEVEL=%s", metadata.Version))
 
 	// ----------------------------------------------------------------------------------------------------
@@ -137,7 +133,7 @@ func (r *Registry) StreamDockerBuild(ccType, path string, codePackage io.Reader,
 	buildOptions.InputStream = codePackage
 	buildOptions.OutputStream = output
 
-	err = r.DockerBuild(buildOptions, client)
+	err = util.DockerBuild(buildOptions, client)
 	if err != nil {
 		return errors.Wrap(err, "docker build failed")
 	}
@@ -149,7 +145,7 @@ func writeBytesToPackage(name string, payload []byte, tw *tar.Writer) error {
 	err := tw.WriteHeader(&tar.Header{
 		Name: name,
 		Size: int64(len(payload)),
-		Mode: 0o100644,
+		Mode: 0100644,
 	})
 	if err != nil {
 		return err

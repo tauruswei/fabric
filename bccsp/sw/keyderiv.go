@@ -26,6 +26,12 @@ import (
 	"github.com/hyperledger/fabric/bccsp"
 )
 
+type smPublicKeyKeyDeriver struct{}
+
+func (kd *smPublicKeyKeyDeriver) KeyDeriv(key bccsp.Key, opts bccsp.KeyDerivOpts) (bccsp.Key, error) {
+	return nil, errors.New("Not implemented")
+}
+
 type ecdsaPublicKeyKeyDeriver struct{}
 
 func (kd *ecdsaPublicKeyKeyDeriver) KeyDeriv(key bccsp.Key, opts bccsp.KeyDerivOpts) (bccsp.Key, error) {
@@ -48,8 +54,8 @@ func (kd *ecdsaPublicKeyKeyDeriver) KeyDeriv(key bccsp.Key, opts bccsp.KeyDerivO
 		Y:     new(big.Int),
 	}
 
-	k := new(big.Int).SetBytes(reRandOpts.ExpansionValue())
-	one := new(big.Int).SetInt64(1)
+	var k = new(big.Int).SetBytes(reRandOpts.ExpansionValue())
+	var one = new(big.Int).SetInt64(1)
 	n := new(big.Int).Sub(ecdsaK.pubKey.Params().N, one)
 	k.Mod(k, n)
 	k.Add(k, one)
@@ -95,8 +101,8 @@ func (kd *ecdsaPrivateKeyKeyDeriver) KeyDeriv(key bccsp.Key, opts bccsp.KeyDeriv
 		D: new(big.Int),
 	}
 
-	k := new(big.Int).SetBytes(reRandOpts.ExpansionValue())
-	one := new(big.Int).SetInt64(1)
+	var k = new(big.Int).SetBytes(reRandOpts.ExpansionValue())
+	var one = new(big.Int).SetInt64(1)
 	n := new(big.Int).Sub(ecdsaK.privKey.Params().N, one)
 	k.Mod(k, n)
 	k.Add(k, one)

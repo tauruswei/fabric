@@ -256,7 +256,9 @@ var _ = Describe("ChaincodePackageParser", func() {
 })
 
 var _ = Describe("ChaincodePackageLocator", func() {
-	var locator *persistence.ChaincodePackageLocator
+	var (
+		locator *persistence.ChaincodePackageLocator
+	)
 
 	BeforeEach(func() {
 		locator = &persistence.ChaincodePackageLocator{
@@ -275,7 +277,9 @@ var _ = Describe("ChaincodePackageLocator", func() {
 })
 
 var _ = Describe("ChaincodePackageStreamer", func() {
-	var streamer *persistence.ChaincodePackageStreamer
+	var (
+		streamer *persistence.ChaincodePackageStreamer
+	)
 
 	BeforeEach(func() {
 		streamer = &persistence.ChaincodePackageStreamer{

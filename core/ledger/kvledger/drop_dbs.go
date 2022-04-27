@@ -6,7 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 
 package kvledger
 
-import "github.com/hyperledger/fabric/internal/fileutil"
+import (
+	"os"
+
+	"github.com/pkg/errors"
+)
 
 func dropDBs(rootFSPath string) error {
 	// During block commits to stateDB, the transaction manager updates the bookkeeperDB and one of the
@@ -27,29 +31,34 @@ func dropDBs(rootFSPath string) error {
 	if err := dropBookkeeperDB(rootFSPath); err != nil {
 		return err
 	}
-	return dropHistoryDB(rootFSPath)
+	if err := dropHistoryDB(rootFSPath); err != nil {
+		return err
+	}
+	return nil
 }
 
 func dropStateLevelDB(rootFSPath string) error {
 	stateLeveldbPath := StateDBPath(rootFSPath)
-	logger.Infof("Dropping all contents in StateLevelDB at location [%s] ...if present", stateLeveldbPath)
-	return fileutil.RemoveContents(stateLeveldbPath)
+	logger.Infof("Dropping StateLevelDB at location [%s] ...if present", stateLeveldbPath)
+	return os.RemoveAll(stateLeveldbPath)
 }
 
 func dropConfigHistoryDB(rootFSPath string) error {
 	configHistoryDBPath := ConfigHistoryDBPath(rootFSPath)
-	logger.Infof("Dropping all contents in ConfigHistoryDB at location [%s] ...if present", configHistoryDBPath)
-	return fileutil.RemoveContents(configHistoryDBPath)
+	logger.Infof("Dropping ConfigHistoryDB at location [%s]", configHistoryDBPath)
+	err := os.RemoveAll(configHistoryDBPath)
+	return errors.Wrapf(err, "error removing the ConfigHistoryDB located at %s", configHistoryDBPath)
 }
 
 func dropBookkeeperDB(rootFSPath string) error {
 	bookkeeperDBPath := BookkeeperDBPath(rootFSPath)
-	logger.Infof("Dropping all contents in BookkeeperDB at location [%s] ...if present", bookkeeperDBPath)
-	return fileutil.RemoveContents(bookkeeperDBPath)
+	logger.Infof("Dropping BookkeeperDB at location [%s]", bookkeeperDBPath)
+	err := os.RemoveAll(bookkeeperDBPath)
+	return errors.Wrapf(err, "error removing the BookkeeperDB located at %s", bookkeeperDBPath)
 }
 
 func dropHistoryDB(rootFSPath string) error {
 	historyDBPath := HistoryDBPath(rootFSPath)
-	logger.Infof("Dropping all contents under in HistoryDB at location [%s] ...if present", historyDBPath)
-	return fileutil.RemoveContents(historyDBPath)
+	logger.Infof("Dropping HistoryDB at location [%s] ...if present", historyDBPath)
+	return os.RemoveAll(historyDBPath)
 }

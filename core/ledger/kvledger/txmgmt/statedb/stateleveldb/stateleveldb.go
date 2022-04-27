@@ -21,12 +21,12 @@ import (
 var logger = flogging.MustGetLogger("stateleveldb")
 
 var (
-	dataKeyPrefix          = []byte{'d'}
-	dataKeyStopper         = []byte{'e'}
-	nsKeySep               = []byte{0x00}
-	lastKeyIndicator       = byte(0x01)
-	savePointKey           = []byte{'s'}
-	maxDataImportBatchSize = 4 * 1024 * 1024
+	dataKeyPrefix               = []byte{'d'}
+	dataKeyStopper              = []byte{'e'}
+	nsKeySep                    = []byte{0x00}
+	lastKeyIndicator            = byte(0x01)
+	savePointKey                = []byte{'s'}
+	fullScanIteratorValueFormat = byte(1)
 )
 
 // VersionedDBProvider implements interface VersionedDBProvider
@@ -49,34 +49,13 @@ func NewVersionedDBProvider(dbPath string) (*VersionedDBProvider, error) {
 }
 
 // GetDBHandle gets the handle to a named database
-func (provider *VersionedDBProvider) GetDBHandle(dbName string, namespaceProvider statedb.NamespaceProvider) (statedb.VersionedDB, error) {
+func (provider *VersionedDBProvider) GetDBHandle(dbName string) (statedb.VersionedDB, error) {
 	return newVersionedDB(provider.dbProvider.GetDBHandle(dbName), dbName), nil
-}
-
-// ImportFromSnapshot loads the public state and pvtdata hashes from the snapshot files previously generated
-func (provider *VersionedDBProvider) ImportFromSnapshot(
-	dbName string,
-	savepoint *version.Height,
-	itr statedb.FullScanIterator,
-) error {
-	vdb := newVersionedDB(provider.dbProvider.GetDBHandle(dbName), dbName)
-	return vdb.importState(itr, savepoint)
-}
-
-// BytesKeySupported returns true if a db created supports bytes as a key
-func (provider *VersionedDBProvider) BytesKeySupported() bool {
-	return true
 }
 
 // Close closes the underlying db
 func (provider *VersionedDBProvider) Close() {
 	provider.dbProvider.Close()
-}
-
-// Drop drops channel-specific data from the state leveldb.
-// It is not an error if a database does not exist.
-func (provider *VersionedDBProvider) Drop(dbName string) error {
-	return provider.dbProvider.Drop(dbName)
 }
 
 // VersionedDB implements VersionedDB interface
@@ -164,10 +143,7 @@ func (vdb *versionedDB) GetStateRangeScanIteratorWithPagination(namespace string
 	if endKey == "" {
 		dataEndKey[len(dataEndKey)-1] = lastKeyIndicator
 	}
-	dbItr, err := vdb.db.GetIterator(dataStartKey, dataEndKey)
-	if err != nil {
-		return nil, err
-	}
+	dbItr := vdb.db.GetIterator(dataStartKey, dataEndKey)
 	return newKVScanner(namespace, dbItr, pageSize), nil
 }
 
@@ -183,7 +159,7 @@ func (vdb *versionedDB) ExecuteQueryWithPagination(namespace, query, bookmark st
 
 // ApplyUpdates implements method in VersionedDB interface
 func (vdb *versionedDB) ApplyUpdates(batch *statedb.UpdateBatch, height *version.Height) error {
-	dbBatch := vdb.db.NewUpdateBatch()
+	dbBatch := leveldbhelper.NewUpdateBatch()
 	namespaces := batch.GetUpdatedNamespaces()
 	for _, ns := range namespaces {
 		updates := batch.GetUpdates(ns)
@@ -210,7 +186,10 @@ func (vdb *versionedDB) ApplyUpdates(batch *statedb.UpdateBatch, height *version
 		dbBatch.Put(savePointKey, height.ToBytes())
 	}
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
-	return vdb.db.WriteBatch(dbBatch, true)
+	if err := vdb.db.WriteBatch(dbBatch, true); err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetLatestSavePoint implements method in VersionedDB interface
@@ -234,49 +213,8 @@ func (vdb *versionedDB) GetLatestSavePoint() (*version.Height, error) {
 // `skipNamespace` parameter can be used to control if the consumer wants the FullScanIterator
 // to skip one or more namespaces from the returned results. The intended use of this iterator
 // is to generate the snapshot files for the stateleveldb
-func (vdb *versionedDB) GetFullScanIterator(skipNamespace func(string) bool) (statedb.FullScanIterator, error) {
+func (vdb *versionedDB) GetFullScanIterator(skipNamespace func(string) bool) (statedb.FullScanIterator, byte, error) {
 	return newFullDBScanner(vdb.db, skipNamespace)
-}
-
-// importState implements method in VersionedDB interface. The function is expected to be used
-// for importing the state from a previously snapshotted state. The parameter itr provides access to
-// the snapshotted state.
-func (vdb *versionedDB) importState(itr statedb.FullScanIterator, savepoint *version.Height) error {
-	if itr == nil {
-		return vdb.db.Put(savePointKey, savepoint.ToBytes(), true)
-	}
-	dbBatch := vdb.db.NewUpdateBatch()
-	batchSize := 0
-	for {
-		versionedKV, err := itr.Next()
-		if err != nil {
-			return err
-		}
-		if versionedKV == nil {
-			break
-		}
-		dbKey := encodeDataKey(versionedKV.Namespace, versionedKV.Key)
-		dbValue, err := encodeValue(versionedKV.VersionedValue)
-		if err != nil {
-			return err
-		}
-		batchSize += len(dbKey) + len(dbValue)
-		dbBatch.Put(dbKey, dbValue)
-		if batchSize >= maxDataImportBatchSize {
-			if err := vdb.db.WriteBatch(dbBatch, true); err != nil {
-				return err
-			}
-			batchSize = 0
-			dbBatch.Reset()
-		}
-	}
-	dbBatch.Put(savePointKey, savepoint.ToBytes())
-	return vdb.db.WriteBatch(dbBatch, true)
-}
-
-// IsEmpty return true if the statedb does not have any content
-func (vdb *versionedDB) IsEmpty() (bool, error) {
-	return vdb.db.IsEmpty()
 }
 
 func encodeDataKey(ns, key string) []byte {
@@ -306,7 +244,7 @@ func newKVScanner(namespace string, dbItr iterator.Iterator, requestedLimit int3
 	return &kvScanner{namespace, dbItr, requestedLimit, 0}
 }
 
-func (scanner *kvScanner) Next() (*statedb.VersionedKV, error) {
+func (scanner *kvScanner) Next() (statedb.QueryResult, error) {
 	if scanner.requestedLimit > 0 && scanner.totalRecordsReturned >= scanner.requestedLimit {
 		return nil, nil
 	}
@@ -326,12 +264,10 @@ func (scanner *kvScanner) Next() (*statedb.VersionedKV, error) {
 
 	scanner.totalRecordsReturned++
 	return &statedb.VersionedKV{
-		CompositeKey: &statedb.CompositeKey{
-			Namespace: scanner.namespace,
-			Key:       key,
-		},
-		VersionedValue: vv,
-	}, nil
+		CompositeKey: statedb.CompositeKey{Namespace: scanner.namespace, Key: key},
+		// TODO remove dereferrencing below by changing the type of the field
+		// `VersionedValue` in `statedb.VersionedKV` to a pointer
+		VersionedValue: *vv}, nil
 }
 
 func (scanner *kvScanner) Close() {
@@ -350,55 +286,59 @@ func (scanner *kvScanner) GetBookmarkAndClose() string {
 }
 
 type fullDBScanner struct {
-	db     *leveldbhelper.DBHandle
-	dbItr  iterator.Iterator
-	toSkip func(namespace string) bool
+	db               *leveldbhelper.DBHandle
+	dbItr            iterator.Iterator
+	toSkip           func(namespace string) bool
+	currentNamespace string
 }
 
-func newFullDBScanner(db *leveldbhelper.DBHandle, skipNamespace func(namespace string) bool) (*fullDBScanner, error) {
-	dbItr, err := db.GetIterator(dataKeyPrefix, dataKeyStopper)
-	if err != nil {
-		return nil, err
+func newFullDBScanner(db *leveldbhelper.DBHandle, skipNamespace func(namespace string) bool) (*fullDBScanner, byte, error) {
+	dbItr := db.GetIterator(dataKeyPrefix, dataKeyStopper)
+	if err := dbItr.Error(); err != nil {
+		return nil, byte(0), errors.Wrap(err, "internal leveldb error while obtaining db iterator")
 	}
 	return &fullDBScanner{
 			db:     db,
 			dbItr:  dbItr,
 			toSkip: skipNamespace,
 		},
+		fullScanIteratorValueFormat,
 		nil
 }
 
 // Next returns the key-values in the lexical order of <Namespace, key>
-func (s *fullDBScanner) Next() (*statedb.VersionedKV, error) {
+// The bytes returned for the <version, value, metadata> are the same as they are stored in the leveldb.
+// Since, the primary intended use of this function is to generate the snapshot files for the statedb, the same
+// bytes can be consumed back as is. Hence, we do not decode or transform these bytes for the efficiency
+func (s *fullDBScanner) Next() (*statedb.CompositeKey, []byte, error) {
 	for s.dbItr.Next() {
-		ns, key := decodeDataKey(s.dbItr.Key())
+		dbKey := s.dbItr.Key()
+		dbVal := s.dbItr.Value()
+		ns, key := decodeDataKey(dbKey)
 		compositeKey := &statedb.CompositeKey{
 			Namespace: ns,
 			Key:       key,
 		}
 
-		versionedVal, err := decodeValue(s.dbItr.Value())
-		if err != nil {
-			return nil, err
-		}
-
 		switch {
+		case ns == s.currentNamespace:
+			return compositeKey, dbVal, nil
+		// new namespace begins
 		case !s.toSkip(ns):
-			return &statedb.VersionedKV{
-				CompositeKey:   compositeKey,
-				VersionedValue: versionedVal,
-			}, nil
+			s.currentNamespace = ns
+			return compositeKey, dbVal, nil
+		// skip the new namespace
 		default:
-			s.dbItr.Seek(dataKeyStarterForNextNamespace(ns))
-			s.dbItr.Prev()
+			s.dbItr.Release()
+			s.dbItr = s.db.GetIterator(dataKeyStarterForNextNamespace(ns), dataKeyStopper)
+			if err := s.dbItr.Error(); err != nil {
+				return nil, nil, errors.Wrapf(err, "internal leveldb error while obtaining db iterator for skipping a namespace [%s]", ns)
+			}
 		}
 	}
-	return nil, errors.Wrap(s.dbItr.Error(), "internal leveldb error while retrieving data from db iterator")
+	return nil, nil, errors.Wrap(s.dbItr.Error(), "internal leveldb error while retrieving data from db iterator")
 }
 
 func (s *fullDBScanner) Close() {
-	if s == nil {
-		return
-	}
 	s.dbItr.Release()
 }

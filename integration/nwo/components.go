@@ -11,7 +11,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/hyperledger/fabric/integration/nwo/runner"
+	"github.com/hyperledger/fabric/integration/runner"
 	. "github.com/onsi/gomega"
 )
 
@@ -37,10 +37,6 @@ func (c *Components) Idemixgen() string {
 
 func (c *Components) Orderer() string {
 	return c.Build("github.com/hyperledger/fabric/cmd/orderer")
-}
-
-func (c *Components) Osnadmin() string {
-	return c.Build("github.com/hyperledger/fabric/cmd/osnadmin")
 }
 
 func (c *Components) Peer() string {
@@ -70,4 +66,6 @@ const CCEnvDefaultImage = "hyperledger/fabric-ccenv:latest"
 var RequiredImages = []string{
 	CCEnvDefaultImage,
 	runner.CouchDBDefaultImage,
+	runner.KafkaDefaultImage,
+	runner.ZooKeeperDefaultImage,
 }

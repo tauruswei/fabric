@@ -7,7 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package e2e
 
 import (
-	"bufio"
 	"encoding/json"
 	"io"
 	"net"
@@ -54,80 +53,74 @@ func StartPort() int {
 	return integration.E2EBasePort.StartPortForNode()
 }
 
-type MetricsReader struct {
+type DatagramReader struct {
 	buffer    *gbytes.Buffer
 	errCh     chan error
-	listener  net.Listener
+	sock      *net.UDPConn
 	doneCh    chan struct{}
 	closeOnce sync.Once
 	err       error
 }
 
-func NewMetricsReader() *MetricsReader {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+func NewDatagramReader() *DatagramReader {
+	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	Expect(err).NotTo(HaveOccurred())
+	sock, err := net.ListenUDP("udp", udpAddr)
+	Expect(err).NotTo(HaveOccurred())
+	err = sock.SetReadBuffer(1024 * 1024)
 	Expect(err).NotTo(HaveOccurred())
 
-	return &MetricsReader{
-		buffer:   gbytes.NewBuffer(),
-		listener: listener,
-		errCh:    make(chan error, 1),
-		doneCh:   make(chan struct{}),
+	return &DatagramReader{
+		buffer: gbytes.NewBuffer(),
+		sock:   sock,
+		errCh:  make(chan error, 1),
+		doneCh: make(chan struct{}),
 	}
 }
 
-func (mr *MetricsReader) Buffer() *gbytes.Buffer {
-	return mr.buffer
+func (dr *DatagramReader) Buffer() *gbytes.Buffer {
+	return dr.buffer
 }
 
-func (mr *MetricsReader) Address() string {
-	return mr.listener.Addr().String()
+func (dr *DatagramReader) Address() string {
+	return dr.sock.LocalAddr().String()
 }
 
-func (mr *MetricsReader) String() string {
-	return string(mr.buffer.Contents())
+func (dr *DatagramReader) String() string {
+	return string(dr.buffer.Contents())
 }
 
-func (mr *MetricsReader) Start() {
-	for {
-		conn, err := mr.listener.Accept()
-		if err != nil {
-			mr.errCh <- err
-			return
-		}
-		go mr.handleConnection(conn)
-	}
-}
-
-func (mr *MetricsReader) handleConnection(c net.Conn) {
-	defer GinkgoRecover()
-	defer c.Close()
-
-	br := bufio.NewReader(c)
+func (dr *DatagramReader) Start() {
+	buf := make([]byte, 1024*1024)
 	for {
 		select {
-		case <-mr.doneCh:
-			c.Close()
+		case <-dr.doneCh:
+			dr.errCh <- nil
+			return
+
 		default:
-			data, err := br.ReadBytes('\n')
-			if err == io.EOF {
+			n, _, err := dr.sock.ReadFrom(buf)
+			if err != nil {
+				dr.errCh <- err
 				return
 			}
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = mr.buffer.Write(data)
-			Expect(err).NotTo(HaveOccurred())
+			_, err = dr.buffer.Write(buf[0:n])
+			if err != nil {
+				dr.errCh <- err
+				return
+			}
 		}
 	}
 }
 
-func (mr *MetricsReader) Close() error {
-	mr.closeOnce.Do(func() {
-		close(mr.doneCh)
-		err := mr.listener.Close()
-		mr.err = <-mr.errCh
-		if mr.err == nil && err != nil && err != io.EOF {
-			mr.err = err
+func (dr *DatagramReader) Close() error {
+	dr.closeOnce.Do(func() {
+		close(dr.doneCh)
+		err := dr.sock.Close()
+		dr.err = <-dr.errCh
+		if dr.err == nil && err != nil && err != io.EOF {
+			dr.err = err
 		}
 	})
-	return mr.err
+	return dr.err
 }

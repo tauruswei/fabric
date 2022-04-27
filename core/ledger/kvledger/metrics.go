@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/common/metrics"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validation"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 )
 
 type stats struct {
@@ -53,7 +53,7 @@ func (s *ledgerStats) updateStatedbCommitTime(timeTaken time.Duration) {
 }
 
 func (s *ledgerStats) updateTransactionsStats(
-	txstatsInfo []*validation.TxStatInfo,
+	txstatsInfo []*txmgr.TxStatInfo,
 ) {
 	for _, txstat := range txstatsInfo {
 		transactionTypeStr := "unknown"

@@ -9,7 +9,8 @@ package blkstorage
 import (
 	"bytes"
 	"fmt"
-	"path/filepath"
+	"hash"
+	"path"
 	"unicode/utf8"
 
 	"github.com/golang/protobuf/proto"
@@ -27,19 +28,15 @@ const (
 	blockHashIdxKeyPrefix       = 'h'
 	txIDIdxKeyPrefix            = 't'
 	blockNumTranNumIdxKeyPrefix = 'a'
-	indexSavePointKeyStr        = "indexCheckpointKey"
+	indexCheckpointKeyStr       = "indexCheckpointKey"
 
 	snapshotFileFormat       = byte(1)
 	snapshotDataFileName     = "txids.data"
 	snapshotMetadataFileName = "txids.metadata"
 )
 
-var (
-	indexSavePointKey              = []byte(indexSavePointKeyStr)
-	errIndexSavePointKeyNotPresent = errors.New("NoBlockIndexed")
-	errNilValue                    = errors.New("")
-	importTxIDsBatchSize           = uint64(10000) // txID is 64 bytes, so batch size roughly translates to 640KB
-)
+var indexCheckpointKey = []byte(indexCheckpointKeyStr)
+var errIndexEmpty = errors.New("NoBlockIndexed")
 
 type blockIdxInfo struct {
 	blockNum  uint64
@@ -61,20 +58,17 @@ func newBlockIndex(indexConfig *IndexConfig, db *leveldbhelper.DBHandle) (*block
 	for _, indexItem := range indexItems {
 		indexItemsMap[indexItem] = true
 	}
-	return &blockIndex{
-		indexItemsMap: indexItemsMap,
-		db:            db,
-	}, nil
+	return &blockIndex{indexItemsMap, db}, nil
 }
 
 func (index *blockIndex) getLastBlockIndexed() (uint64, error) {
 	var blockNumBytes []byte
 	var err error
-	if blockNumBytes, err = index.db.Get(indexSavePointKey); err != nil {
+	if blockNumBytes, err = index.db.Get(indexCheckpointKey); err != nil {
 		return 0, err
 	}
 	if blockNumBytes == nil {
-		return 0, errIndexSavePointKeyNotPresent
+		return 0, errIndexEmpty
 	}
 	return decodeBlockNum(blockNumBytes), nil
 }
@@ -91,23 +85,23 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 	blkNum := blockIdxInfo.blockNum
 	blkHash := blockIdxInfo.blockHash
 	txsfltr := txflags.ValidationFlags(blockIdxInfo.metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
-	batch := index.db.NewUpdateBatch()
+	batch := leveldbhelper.NewUpdateBatch()
 	flpBytes, err := flp.marshal()
 	if err != nil {
 		return err
 	}
 
-	// Index1
+	//Index1
 	if index.isAttributeIndexed(IndexableAttrBlockHash) {
 		batch.Put(constructBlockHashKey(blkHash), flpBytes)
 	}
 
-	// Index2
+	//Index2
 	if index.isAttributeIndexed(IndexableAttrBlockNum) {
 		batch.Put(constructBlockNumKey(blkNum), flpBytes)
 	}
 
-	// Index3 Used to find a transaction by its transaction id
+	//Index3 Used to find a transaction by its transaction id
 	if index.isAttributeIndexed(IndexableAttrTxID) {
 		for i, txoffset := range txOffsets {
 			txFlp := newFileLocationPointer(flp.fileSuffixNum, flp.offset, txoffset.loc)
@@ -133,7 +127,7 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 		}
 	}
 
-	// Index4 - Store BlockNumTranNum will be used to query history data
+	//Index4 - Store BlockNumTranNum will be used to query history data
 	if index.isAttributeIndexed(IndexableAttrBlockNumTranNum) {
 		for i, txoffset := range txOffsets {
 			txFlp := newFileLocationPointer(flp.fileSuffixNum, flp.offset, txoffset.loc)
@@ -146,7 +140,7 @@ func (index *blockIndex) indexBlock(blockIdxInfo *blockIdxInfo) error {
 		}
 	}
 
-	batch.Put(indexSavePointKey, encodeBlockNum(blockIdxInfo.blockNum))
+	batch.Put(indexCheckpointKey, encodeBlockNum(blockIdxInfo.blockNum))
 	// Setting snyc to true as a precaution, false may be an ok optimization after further testing.
 	if err := index.db.WriteBatch(batch, true); err != nil {
 		return err
@@ -161,37 +155,33 @@ func (index *blockIndex) isAttributeIndexed(attribute IndexableAttr) bool {
 
 func (index *blockIndex) getBlockLocByHash(blockHash []byte) (*fileLocPointer, error) {
 	if !index.isAttributeIndexed(IndexableAttrBlockHash) {
-		return nil, errors.New("block hashes not maintained in index")
+		return nil, ErrAttrNotIndexed
 	}
 	b, err := index.db.Get(constructBlockHashKey(blockHash))
 	if err != nil {
 		return nil, err
 	}
 	if b == nil {
-		return nil, errors.Errorf("no such block hash [%x] in index", blockHash)
+		return nil, ErrNotFoundInIndex
 	}
 	blkLoc := &fileLocPointer{}
-	if err := blkLoc.unmarshal(b); err != nil {
-		return nil, err
-	}
+	blkLoc.unmarshal(b)
 	return blkLoc, nil
 }
 
 func (index *blockIndex) getBlockLocByBlockNum(blockNum uint64) (*fileLocPointer, error) {
 	if !index.isAttributeIndexed(IndexableAttrBlockNum) {
-		return nil, errors.New("block numbers not maintained in index")
+		return nil, ErrAttrNotIndexed
 	}
 	b, err := index.db.Get(constructBlockNumKey(blockNum))
 	if err != nil {
 		return nil, err
 	}
 	if b == nil {
-		return nil, errors.Errorf("no such block number [%d] in index", blockNum)
+		return nil, ErrNotFoundInIndex
 	}
 	blkLoc := &fileLocPointer{}
-	if err := blkLoc.unmarshal(b); err != nil {
-		return nil, err
-	}
+	blkLoc.unmarshal(b)
 	return blkLoc, nil
 }
 
@@ -227,33 +217,12 @@ func (index *blockIndex) getTxValidationCodeByTxID(txID string) (peer.TxValidati
 	return peer.TxValidationCode(v.TxValidationCode), nil
 }
 
-func (index *blockIndex) txIDExists(txID string) (bool, error) {
-	if !index.isAttributeIndexed(IndexableAttrTxID) {
-		return false, errors.New("transaction IDs not maintained in index")
-	}
-	rangeScan := constructTxIDRangeScan(txID)
-	itr, err := index.db.GetIterator(rangeScan.startKey, rangeScan.stopKey)
-	if err != nil {
-		return false, errors.WithMessagef(err, "error while trying to check the presence of TXID [%s]", txID)
-	}
-	defer itr.Release()
-
-	present := itr.Next()
-	if err := itr.Error(); err != nil {
-		return false, errors.Wrapf(err, "error while trying to check the presence of TXID [%s]", txID)
-	}
-	return present, nil
-}
-
 func (index *blockIndex) getTxIDVal(txID string) (*TxIDIndexValue, error) {
 	if !index.isAttributeIndexed(IndexableAttrTxID) {
-		return nil, errors.New("transaction IDs not maintained in index")
+		return nil, ErrAttrNotIndexed
 	}
 	rangeScan := constructTxIDRangeScan(txID)
-	itr, err := index.db.GetIterator(rangeScan.startKey, rangeScan.stopKey)
-	if err != nil {
-		return nil, errors.WithMessagef(err, "error while trying to retrieve transaction info by TXID [%s]", txID)
-	}
+	itr := index.db.GetIterator(rangeScan.startKey, rangeScan.stopKey)
 	defer itr.Release()
 
 	present := itr.Next()
@@ -261,12 +230,9 @@ func (index *blockIndex) getTxIDVal(txID string) (*TxIDIndexValue, error) {
 		return nil, errors.Wrapf(err, "error while trying to retrieve transaction info by TXID [%s]", txID)
 	}
 	if !present {
-		return nil, errors.Errorf("no such transaction ID [%s] in index", txID)
+		return nil, ErrNotFoundInIndex
 	}
 	valBytes := itr.Value()
-	if len(valBytes) == 0 {
-		return nil, errNilValue
-	}
 	val := &TxIDIndexValue{}
 	if err := proto.Unmarshal(valBytes, val); err != nil {
 		return nil, errors.Wrapf(err, "unexpected error while unmarshaling bytes [%#v] into TxIDIndexValProto", valBytes)
@@ -276,36 +242,40 @@ func (index *blockIndex) getTxIDVal(txID string) (*TxIDIndexValue, error) {
 
 func (index *blockIndex) getTXLocByBlockNumTranNum(blockNum uint64, tranNum uint64) (*fileLocPointer, error) {
 	if !index.isAttributeIndexed(IndexableAttrBlockNumTranNum) {
-		return nil, errors.New("<blockNumber, transactionNumber> tuple not maintained in index")
+		return nil, ErrAttrNotIndexed
 	}
 	b, err := index.db.Get(constructBlockNumTranNumKey(blockNum, tranNum))
 	if err != nil {
 		return nil, err
 	}
 	if b == nil {
-		return nil, errors.Errorf("no such blockNumber, transactionNumber <%d, %d> in index", blockNum, tranNum)
+		return nil, ErrNotFoundInIndex
 	}
 	txFLP := &fileLocPointer{}
-	if err := txFLP.unmarshal(b); err != nil {
-		return nil, err
-	}
+	txFLP.unmarshal(b)
 	return txFLP, nil
 }
 
-func (index *blockIndex) exportUniqueTxIDs(dir string, newHashFunc snapshot.NewHashFunc) (map[string][]byte, error) {
+func (index *blockIndex) exportUniqueTxIDs(dir string, hasher hash.Hash) (map[string][]byte, error) {
 	if !index.isAttributeIndexed(IndexableAttrTxID) {
-		return nil, errors.New("transaction IDs not maintained in index")
+		return nil, ErrAttrNotIndexed
 	}
 
-	dbItr, err := index.db.GetIterator([]byte{txIDIdxKeyPrefix}, []byte{txIDIdxKeyPrefix + 1})
+	// create the data file
+	dataFile, err := snapshot.CreateFile(path.Join(dir, snapshotDataFileName), snapshotFileFormat, hasher)
 	if err != nil {
 		return nil, err
 	}
+	defer dataFile.Close()
+
+	dbItr := index.db.GetIterator([]byte{txIDIdxKeyPrefix}, []byte{txIDIdxKeyPrefix + 1})
 	defer dbItr.Release()
+	if err := dbItr.Error(); err != nil {
+		return nil, errors.Wrap(err, "internal leveldb error while obtaining db iterator")
+	}
 
 	var previousTxID string
 	var numTxIDs uint64 = 0
-	var dataFile *snapshot.FileWriter
 	for dbItr.Next() {
 		if err := dbItr.Error(); err != nil {
 			return nil, errors.Wrap(err, "internal leveldb error while iterating for txids")
@@ -319,21 +289,10 @@ func (index *blockIndex) exportUniqueTxIDs(dir string, newHashFunc snapshot.NewH
 			continue
 		}
 		previousTxID = txID
-		if numTxIDs == 0 { // first iteration, create the data file
-			dataFile, err = snapshot.CreateFile(filepath.Join(dir, snapshotDataFileName), snapshotFileFormat, newHashFunc)
-			if err != nil {
-				return nil, err
-			}
-			defer dataFile.Close()
-		}
 		if err := dataFile.EncodeString(txID); err != nil {
 			return nil, err
 		}
 		numTxIDs++
-	}
-
-	if dataFile == nil {
-		return nil, nil
 	}
 
 	dataHash, err := dataFile.Done()
@@ -342,7 +301,8 @@ func (index *blockIndex) exportUniqueTxIDs(dir string, newHashFunc snapshot.NewH
 	}
 
 	// create the metadata file
-	metadataFile, err := snapshot.CreateFile(filepath.Join(dir, snapshotMetadataFileName), snapshotFileFormat, newHashFunc)
+	hasher.Reset()
+	metadataFile, err := snapshot.CreateFile(path.Join(dir, snapshotMetadataFileName), snapshotFileFormat, hasher)
 	if err != nil {
 		return nil, err
 	}
@@ -352,55 +312,11 @@ func (index *blockIndex) exportUniqueTxIDs(dir string, newHashFunc snapshot.NewH
 		return nil, err
 	}
 	metadataHash, err := metadataFile.Done()
-	if err != nil {
-		return nil, err
-	}
 
 	return map[string][]byte{
 		snapshotDataFileName:     dataHash,
 		snapshotMetadataFileName: metadataHash,
 	}, nil
-}
-
-func importTxIDsFromSnapshot(
-	snapshotDir string,
-	lastBlockNumInSnapshot uint64,
-	db *leveldbhelper.DBHandle) error {
-	txIDsMetadata, err := snapshot.OpenFile(filepath.Join(snapshotDir, snapshotMetadataFileName), snapshotFileFormat)
-	if err != nil {
-		return err
-	}
-	numTxIDs, err := txIDsMetadata.DecodeUVarInt()
-	if err != nil {
-		return err
-	}
-	txIDsData, err := snapshot.OpenFile(filepath.Join(snapshotDir, snapshotDataFileName), snapshotFileFormat)
-	if err != nil {
-		return err
-	}
-
-	batch := db.NewUpdateBatch()
-	for i := uint64(0); i < numTxIDs; i++ {
-		txID, err := txIDsData.DecodeString()
-		if err != nil {
-			return err
-		}
-		batch.Put(
-			constructTxIDKey(txID, lastBlockNumInSnapshot, uint64(i)),
-			[]byte{},
-		)
-		if (i+1)%importTxIDsBatchSize == 0 {
-			if err := db.WriteBatch(batch, true); err != nil {
-				return err
-			}
-			batch.Reset()
-		}
-	}
-	batch.Put(indexSavePointKey, encodeBlockNum(lastBlockNumInSnapshot))
-	if err := db.WriteBatch(batch, true); err != nil {
-		return err
-	}
-	return nil
 }
 
 func constructBlockNumKey(blockNum uint64) []byte {

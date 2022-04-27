@@ -195,10 +195,8 @@ func (*KeyImportOpts) Ephemeral() bool {
 	panic("Not yet implemented")
 }
 
-type (
-	EncrypterOpts struct{}
-	DecrypterOpts struct{}
-)
+type EncrypterOpts struct{}
+type DecrypterOpts struct{}
 
 type HashOpts struct{}
 

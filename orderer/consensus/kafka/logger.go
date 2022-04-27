@@ -16,10 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	logger       = flogging.MustGetLogger("orderer.consensus.kafka")
-	saramaLogger eventLogger
-)
+var logger = flogging.MustGetLogger("orderer.consensus.kafka")
+var saramaLogger eventLogger
 
 // init initializes the samara logger
 func init() {
@@ -38,11 +36,14 @@ func init() {
 func init() {
 	listener := saramaLogger.NewListener("insufficient data to decode packet")
 	go func() {
-		for range listener {
-			logger.Critical("Unable to decode a Kafka packet. Usually, this " +
-				"indicates that the Kafka.Version specified in the orderer " +
-				"configuration is incorrectly set to a version which is newer than " +
-				"the actual Kafka broker version.")
+		for {
+			select {
+			case <-listener:
+				logger.Critical("Unable to decode a Kafka packet. Usually, this " +
+					"indicates that the Kafka.Version specified in the orderer " +
+					"configuration is incorrectly set to a version which is newer than " +
+					"the actual Kafka broker version.")
+			}
 		}
 	}()
 }

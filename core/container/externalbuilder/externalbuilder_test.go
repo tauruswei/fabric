@@ -190,7 +190,7 @@ var _ = Describe("externalbuilder", func() {
 
 			When("the build-info is corrupted", func() {
 				BeforeEach(func() {
-					err := ioutil.WriteFile(filepath.Join(durablePath, "fake-package-id", "build-info.json"), []byte("{corrupted"), 0o600)
+					err := ioutil.WriteFile(filepath.Join(durablePath, "fake-package-id", "build-info.json"), []byte("{corrupted"), 0600)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -344,7 +344,7 @@ var _ = Describe("externalbuilder", func() {
 		Describe("NewCommand", func() {
 			It("only propagates expected variables", func() {
 				var expectedEnv []string
-				for _, key := range externalbuilder.DefaultPropagateEnvironment {
+				for _, key := range externalbuilder.DefaultEnvWhitelist {
 					if val, ok := os.LookupEnv(key); ok {
 						expectedEnv = append(expectedEnv, fmt.Sprintf("%s=%s", key, val))
 					}

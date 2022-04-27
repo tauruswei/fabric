@@ -17,8 +17,8 @@ const pkcs11Enabled = false
 
 // FactoryOpts holds configuration information used to initialize factory implementations
 type FactoryOpts struct {
-	Default string  `json:"default" yaml:"Default"`
-	SW      *SwOpts `json:"SW,omitempty" yaml:"SW,omitempty"`
+	ProviderName string  `mapstructure:"default" json:"default" yaml:"Default"`
+	SwOpts       *SwOpts `mapstructure:"SW,omitempty" json:"SW,omitempty" yaml:"SwOpts"`
 }
 
 // InitFactories must be called before using factory interfaces
@@ -39,17 +39,26 @@ func initFactories(config *FactoryOpts) error {
 		config = GetDefaultOpts()
 	}
 
-	if config.Default == "" {
-		config.Default = "SW"
+	if config.ProviderName == "" {
+		config.ProviderName = "GM"
 	}
 
-	if config.SW == nil {
-		config.SW = GetDefaultOpts().SW
+	if config.SwOpts == nil {
+		config.SwOpts = GetDefaultOpts().SwOpts
 	}
 
 	// Software-Based BCCSP
-	if config.Default == "SW" && config.SW != nil {
-		f := &SWFactory{}
+	if config.ProviderName == "SW" && config.SwOpts != nil {
+		f := &GMFactory{}
+		var err error
+		defaultBCCSP, err = initBCCSP(f, config)
+		if err != nil {
+			return errors.Wrapf(err, "Failed initializing BCCSP")
+		}
+	}
+	// Software-Based BCCSP
+	if config.ProviderName == "GM" && config.SwOpts != nil {
+		f := &GMFactory{}
 		var err error
 		defaultBCCSP, err = initBCCSP(f, config)
 		if err != nil {
@@ -58,7 +67,7 @@ func initFactories(config *FactoryOpts) error {
 	}
 
 	if defaultBCCSP == nil {
-		return errors.Errorf("Could not find default `%s` BCCSP", config.Default)
+		return errors.Errorf("Could not find default `%s` BCCSP", config.ProviderName)
 	}
 
 	return nil
@@ -67,11 +76,13 @@ func initFactories(config *FactoryOpts) error {
 // GetBCCSPFromOpts returns a BCCSP created according to the options passed in input.
 func GetBCCSPFromOpts(config *FactoryOpts) (bccsp.BCCSP, error) {
 	var f BCCSPFactory
-	switch config.Default {
+	switch config.ProviderName {
+	case "GM":
+		f = &GMFactory{}
 	case "SW":
 		f = &SWFactory{}
 	default:
-		return nil, errors.Errorf("Could not find BCCSP, no '%s' provider", config.Default)
+		return nil, errors.Errorf("Could not find BCCSP, no '%s' provider", config.ProviderName)
 	}
 
 	csp, err := f.Get(config)

@@ -9,11 +9,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"strings"
 )
@@ -30,7 +29,7 @@ type AuthConfiguration struct {
 	ServerAddress string `json:"serveraddress,omitempty"`
 
 	// IdentityToken can be supplied with the identitytoken response of the AuthCheck call
-	// see https://pkg.go.dev/github.com/docker/docker/api/types?tab=doc#AuthConfig
+	// see https://godoc.org/github.com/docker/docker/api/types#AuthConfig
 	// It can be used in place of password not in conjunction with it
 	IdentityToken string `json:"identitytoken,omitempty"`
 
@@ -56,21 +55,8 @@ func (c AuthConfigurations) isEmpty() bool {
 	return len(c.Configs) == 0
 }
 
-func (AuthConfigurations) headerKey() string {
+func (c AuthConfigurations) headerKey() string {
 	return "X-Registry-Config"
-}
-
-// merge updates the configuration. If a key is defined in both maps, the one
-// in c.Configs takes precedence.
-func (c *AuthConfigurations) merge(other AuthConfigurations) {
-	for k, v := range other.Configs {
-		if c.Configs == nil {
-			c.Configs = make(map[string]AuthConfiguration)
-		}
-		if _, ok := c.Configs[k]; !ok {
-			c.Configs[k] = v
-		}
-	}
 }
 
 // AuthConfigurations119 is used to serialize a set of AuthConfigurations
@@ -105,65 +91,34 @@ func NewAuthConfigurationsFromFile(path string) (*AuthConfigurations, error) {
 }
 
 func cfgPaths(dockerConfigEnv string, homeEnv string) []string {
+	var paths []string
 	if dockerConfigEnv != "" {
-		return []string{
-			path.Join(dockerConfigEnv, "plaintext-passwords.json"),
-			path.Join(dockerConfigEnv, "config.json"),
-		}
+		paths = append(paths, path.Join(dockerConfigEnv, "config.json"))
 	}
 	if homeEnv != "" {
-		return []string{
-			path.Join(homeEnv, ".docker", "plaintext-passwords.json"),
-			path.Join(homeEnv, ".docker", "config.json"),
-			path.Join(homeEnv, ".dockercfg"),
-		}
+		paths = append(paths, path.Join(homeEnv, ".docker", "config.json"))
+		paths = append(paths, path.Join(homeEnv, ".dockercfg"))
 	}
-	return nil
+	return paths
 }
 
-// NewAuthConfigurationsFromDockerCfg returns AuthConfigurations from system
-// config files. The following files are checked in the order listed:
-//
-// If the environment variable DOCKER_CONFIG is set to a non-empty string:
-//
-// - $DOCKER_CONFIG/plaintext-passwords.json
-// - $DOCKER_CONFIG/config.json
-//
-// Otherwise, it looks for files in the $HOME directory and the legacy
-// location:
-//
-// - $HOME/.docker/plaintext-passwords.json
+// NewAuthConfigurationsFromDockerCfg returns AuthConfigurations from
+// system config files. The following files are checked in the order listed:
+// - $DOCKER_CONFIG/config.json if DOCKER_CONFIG set in the environment,
 // - $HOME/.docker/config.json
 // - $HOME/.dockercfg
 func NewAuthConfigurationsFromDockerCfg() (*AuthConfigurations, error) {
-	pathsToTry := cfgPaths(os.Getenv("DOCKER_CONFIG"), os.Getenv("HOME"))
-	if len(pathsToTry) < 1 {
-		return nil, errors.New("no docker configuration found")
-	}
-	return newAuthConfigurationsFromDockerCfg(pathsToTry)
-}
-
-func newAuthConfigurationsFromDockerCfg(pathsToTry []string) (*AuthConfigurations, error) {
-	var result *AuthConfigurations
+	err := fmt.Errorf("no docker configuration found")
 	var auths *AuthConfigurations
-	var err error
+
+	pathsToTry := cfgPaths(os.Getenv("DOCKER_CONFIG"), os.Getenv("HOME"))
 	for _, path := range pathsToTry {
 		auths, err = NewAuthConfigurationsFromFile(path)
-		if err != nil {
-			continue
-		}
-
-		if result == nil {
-			result = auths
-		} else {
-			result.merge(*auths)
+		if err == nil {
+			return auths, nil
 		}
 	}
-
-	if result != nil {
-		return result, nil
-	}
-	return result, err
+	return auths, err
 }
 
 // NewAuthConfigurations returns AuthConfigurations from a JSON encoded string in the
@@ -212,14 +167,9 @@ func authConfigs(confs map[string]dockerConfig) (*AuthConfigurations, error) {
 		if conf.Auth == "" {
 			continue
 		}
-
-		// support both padded and unpadded encoding
 		data, err := base64.StdEncoding.DecodeString(conf.Auth)
 		if err != nil {
-			data, err = base64.StdEncoding.WithPadding(base64.NoPadding).DecodeString(conf.Auth)
-		}
-		if err != nil {
-			return nil, errors.New("error decoding plaintext credentials")
+			return nil, err
 		}
 
 		userpass := strings.SplitN(string(data), ":", 2)
@@ -267,7 +217,7 @@ func (c *Client) AuthCheck(conf *AuthConfiguration) (AuthStatus, error) {
 	if conf == nil {
 		return authStatus, errors.New("conf is nil")
 	}
-	resp, err := c.do(http.MethodPost, "/auth", doOptions{data: conf})
+	resp, err := c.do("POST", "/auth", doOptions{data: conf})
 	if err != nil {
 		return authStatus, err
 	}
@@ -283,103 +233,4 @@ func (c *Client) AuthCheck(conf *AuthConfiguration) (AuthStatus, error) {
 		return authStatus, err
 	}
 	return authStatus, nil
-}
-
-// helperCredentials represents credentials commit from an helper
-type helperCredentials struct {
-	Username string `json:"Username,omitempty"`
-	Secret   string `json:"Secret,omitempty"`
-}
-
-// NewAuthConfigurationsFromCredsHelpers returns AuthConfigurations from
-// installed credentials helpers
-func NewAuthConfigurationsFromCredsHelpers(registry string) (*AuthConfiguration, error) {
-	// Load docker configuration file in order to find a possible helper provider
-	pathsToTry := cfgPaths(os.Getenv("DOCKER_CONFIG"), os.Getenv("HOME"))
-	if len(pathsToTry) < 1 {
-		return nil, errors.New("no docker configuration found")
-	}
-
-	provider, err := getHelperProviderFromDockerCfg(pathsToTry, registry)
-	if err != nil {
-		return nil, err
-	}
-
-	c, err := getCredentialsFromHelper(provider, registry)
-	if err != nil {
-		return nil, err
-	}
-
-	creds := new(AuthConfiguration)
-	creds.Username = c.Username
-	creds.Password = c.Secret
-	return creds, nil
-}
-
-func getHelperProviderFromDockerCfg(pathsToTry []string, registry string) (string, error) {
-	for _, path := range pathsToTry {
-		content, err := ioutil.ReadFile(path)
-		if err != nil {
-			// if we can't read the file keep going
-			continue
-		}
-
-		provider, err := parseCredsDockerConfig(content, registry)
-		if err != nil {
-			continue
-		}
-		if provider != "" {
-			return provider, nil
-		}
-	}
-	return "", errors.New("no docker credentials provider found")
-}
-
-func parseCredsDockerConfig(config []byte, registry string) (string, error) {
-	creds := struct {
-		CredsStore  string            `json:"credsStore,omitempty"`
-		CredHelpers map[string]string `json:"credHelpers,omitempty"`
-	}{}
-	err := json.Unmarshal(config, &creds)
-	if err != nil {
-		return "", err
-	}
-
-	provider, ok := creds.CredHelpers[registry]
-	if ok {
-		return provider, nil
-	}
-	return creds.CredsStore, nil
-}
-
-// Run and parse the found credential helper
-func getCredentialsFromHelper(provider string, registry string) (*helperCredentials, error) {
-	helpercreds, err := runDockerCredentialsHelper(provider, registry)
-	if err != nil {
-		return nil, err
-	}
-
-	c := new(helperCredentials)
-	err = json.Unmarshal(helpercreds, c)
-	if err != nil {
-		return nil, err
-	}
-
-	return c, nil
-}
-
-func runDockerCredentialsHelper(provider string, registry string) ([]byte, error) {
-	cmd := exec.Command("docker-credential-"+provider, "get")
-
-	var stdout bytes.Buffer
-
-	cmd.Stdin = bytes.NewBuffer([]byte(registry))
-	cmd.Stdout = &stdout
-
-	err := cmd.Run()
-	if err != nil {
-		return nil, err
-	}
-
-	return stdout.Bytes(), nil
 }

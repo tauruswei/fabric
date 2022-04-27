@@ -21,6 +21,7 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/blockledger"
 	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/common/util"
+	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"github.com/hyperledger/fabric/protoutil"
 	"github.com/pkg/errors"
 )
@@ -146,7 +147,7 @@ func NewHandler(cm ChainManager, timeWindow time.Duration, mutualTLS bool, metri
 	return &Handler{
 		ChainManager:        cm,
 		TimeWindow:          timeWindow,
-		BindingInspector:    InspectorFunc(NewBindingInspector(mutualTLS, ExtractChannelHeaderCertHash)),
+		BindingInspector:    InspectorFunc(comm.NewBindingInspector(mutualTLS, ExtractChannelHeaderCertHash)),
 		Metrics:             metrics,
 		ExpirationCheckFunc: expirationCheck,
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric/common/channelconfig"
 	cc "github.com/hyperledger/fabric/common/config"
+	"github.com/hyperledger/fabric/common/configtx"
 	"github.com/hyperledger/fabric/common/deliver"
 	"github.com/hyperledger/fabric/common/flogging"
 	commonledger "github.com/hyperledger/fabric/common/ledger"
@@ -52,6 +53,12 @@ type CollectionInfoShim struct {
 
 func (cis *CollectionInfoShim) CollectionValidationInfo(chaincodeName, collectionName string, validationState validation.State) ([]byte, error, error) {
 	return cis.CollectionAndLifecycleResources.CollectionValidationInfo(cis.ChannelID, chaincodeName, collectionName, validationState)
+}
+
+type gossipSupport struct {
+	channelconfig.Application
+	configtx.Validator
+	channelconfig.Channel
 }
 
 func ConfigBlockFromLedger(ledger ledger.PeerLedger) (*common.Block, error) {
@@ -141,8 +148,6 @@ func (flbs fileLedgerBlockStore) RetrieveBlocks(startBlockNumber uint64) (common
 	return flbs.GetBlocksIterator(startBlockNumber)
 }
 
-func (flbs fileLedgerBlockStore) Shutdown() {}
-
 // NewConfigSupport returns
 func NewConfigSupport(peer *Peer) cc.Manager {
 	return &configSupport{
@@ -219,31 +224,8 @@ func (p *Peer) CreateChannel(
 	return nil
 }
 
-// CreateChannelFromSnapshot creates a channel from the specified snapshot.
-func (p *Peer) CreateChannelFromSnapshot(
-	snapshotDir string,
-	deployedCCInfoProvider ledger.DeployedChaincodeInfoProvider,
-	legacyLifecycleValidation plugindispatcher.LifecycleResources,
-	newLifecycleValidation plugindispatcher.CollectionAndLifecycleResources,
-) error {
-	channelCallback := func(l ledger.PeerLedger, cid string) {
-		if err := p.createChannel(cid, l, deployedCCInfoProvider, legacyLifecycleValidation, newLifecycleValidation); err != nil {
-			logger.Errorf("error creating channel for %s", cid)
-			return
-		}
-		p.initChannel(cid)
-	}
-
-	err := p.LedgerMgr.CreateLedgerFromSnapshot(snapshotDir, channelCallback)
-	if err != nil {
-		return errors.WithMessagef(err, "cannot create ledger from snapshot %s", snapshotDir)
-	}
-
-	return nil
-}
-
-// RetrievePersistedChannelConfig retrieves the persisted channel config from statedb
-func RetrievePersistedChannelConfig(ledger ledger.PeerLedger) (*common.Config, error) {
+// retrievePersistedChannelConfig retrieves the persisted channel config from statedb
+func retrievePersistedChannelConfig(ledger ledger.PeerLedger) (*common.Config, error) {
 	qe, err := ledger.NewQueryExecutor()
 	if err != nil {
 		return nil, err
@@ -260,7 +242,7 @@ func (p *Peer) createChannel(
 	legacyLifecycleValidation plugindispatcher.LifecycleResources,
 	newLifecycleValidation plugindispatcher.CollectionAndLifecycleResources,
 ) error {
-	chanConf, err := RetrievePersistedChannelConfig(l)
+	chanConf, err := retrievePersistedChannelConfig(l)
 	if err != nil {
 		return err
 	}
@@ -279,13 +261,13 @@ func (p *Peer) createChannel(
 	gossipCallbackWrapper := func(bundle *channelconfig.Bundle) {
 		ac, ok := bundle.ApplicationConfig()
 		if !ok {
+			// TODO, handle a missing ApplicationConfig more gracefully
 			ac = nil
 		}
-		gossipEventer.ProcessConfigUpdate(gossipservice.ConfigUpdate{
-			ChannelID:        bundle.ConfigtxValidator().ChannelID(),
-			Organizations:    ac.Organizations(),
-			OrdererAddresses: bundle.ChannelConfig().OrdererAddresses(),
-			Sequence:         bundle.ConfigtxValidator().Sequence(),
+		gossipEventer.ProcessConfigUpdate(&gossipSupport{
+			Validator:   bundle.ConfigtxValidator(),
+			Application: ac,
+			Channel:     bundle.ChannelConfig(),
 		})
 		p.GossipService.SuspectPeers(func(identity api.PeerIdentityType) bool {
 			// TODO: this is a place-holder that would somehow make the MSP layer suspect
@@ -314,9 +296,14 @@ func (p *Peer) createChannel(
 		orgAddresses := map[string]orderers.OrdererOrg{}
 		if ordererConfig, ok := bundle.OrdererConfig(); ok {
 			for orgName, org := range ordererConfig.Organizations() {
-				var certs [][]byte
-				certs = append(certs, org.MSP().GetTLSRootCerts()...)
-				certs = append(certs, org.MSP().GetTLSIntermediateCerts()...)
+				certs := [][]byte{}
+				for _, root := range org.MSP().GetTLSRootCerts() {
+					certs = append(certs, root)
+				}
+
+				for _, intermediate := range org.MSP().GetTLSIntermediateCerts() {
+					certs = append(certs, intermediate)
+				}
 
 				orgAddresses[orgName] = orderers.OrdererOrg{
 					Addresses: org.Endpoints(),
@@ -471,11 +458,6 @@ func (p *Peer) GetPolicyManager(cid string) policies.Manager {
 		return c.Resources().PolicyManager()
 	}
 	return nil
-}
-
-// JoinBySnaphotStatus queries ledger mgr to get the status of joinbysnapshot
-func (p *Peer) JoinBySnaphotStatus() *pb.JoinBySnapshotStatus {
-	return p.LedgerMgr.JoinBySnapshotStatus()
 }
 
 // initChannel takes care to initialize channel after peer joined, for example deploys system CCs

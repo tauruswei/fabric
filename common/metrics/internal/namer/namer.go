@@ -85,10 +85,8 @@ func (n *Namer) labelsToMap(labelValues []string) map[string]string {
 	return labels
 }
 
-var (
-	formatRegexp            = regexp.MustCompile(`%{([#?[:alnum:]_]+)}`)
-	invalidLabelValueRegexp = regexp.MustCompile(`[.|:\s]`)
-)
+var formatRegexp = regexp.MustCompile(`%{([#?[:alnum:]_]+)}`)
+var invalidLabelValueRegexp = regexp.MustCompile(`[.|:\s]`)
 
 func (n *Namer) Format(labelValues ...string) string {
 	labels := n.labelsToMap(labelValues)

@@ -50,7 +50,6 @@
 #ifndef ZSTDMT_JOBSIZE_MIN
 #  define ZSTDMT_JOBSIZE_MIN (1 MB)
 #endif
-#define ZSTDMT_JOBLOG_MAX   (MEM_32bits() ? 29 : 30)
 #define ZSTDMT_JOBSIZE_MAX  (MEM_32bits() ? (512 MB) : (1024 MB))
 
 

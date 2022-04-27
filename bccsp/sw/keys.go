@@ -92,6 +92,7 @@ func privateKeyToPEM(privateKey interface{}, pwd []byte) ([]byte, error) {
 			PrivateKey: paddedPrivateKey,
 			PublicKey:  asn1.BitString{Bytes: elliptic.Marshal(k.Curve, k.X, k.Y)},
 		})
+
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling EC key to asn1: [%s]", err)
 		}
@@ -130,6 +131,7 @@ func privateKeyToEncryptedPEM(privateKey interface{}, pwd []byte) ([]byte, error
 			return nil, errors.New("invalid ecdsa private key. It must be different from nil")
 		}
 		raw, err := x509.MarshalECPrivateKey(k)
+
 		if err != nil {
 			return nil, err
 		}
@@ -140,6 +142,7 @@ func privateKeyToEncryptedPEM(privateKey interface{}, pwd []byte) ([]byte, error
 			raw,
 			pwd,
 			x509.PEMCipherAES256)
+
 		if err != nil {
 			return nil, err
 		}
@@ -152,6 +155,7 @@ func privateKeyToEncryptedPEM(privateKey interface{}, pwd []byte) ([]byte, error
 }
 
 func derToPrivateKey(der []byte) (key interface{}, err error) {
+
 	if key, err = x509.ParsePKCS1PrivateKey(der); err == nil {
 		return key, nil
 	}
@@ -246,6 +250,7 @@ func aesToEncryptedPEM(raw []byte, pwd []byte) ([]byte, error) {
 		raw,
 		pwd,
 		x509.PEMCipherAES256)
+
 	if err != nil {
 		return nil, err
 	}
@@ -301,6 +306,7 @@ func publicKeyToEncryptedPEM(publicKey interface{}, pwd []byte) ([]byte, error) 
 			raw,
 			pwd,
 			x509.PEMCipherAES256)
+
 		if err != nil {
 			return nil, err
 		}

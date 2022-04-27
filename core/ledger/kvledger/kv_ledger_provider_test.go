@@ -11,9 +11,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/common"
@@ -28,50 +26,31 @@ import (
 	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/ledger"
+	lgr "github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/msgs"
 	"github.com/hyperledger/fabric/core/ledger/mock"
 	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLedgerProvider(t *testing.T) {
-	testcases := []struct {
-		enableHistoryDB bool
-	}{
-		{
-			enableHistoryDB: true,
-		},
-		{
-			enableHistoryDB: false,
-		},
-	}
-
-	for i, tc := range testcases {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			testLedgerProvider(t, tc.enableHistoryDB)
-		})
-	}
-}
-
-func testLedgerProvider(t *testing.T, enableHistoryDB bool) {
 	conf, cleanup := testConfig(t)
-	conf.HistoryDBConfig.Enabled = enableHistoryDB
 	defer cleanup()
 	provider := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
 	numLedgers := 10
 	existingLedgerIDs, err := provider.List()
-	require.NoError(t, err)
-	require.Len(t, existingLedgerIDs, 0)
+	assert.NoError(t, err)
+	assert.Len(t, existingLedgerIDs, 0)
 	genesisBlocks := make([]*common.Block, numLedgers)
 	for i := 0; i < numLedgers; i++ {
 		genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(i))
 		genesisBlocks[i] = genesisBlock
-		_, err := provider.CreateFromGenesisBlock(genesisBlock)
-		require.NoError(t, err)
+		provider.Create(genesisBlock)
 	}
 	existingLedgerIDs, err = provider.List()
-	require.NoError(t, err)
-	require.Len(t, existingLedgerIDs, numLedgers)
+	assert.NoError(t, err)
+	assert.Len(t, existingLedgerIDs, numLedgers)
 
 	// verify formatKey is present in idStore
 	s := provider.idStore
@@ -84,39 +63,46 @@ func testLedgerProvider(t *testing.T, enableHistoryDB bool) {
 	provider = testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
 	defer provider.Close()
 	ledgerIds, _ := provider.List()
-	require.Len(t, ledgerIds, numLedgers)
+	assert.Len(t, ledgerIds, numLedgers)
 	for i := 0; i < numLedgers; i++ {
-		require.Equal(t, constructTestLedgerID(i), ledgerIds[i])
+		assert.Equal(t, constructTestLedgerID(i), ledgerIds[i])
 	}
 	for i := 0; i < numLedgers; i++ {
 		ledgerid := constructTestLedgerID(i)
 		status, _ := provider.Exists(ledgerid)
-		require.True(t, status)
+		assert.True(t, status)
 		ledger, err := provider.Open(ledgerid)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		bcInfo, err := ledger.GetBlockchainInfo()
 		ledger.Close()
-		require.NoError(t, err)
-		require.Equal(t, uint64(1), bcInfo.Height)
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1), bcInfo.Height)
+
+		// check that the genesis block was persisted in the provider's db
+		s := provider.idStore
+		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid, ledgerKeyPrefix))
+		assert.NoError(t, err)
+		gb := &common.Block{}
+		assert.NoError(t, proto.Unmarshal(gbBytesInProviderStore, gb))
+		assert.True(t, proto.Equal(gb, genesisBlocks[i]), "proto messages are not equal")
 
 		// check that ledger metadata keys were persisted in idStore with active status
-		s := provider.idStore
-		val, err := s.db.Get(metadataKey(ledgerid))
+		val, err := s.db.Get(s.encodeLedgerKey(ledgerid, metadataKeyPrefix))
 		require.NoError(t, err)
 		metadata := &msgs.LedgerMetadata{}
 		require.NoError(t, proto.Unmarshal(val, metadata))
 		require.Equal(t, msgs.Status_ACTIVE, metadata.Status)
 	}
 	gb, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(2))
-	_, err = provider.CreateFromGenesisBlock(gb)
-	require.EqualError(t, err, "ledger [ledger_000002] already exists with state [ACTIVE]")
+	_, err = provider.Create(gb)
+	assert.Equal(t, ErrLedgerIDExists, err)
 
 	status, err := provider.Exists(constructTestLedgerID(numLedgers))
-	require.NoError(t, err, "Failed to check for ledger existence")
-	require.Equal(t, status, false)
+	assert.NoError(t, err, "Failed to check for ledger existence")
+	assert.Equal(t, status, false)
 
 	_, err = provider.Open(constructTestLedgerID(numLedgers))
-	require.EqualError(t, err, "cannot open ledger [ledger_000010], ledger does not exist")
+	assert.Equal(t, ErrNonExistingLedgerID, err)
 }
 
 func TestGetActiveLedgerIDsIteratorError(t *testing.T) {
@@ -126,8 +112,7 @@ func TestGetActiveLedgerIDsIteratorError(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(i))
-		_, err := provider.CreateFromGenesisBlock(genesisBlock)
-		require.NoError(t, err)
+		provider.Create(genesisBlock)
 	}
 
 	// close provider to trigger db error
@@ -144,13 +129,12 @@ func TestLedgerMetataDataUnmarshalError(t *testing.T) {
 
 	ledgerID := constructTestLedgerID(0)
 	genesisBlock, _ := configtxtest.MakeGenesisBlock(ledgerID)
-	_, err := provider.CreateFromGenesisBlock(genesisBlock)
-	require.NoError(t, err)
+	provider.Create(genesisBlock)
 
 	// put invalid bytes for the metatdata key
-	require.NoError(t, provider.idStore.db.Put(metadataKey(ledgerID), []byte("invalid"), true))
+	provider.idStore.db.Put(provider.idStore.encodeLedgerKey(ledgerID, metadataKeyPrefix), []byte("invalid"), true)
 
-	_, err = provider.List()
+	_, err := provider.List()
 	require.EqualError(t, err, "error unmarshalling ledger metadata: unexpected EOF")
 
 	_, err = provider.Open(ledgerID)
@@ -165,7 +149,7 @@ func TestNewProviderIdStoreFormatError(t *testing.T) {
 
 	// NewProvider fails because ledgerProvider (idStore) has old format
 	_, err := NewProvider(
-		&ledger.Initializer{
+		&lgr.Initializer{
 			DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
 			MetricsProvider:               &disabled.Provider{},
 			Config:                        conf,
@@ -256,115 +240,150 @@ func TestCheckUpgradeEligibilityEmptyDB(t *testing.T) {
 	require.False(t, eligible)
 }
 
-func TestDeletionOfUnderConstructionLedgersAtStart(t *testing.T) {
-	testcases := []struct {
-		enableHistoryDB               bool
-		mimicCrashAfterLedgerCreation bool
-	}{
-		{
-			enableHistoryDB:               true,
-			mimicCrashAfterLedgerCreation: true,
-		},
-		{
-			enableHistoryDB:               false,
-			mimicCrashAfterLedgerCreation: true,
-		},
-		{
-			enableHistoryDB:               true,
-			mimicCrashAfterLedgerCreation: false,
-		},
-		{
-			enableHistoryDB:               false,
-			mimicCrashAfterLedgerCreation: false,
-		},
-	}
-
-	for i, tc := range testcases {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			testDeletionOfUnderConstructionLedgersAtStart(t, tc.enableHistoryDB, tc.mimicCrashAfterLedgerCreation)
-		})
-	}
-}
-
-func testDeletionOfUnderConstructionLedgersAtStart(t *testing.T, enableHistoryDB, mimicCrashAfterLedgerCreation bool) {
+func TestLedgerProviderHistoryDBDisabled(t *testing.T) {
 	conf, cleanup := testConfig(t)
-	conf.HistoryDBConfig.Enabled = enableHistoryDB
+	conf.HistoryDBConfig.Enabled = false
 	defer cleanup()
 	provider := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
-	idStore := provider.idStore
-	ledgerID := "testLedger"
-	defer func() {
-		provider.Close()
-	}()
-
-	switch mimicCrashAfterLedgerCreation {
-	case false:
-		require.NoError(t,
-			idStore.createLedgerID(ledgerID, &msgs.LedgerMetadata{
-				Status: msgs.Status_UNDER_CONSTRUCTION,
-			}),
-		)
-	case true:
-		genesisBlock, err := configtxtest.MakeGenesisBlock(ledgerID)
-		require.NoError(t, err)
-		_, err = provider.CreateFromGenesisBlock(genesisBlock)
-		require.NoError(t, err)
-		m, err := provider.idStore.getLedgerMetadata(ledgerID)
-		require.NoError(t, err)
-		require.Equal(t, msgs.Status_ACTIVE, m.Status)
-		// mimic a situation that a crash happens after ledger creation but before changing the UNDER_CONSTRUCTION status
-		// to Status_ACTIVE
-		require.NoError(t,
-			provider.idStore.updateLedgerStatus(ledgerID, msgs.Status_UNDER_CONSTRUCTION),
-		)
+	numLedgers := 10
+	existingLedgerIDs, err := provider.List()
+	assert.NoError(t, err)
+	assert.Len(t, existingLedgerIDs, 0)
+	genesisBlocks := make([]*common.Block, numLedgers)
+	for i := 0; i < numLedgers; i++ {
+		genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(i))
+		genesisBlocks[i] = genesisBlock
+		provider.Create(genesisBlock)
 	}
+	existingLedgerIDs, err = provider.List()
+	assert.NoError(t, err)
+	assert.Len(t, existingLedgerIDs, numLedgers)
+
 	provider.Close()
-	// construct a new provider to invoke recovery
+
 	provider = testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
-	exists, err := provider.Exists(ledgerID)
-	require.NoError(t, err)
-	require.False(t, exists)
-	m, err := provider.idStore.getLedgerMetadata(ledgerID)
-	require.NoError(t, err)
-	require.Nil(t, m)
+	defer provider.Close()
+	ledgerIds, _ := provider.List()
+	assert.Len(t, ledgerIds, numLedgers)
+	t.Logf("ledgerIDs=%#v", ledgerIds)
+	for i := 0; i < numLedgers; i++ {
+		assert.Equal(t, constructTestLedgerID(i), ledgerIds[i])
+	}
+	for i := 0; i < numLedgers; i++ {
+		ledgerid := constructTestLedgerID(i)
+		status, _ := provider.Exists(ledgerid)
+		assert.True(t, status)
+		ledger, err := provider.Open(ledgerid)
+		assert.NoError(t, err)
+		bcInfo, err := ledger.GetBlockchainInfo()
+		ledger.Close()
+		assert.NoError(t, err)
+		assert.Equal(t, uint64(1), bcInfo.Height)
+
+		// check that the genesis block was persisted in the provider's db
+		s := provider.idStore
+		gbBytesInProviderStore, err := s.db.Get(s.encodeLedgerKey(ledgerid, ledgerKeyPrefix))
+		assert.NoError(t, err)
+		gb := &common.Block{}
+		assert.NoError(t, proto.Unmarshal(gbBytesInProviderStore, gb))
+		assert.True(t, proto.Equal(gb, genesisBlocks[i]), "proto messages are not equal")
+	}
+	gb, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(2))
+	_, err = provider.Create(gb)
+	assert.Equal(t, ErrLedgerIDExists, err)
+
+	status, err := provider.Exists(constructTestLedgerID(numLedgers))
+	assert.NoError(t, err, "Failed to check for ledger existence")
+	assert.Equal(t, status, false)
+
+	_, err = provider.Open(constructTestLedgerID(numLedgers))
+	assert.Equal(t, ErrNonExistingLedgerID, err)
+
 }
 
-func TestLedgerCreationFailure(t *testing.T) {
+func TestRecovery(t *testing.T) {
 	conf, cleanup := testConfig(t)
 	defer cleanup()
-	provider := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
-	ledgerID := "testLedger"
-	defer func() {
-		provider.Close()
-	}()
+	provider1 := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
+	defer provider1.Close()
 
-	genesisBlock, err := configtxtest.MakeGenesisBlock(ledgerID)
-	require.NoError(t, err)
-	genesisBlock.Header.Number = 1 // should cause an error during ledger creation
-	_, err = provider.CreateFromGenesisBlock(genesisBlock)
-	require.EqualError(t, err, "expected block number=0, received block number=1")
+	// now create the genesis block
+	genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(1))
+	ledger, err := provider1.open(constructTestLedgerID(1))
+	ledger.CommitLegacy(&lgr.BlockAndPvtData{Block: genesisBlock}, &lgr.CommitOptions{})
+	ledger.Close()
 
-	verifyLedgerDoesNotExist(t, provider, ledgerID)
+	// Case 1: assume a crash happens, force underconstruction flag to be set to simulate
+	// a failure where ledgerid is being created - ie., block is written but flag is not unset
+	provider1.idStore.setUnderConstructionFlag(constructTestLedgerID(1))
+	provider1.Close()
+
+	// construct a new provider1 to invoke recovery
+	provider1 = testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
+	// verify the underecoveryflag and open the ledger
+	flag, err := provider1.idStore.getUnderConstructionFlag()
+	assert.NoError(t, err, "Failed to read the underconstruction flag")
+	assert.Equal(t, "", flag)
+	ledger, err = provider1.Open(constructTestLedgerID(1))
+	assert.NoError(t, err, "Failed to open the ledger")
+	ledger.Close()
+
+	// Case 0: assume a crash happens before the genesis block of ledger 2 is committed
+	// Open the ID store (inventory of chainIds/ledgerIds)
+	provider1.idStore.setUnderConstructionFlag(constructTestLedgerID(2))
+	provider1.Close()
+
+	// construct a new provider to invoke recovery
+	provider2 := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
+	defer provider2.Close()
+	assert.NoError(t, err, "Provider failed to recover an underConstructionLedger")
+	flag, err = provider2.idStore.getUnderConstructionFlag()
+	assert.NoError(t, err, "Failed to read the underconstruction flag")
+	assert.Equal(t, "", flag)
 }
 
-func TestLedgerCreationFailureDuringLedgerDeletion(t *testing.T) {
+func TestRecoveryHistoryDBDisabled(t *testing.T) {
 	conf, cleanup := testConfig(t)
+	conf.HistoryDBConfig.Enabled = false
 	defer cleanup()
-	provider := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
-	ledgerID := "testLedger"
-	defer func() {
-		provider.Close()
-	}()
+	provider1 := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
+	defer provider1.Close()
 
-	genesisBlock, err := configtxtest.MakeGenesisBlock(ledgerID)
-	require.NoError(t, err)
-	genesisBlock.Header.Number = 1 // should cause an error during ledger creation
+	// now create the genesis block
+	genesisBlock, _ := configtxtest.MakeGenesisBlock(constructTestLedgerID(1))
+	ledger, err := provider1.open(constructTestLedgerID(1))
+	assert.NoError(t, err, "Failed to open the ledger")
+	ledger.CommitLegacy(&lgr.BlockAndPvtData{Block: genesisBlock}, &lgr.CommitOptions{})
+	ledger.Close()
 
-	provider.dbProvider.Close()
-	_, err = provider.CreateFromGenesisBlock(genesisBlock)
-	require.Contains(t, err.Error(), "expected block number=0, received block number=1: error while deleting data from ledger [testLedger]")
+	// Case 1: assume a crash happens, force underconstruction flag to be set to simulate
+	// a failure where ledgerid is being created - ie., block is written but flag is not unset
+	provider1.idStore.setUnderConstructionFlag(constructTestLedgerID(1))
+	provider1.Close()
 
-	verifyLedgerIDExists(t, provider, ledgerID, msgs.Status_UNDER_CONSTRUCTION)
+	// construct a new provider to invoke recovery
+	provider2 := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
+	defer provider2.Close()
+	// verify the underecoveryflag and open the ledger
+	flag, err := provider2.idStore.getUnderConstructionFlag()
+	assert.NoError(t, err, "Failed to read the underconstruction flag")
+	assert.Equal(t, "", flag)
+	ledger, err = provider2.Open(constructTestLedgerID(1))
+	assert.NoError(t, err, "Failed to open the ledger")
+	ledger.Close()
+
+	// Case 0: assume a crash happens before the genesis block of ledger 2 is committed
+	// Open the ID store (inventory of chainIds/ledgerIds)
+	provider2.idStore.setUnderConstructionFlag(constructTestLedgerID(2))
+	provider2.Close()
+
+	// construct a new provider to invoke recovery
+	provider3 := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
+	defer provider3.Close()
+	assert.NoError(t, err, "Provider failed to recover an underConstructionLedger")
+	flag, err = provider3.idStore.getUnderConstructionFlag()
+	assert.NoError(t, err, "Failed to read the underconstruction flag")
+	assert.Equal(t, "", flag)
 }
 
 func TestMultipleLedgerBasicRW(t *testing.T) {
@@ -374,34 +393,34 @@ func TestMultipleLedgerBasicRW(t *testing.T) {
 	defer provider1.Close()
 
 	numLedgers := 10
-	ledgers := make([]ledger.PeerLedger, numLedgers)
+	ledgers := make([]lgr.PeerLedger, numLedgers)
 	for i := 0; i < numLedgers; i++ {
 		bg, gb := testutil.NewBlockGenerator(t, constructTestLedgerID(i), false)
-		l, err := provider1.CreateFromGenesisBlock(gb)
-		require.NoError(t, err)
+		l, err := provider1.Create(gb)
+		assert.NoError(t, err)
 		ledgers[i] = l
 		txid := util.GenerateUUID()
 		s, _ := l.NewTxSimulator(txid)
 		err = s.SetState("ns", "testKey", []byte(fmt.Sprintf("testValue_%d", i)))
 		s.Done()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		res, err := s.GetTxSimulationResults()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		pubSimBytes, _ := res.GetPubSimulationBytes()
 		b := bg.NextBlock([][]byte{pubSimBytes})
-		err = l.CommitLegacy(&ledger.BlockAndPvtData{Block: b}, &ledger.CommitOptions{})
+		err = l.CommitLegacy(&lgr.BlockAndPvtData{Block: b}, &ledger.CommitOptions{})
 		l.Close()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}
 
 	provider1.Close()
 
 	provider2 := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
 	defer provider2.Close()
-	ledgers = make([]ledger.PeerLedger, numLedgers)
+	ledgers = make([]lgr.PeerLedger, numLedgers)
 	for i := 0; i < numLedgers; i++ {
 		l, err := provider2.Open(constructTestLedgerID(i))
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		ledgers[i] = l
 	}
 
@@ -409,8 +428,8 @@ func TestMultipleLedgerBasicRW(t *testing.T) {
 		q, _ := l.NewQueryExecutor()
 		val, err := q.GetState("ns", "testKey")
 		q.Done()
-		require.NoError(t, err)
-		require.Equal(t, []byte(fmt.Sprintf("testValue_%d", i)), val)
+		assert.NoError(t, err)
+		assert.Equal(t, []byte(fmt.Sprintf("testValue_%d", i)), val)
 		l.Close()
 	}
 }
@@ -424,165 +443,152 @@ func TestLedgerBackup(t *testing.T) {
 	restorePath := filepath.Join(basePath, "kvledger2")
 
 	// create and populate a ledger in the original environment
-	origConf := &ledger.Config{
+	origConf := &lgr.Config{
 		RootFSPath:    originalPath,
-		StateDBConfig: &ledger.StateDBConfig{},
-		PrivateDataConfig: &ledger.PrivateDataConfig{
-			MaxBatchSize:                        5000,
-			BatchesInterval:                     1000,
-			PurgeInterval:                       100,
-			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
+		StateDBConfig: &lgr.StateDBConfig{},
+		PrivateDataConfig: &lgr.PrivateDataConfig{
+			MaxBatchSize:    5000,
+			BatchesInterval: 1000,
+			PurgeInterval:   100,
 		},
-		HistoryDBConfig: &ledger.HistoryDBConfig{
+		HistoryDBConfig: &lgr.HistoryDBConfig{
 			Enabled: true,
-		},
-		SnapshotsConfig: &ledger.SnapshotsConfig{
-			RootDir: filepath.Join(originalPath, "snapshots"),
 		},
 	}
 	provider := testutilNewProvider(origConf, t, &mock.DeployedChaincodeInfoProvider{})
 	bg, gb := testutil.NewBlockGenerator(t, ledgerid, false)
 	gbHash := protoutil.BlockHeaderHash(gb.Header)
-	lgr, _ := provider.CreateFromGenesisBlock(gb)
+	ledger, _ := provider.Create(gb)
 
 	txid := util.GenerateUUID()
-	simulator, _ := lgr.NewTxSimulator(txid)
-	require.NoError(t, simulator.SetState("ns1", "key1", []byte("value1")))
-	require.NoError(t, simulator.SetState("ns1", "key2", []byte("value2")))
-	require.NoError(t, simulator.SetState("ns1", "key3", []byte("value3")))
+	simulator, _ := ledger.NewTxSimulator(txid)
+	simulator.SetState("ns1", "key1", []byte("value1"))
+	simulator.SetState("ns1", "key2", []byte("value2"))
+	simulator.SetState("ns1", "key3", []byte("value3"))
 	simulator.Done()
 	simRes, _ := simulator.GetTxSimulationResults()
 	pubSimBytes, _ := simRes.GetPubSimulationBytes()
 	block1 := bg.NextBlock([][]byte{pubSimBytes})
-	require.NoError(t, lgr.CommitLegacy(&ledger.BlockAndPvtData{Block: block1}, &ledger.CommitOptions{}))
+	ledger.CommitLegacy(&lgr.BlockAndPvtData{Block: block1}, &lgr.CommitOptions{})
 
 	txid = util.GenerateUUID()
-	simulator, _ = lgr.NewTxSimulator(txid)
-	require.NoError(t, simulator.SetState("ns1", "key1", []byte("value4")))
-	require.NoError(t, simulator.SetState("ns1", "key2", []byte("value5")))
-	require.NoError(t, simulator.SetState("ns1", "key3", []byte("value6")))
+	simulator, _ = ledger.NewTxSimulator(txid)
+	simulator.SetState("ns1", "key1", []byte("value4"))
+	simulator.SetState("ns1", "key2", []byte("value5"))
+	simulator.SetState("ns1", "key3", []byte("value6"))
 	simulator.Done()
 	simRes, _ = simulator.GetTxSimulationResults()
 	pubSimBytes, _ = simRes.GetPubSimulationBytes()
 	block2 := bg.NextBlock([][]byte{pubSimBytes})
-	require.NoError(t, lgr.CommitLegacy(&ledger.BlockAndPvtData{Block: block2}, &ledger.CommitOptions{}))
+	ledger.CommitLegacy(&lgr.BlockAndPvtData{Block: block2}, &lgr.CommitOptions{})
 
-	lgr.Close()
+	ledger.Close()
 	provider.Close()
 
 	// remove the statedb, historydb, and block indexes (they are supposed to be auto created during opening of an existing ledger)
 	// and rename the originalPath to restorePath
-	require.NoError(t, os.RemoveAll(StateDBPath(originalPath)))
-	require.NoError(t, os.RemoveAll(HistoryDBPath(originalPath)))
-	require.NoError(t, os.RemoveAll(filepath.Join(BlockStorePath(originalPath), blkstorage.IndexDir)))
-	require.NoError(t, os.Rename(originalPath, restorePath))
+	assert.NoError(t, os.RemoveAll(StateDBPath(originalPath)))
+	assert.NoError(t, os.RemoveAll(HistoryDBPath(originalPath)))
+	assert.NoError(t, os.RemoveAll(filepath.Join(BlockStorePath(originalPath), blkstorage.IndexDir)))
+	assert.NoError(t, os.Rename(originalPath, restorePath))
 
 	// Instantiate the ledger from restore environment and this should behave exactly as it would have in the original environment
-	restoreConf := &ledger.Config{
+	restoreConf := &lgr.Config{
 		RootFSPath:    restorePath,
-		StateDBConfig: &ledger.StateDBConfig{},
-		PrivateDataConfig: &ledger.PrivateDataConfig{
-			MaxBatchSize:                        5000,
-			BatchesInterval:                     1000,
-			PurgeInterval:                       100,
-			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
+		StateDBConfig: &lgr.StateDBConfig{},
+		PrivateDataConfig: &lgr.PrivateDataConfig{
+			MaxBatchSize:    5000,
+			BatchesInterval: 1000,
+			PurgeInterval:   100,
 		},
-		HistoryDBConfig: &ledger.HistoryDBConfig{
+		HistoryDBConfig: &lgr.HistoryDBConfig{
 			Enabled: true,
-		},
-		SnapshotsConfig: &ledger.SnapshotsConfig{
-			RootDir: filepath.Join(restorePath, "snapshots"),
 		},
 	}
 	provider = testutilNewProvider(restoreConf, t, &mock.DeployedChaincodeInfoProvider{})
 	defer provider.Close()
 
-	_, err = provider.CreateFromGenesisBlock(gb)
-	require.EqualError(t, err, "ledger [TestLedger] already exists with state [ACTIVE]")
+	_, err = provider.Create(gb)
+	assert.Equal(t, ErrLedgerIDExists, err)
 
-	lgr, err = provider.Open(ledgerid)
-	require.NoError(t, err)
-	defer lgr.Close()
+	ledger, _ = provider.Open(ledgerid)
+	defer ledger.Close()
 
 	block1Hash := protoutil.BlockHeaderHash(block1.Header)
 	block2Hash := protoutil.BlockHeaderHash(block2.Header)
-	bcInfo, _ := lgr.GetBlockchainInfo()
-	require.Equal(t, &common.BlockchainInfo{
+	bcInfo, _ := ledger.GetBlockchainInfo()
+	assert.Equal(t, &common.BlockchainInfo{
 		Height: 3, CurrentBlockHash: block2Hash, PreviousBlockHash: block1Hash,
 	}, bcInfo)
 
-	b0, _ := lgr.GetBlockByHash(gbHash)
-	require.True(t, proto.Equal(b0, gb), "proto messages are not equal")
+	b0, _ := ledger.GetBlockByHash(gbHash)
+	assert.True(t, proto.Equal(b0, gb), "proto messages are not equal")
 
-	b1, _ := lgr.GetBlockByHash(block1Hash)
-	require.True(t, proto.Equal(b1, block1), "proto messages are not equal")
+	b1, _ := ledger.GetBlockByHash(block1Hash)
+	assert.True(t, proto.Equal(b1, block1), "proto messages are not equal")
 
-	b2, _ := lgr.GetBlockByHash(block2Hash)
-	require.True(t, proto.Equal(b2, block2), "proto messages are not equal")
+	b2, _ := ledger.GetBlockByHash(block2Hash)
+	assert.True(t, proto.Equal(b2, block2), "proto messages are not equal")
 
-	b0, _ = lgr.GetBlockByNumber(0)
-	require.True(t, proto.Equal(b0, gb), "proto messages are not equal")
+	b0, _ = ledger.GetBlockByNumber(0)
+	assert.True(t, proto.Equal(b0, gb), "proto messages are not equal")
 
-	b1, _ = lgr.GetBlockByNumber(1)
-	require.True(t, proto.Equal(b1, block1), "proto messages are not equal")
+	b1, _ = ledger.GetBlockByNumber(1)
+	assert.True(t, proto.Equal(b1, block1), "proto messages are not equal")
 
-	b2, _ = lgr.GetBlockByNumber(2)
-	require.True(t, proto.Equal(b2, block2), "proto messages are not equal")
+	b2, _ = ledger.GetBlockByNumber(2)
+	assert.True(t, proto.Equal(b2, block2), "proto messages are not equal")
 
 	// get the tran id from the 2nd block, then use it to test GetTransactionByID()
 	txEnvBytes2 := block1.Data.Data[0]
 	txEnv2, err := protoutil.GetEnvelopeFromBlock(txEnvBytes2)
-	require.NoError(t, err, "Error upon GetEnvelopeFromBlock")
+	assert.NoError(t, err, "Error upon GetEnvelopeFromBlock")
 	payload2, err := protoutil.UnmarshalPayload(txEnv2.Payload)
-	require.NoError(t, err, "Error upon GetPayload")
+	assert.NoError(t, err, "Error upon GetPayload")
 	chdr, err := protoutil.UnmarshalChannelHeader(payload2.Header.ChannelHeader)
-	require.NoError(t, err, "Error upon GetChannelHeaderFromBytes")
+	assert.NoError(t, err, "Error upon GetChannelHeaderFromBytes")
 	txID2 := chdr.TxId
-	processedTran2, err := lgr.GetTransactionByID(txID2)
-	require.NoError(t, err, "Error upon GetTransactionByID")
+	processedTran2, err := ledger.GetTransactionByID(txID2)
+	assert.NoError(t, err, "Error upon GetTransactionByID")
 	// get the tran envelope from the retrieved ProcessedTransaction
 	retrievedTxEnv2 := processedTran2.TransactionEnvelope
-	require.Equal(t, txEnv2, retrievedTxEnv2)
+	assert.Equal(t, txEnv2, retrievedTxEnv2)
 
-	qe, _ := lgr.NewQueryExecutor()
+	qe, _ := ledger.NewQueryExecutor()
 	value1, _ := qe.GetState("ns1", "key1")
-	require.Equal(t, []byte("value4"), value1)
+	assert.Equal(t, []byte("value4"), value1)
 
-	hqe, err := lgr.NewHistoryQueryExecutor()
-	require.NoError(t, err)
+	hqe, err := ledger.NewHistoryQueryExecutor()
+	assert.NoError(t, err)
 	itr, err := hqe.GetHistoryForKey("ns1", "key1")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	defer itr.Close()
 
 	result1, err := itr.Next()
-	require.NoError(t, err)
-	require.Equal(t, []byte("value4"), result1.(*queryresult.KeyModification).Value)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("value4"), result1.(*queryresult.KeyModification).Value)
 	result2, err := itr.Next()
-	require.NoError(t, err)
-	require.Equal(t, []byte("value1"), result2.(*queryresult.KeyModification).Value)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("value1"), result2.(*queryresult.KeyModification).Value)
 }
 
 func constructTestLedgerID(i int) string {
 	return fmt.Sprintf("ledger_%06d", i)
 }
 
-func testConfig(t *testing.T) (conf *ledger.Config, cleanup func()) {
+func testConfig(t *testing.T) (conf *lgr.Config, cleanup func()) {
 	path, err := ioutil.TempDir("", "kvledger")
 	require.NoError(t, err, "Failed to create test ledger directory")
-	conf = &ledger.Config{
+	conf = &lgr.Config{
 		RootFSPath:    path,
-		StateDBConfig: &ledger.StateDBConfig{},
-		PrivateDataConfig: &ledger.PrivateDataConfig{
-			MaxBatchSize:                        5000,
-			BatchesInterval:                     1000,
-			PurgeInterval:                       100,
-			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
+		StateDBConfig: &lgr.StateDBConfig{},
+		PrivateDataConfig: &lgr.PrivateDataConfig{
+			MaxBatchSize:    5000,
+			BatchesInterval: 1000,
+			PurgeInterval:   100,
 		},
-		HistoryDBConfig: &ledger.HistoryDBConfig{
+		HistoryDBConfig: &lgr.HistoryDBConfig{
 			Enabled: true,
-		},
-		SnapshotsConfig: &ledger.SnapshotsConfig{
-			RootDir: filepath.Join(path, "snapshots"),
 		},
 	}
 	cleanup = func() {
@@ -592,117 +598,61 @@ func testConfig(t *testing.T) (conf *ledger.Config, cleanup func()) {
 	return conf, cleanup
 }
 
-func testutilNewProvider(conf *ledger.Config, t *testing.T, ccInfoProvider *mock.DeployedChaincodeInfoProvider) *Provider {
+func testutilNewProvider(conf *lgr.Config, t *testing.T, ccInfoProvider *mock.DeployedChaincodeInfoProvider) *Provider {
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	provider, err := NewProvider(
-		&ledger.Initializer{
-			DeployedChaincodeInfoProvider:   ccInfoProvider,
-			MetricsProvider:                 &disabled.Provider{},
-			Config:                          conf,
-			HashProvider:                    cryptoProvider,
-			HealthCheckRegistry:             &mock.HealthCheckRegistry{},
-			ChaincodeLifecycleEventProvider: &mock.ChaincodeLifecycleEventProvider{},
-			MembershipInfoProvider:          &mock.MembershipInfoProvider{},
+		&lgr.Initializer{
+			DeployedChaincodeInfoProvider: ccInfoProvider,
+			MetricsProvider:               &disabled.Provider{},
+			Config:                        conf,
+			Hasher:                        cryptoProvider,
 		},
 	)
 	require.NoError(t, err, "Failed to create new Provider")
 	return provider
 }
 
-type nsCollBtlConfig struct {
-	namespace string
-	btlConfig map[string]uint64
-}
-
 func testutilNewProviderWithCollectionConfig(
 	t *testing.T,
-	nsCollBtlConfigs []*nsCollBtlConfig,
-	conf *ledger.Config,
+	namespace string,
+	btlConfigs map[string]uint64,
+	conf *lgr.Config,
 ) *Provider {
 	provider := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
 	mockCCInfoProvider := provider.initializer.DeployedChaincodeInfoProvider.(*mock.DeployedChaincodeInfoProvider)
-	collectionConfPkgs := []*peer.CollectionConfigPackage{}
-
-	nsCollMap := map[string]map[string]*peer.StaticCollectionConfig{}
-	for _, nsCollBtlConf := range nsCollBtlConfigs {
-		collMap := map[string]*peer.StaticCollectionConfig{}
-		var collConf []*peer.CollectionConfig
-		for collName, btl := range nsCollBtlConf.btlConfig {
-			staticConf := &peer.StaticCollectionConfig{Name: collName, BlockToLive: btl}
-			collMap[collName] = staticConf
-			collectionConf := &peer.CollectionConfig{}
-			collectionConf.Payload = &peer.CollectionConfig_StaticCollectionConfig{StaticCollectionConfig: staticConf}
-			collConf = append(collConf, collectionConf)
-		}
-		collectionConfPkgs = append(collectionConfPkgs, &peer.CollectionConfigPackage{Config: collConf})
-		nsCollMap[nsCollBtlConf.namespace] = collMap
+	collMap := map[string]*peer.StaticCollectionConfig{}
+	var collConf []*peer.CollectionConfig
+	for collName, btl := range btlConfigs {
+		staticConf := &peer.StaticCollectionConfig{Name: collName, BlockToLive: btl}
+		collMap[collName] = staticConf
+		collectionConf := &peer.CollectionConfig{}
+		collectionConf.Payload = &peer.CollectionConfig_StaticCollectionConfig{StaticCollectionConfig: staticConf}
+		collConf = append(collConf, collectionConf)
 	}
+	collectionConfPkg := &peer.CollectionConfigPackage{Config: collConf}
 
-	mockCCInfoProvider.ChaincodeInfoStub = func(channelName, ccName string, qe ledger.SimpleQueryExecutor) (*ledger.DeployedChaincodeInfo, error) {
-		for i, nsCollBtlConf := range nsCollBtlConfigs {
-			if ccName == nsCollBtlConf.namespace {
-				return &ledger.DeployedChaincodeInfo{
-					Name: nsCollBtlConf.namespace, ExplicitCollectionConfigPkg: collectionConfPkgs[i],
-				}, nil
-			}
+	mockCCInfoProvider.ChaincodeInfoStub = func(channelName, ccName string, qe lgr.SimpleQueryExecutor) (*lgr.DeployedChaincodeInfo, error) {
+		if ccName == namespace {
+			return &lgr.DeployedChaincodeInfo{
+				Name: namespace, ExplicitCollectionConfigPkg: collectionConfPkg}, nil
 		}
 		return nil, nil
 	}
 
-	mockCCInfoProvider.AllCollectionsConfigPkgStub = func(channelName, ccName string, qe ledger.SimpleQueryExecutor) (*peer.CollectionConfigPackage, error) {
-		for i, nsCollBtlConf := range nsCollBtlConfigs {
-			if ccName == nsCollBtlConf.namespace {
-				return collectionConfPkgs[i], nil
-			}
+	mockCCInfoProvider.AllCollectionsConfigPkgStub = func(channelName, ccName string, qe lgr.SimpleQueryExecutor) (*peer.CollectionConfigPackage, error) {
+		if ccName == namespace {
+			return collectionConfPkg, nil
 		}
 		return nil, nil
 	}
 
-	mockCCInfoProvider.CollectionInfoStub = func(channelName, ccName, collName string, qe ledger.SimpleQueryExecutor) (*peer.StaticCollectionConfig, error) {
-		for _, nsCollBtlConf := range nsCollBtlConfigs {
-			if ccName == nsCollBtlConf.namespace {
-				return nsCollMap[nsCollBtlConf.namespace][collName], nil
-			}
+	mockCCInfoProvider.CollectionInfoStub = func(channelName, ccName, collName string, qe lgr.SimpleQueryExecutor) (*peer.StaticCollectionConfig, error) {
+		if ccName == namespace {
+			return collMap[collName], nil
 		}
 		return nil, nil
 	}
 	return provider
-}
-
-func verifyLedgerDoesNotExist(t *testing.T, provider *Provider, ledgerID string) {
-	exists, err := provider.idStore.ledgerIDExists(ledgerID)
-	require.NoError(t, err)
-	require.False(t, exists)
-
-	exists, err = provider.blkStoreProvider.Exists(ledgerID)
-	require.NoError(t, err)
-	require.False(t, exists)
-
-	db, err := provider.dbProvider.GetDBHandle(ledgerID, nil)
-	require.NoError(t, err)
-	itr, err := db.GetFullScanIterator(func(string) bool { return false })
-	require.NoError(t, err)
-	kv, err := itr.Next()
-	require.NoError(t, err)
-	require.Nil(t, kv)
-	sp, err := db.GetLatestSavePoint()
-	require.NoError(t, err)
-	require.Nil(t, sp)
-
-	historydb := provider.historydbProvider.GetDBHandle(ledgerID)
-	sp, err = historydb.GetLastSavepoint()
-	require.NoError(t, err)
-	require.Nil(t, sp)
-}
-
-func verifyLedgerIDExists(t *testing.T, provider *Provider, ledgerID string, expectedStatus msgs.Status) {
-	exists, err := provider.idStore.ledgerIDExists(ledgerID)
-	require.NoError(t, err)
-	require.True(t, exists)
-
-	metadata, err := provider.idStore.getLedgerMetadata(ledgerID)
-	require.NoError(t, err)
-	require.Equal(t, metadata.Status, expectedStatus)
 }

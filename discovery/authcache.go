@@ -21,8 +21,10 @@ const (
 	defaultRetentionRatio = 0.75
 )
 
-// asBytes is the function that is used to marshal protoutil.SignedData to bytes
-var asBytes = asn1.Marshal
+var (
+	// asBytes is the function that is used to marshal protoutil.SignedData to bytes
+	asBytes = asn1.Marshal
+)
 
 type acSupport interface {
 	// Eligible returns whether the given peer is eligible for receiving

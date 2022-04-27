@@ -14,11 +14,11 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric-protos-go/discovery"
+	. "github.com/hyperledger/fabric-protos-go/discovery"
 	"github.com/hyperledger/fabric-protos-go/gossip"
 	"github.com/hyperledger/fabric-protos-go/msp"
 	"github.com/hyperledger/fabric/cmd/common"
-	discoveryclient "github.com/hyperledger/fabric/discovery/client"
+	discovery "github.com/hyperledger/fabric/discovery/client"
 	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/pkg/errors"
 )
@@ -90,17 +90,17 @@ func (pc *EndorsersCmd) Execute(conf common.Config) error {
 		return err
 	}
 
-	var ccCalls []*discovery.ChaincodeCall
+	var ccCalls []*ChaincodeCall
 
 	for _, cc := range *ccAndCol.Chaincodes {
-		ccCalls = append(ccCalls, &discovery.ChaincodeCall{
+		ccCalls = append(ccCalls, &ChaincodeCall{
 			Name:            cc,
 			CollectionNames: cc2collections[cc],
 			NoPrivateReads:  ccAndCol.noPrivateReads(cc),
 		})
 	}
 
-	req, err := discoveryclient.NewRequest().OfChannel(channel).AddEndorsersQuery(&discovery.ChaincodeInterest{Chaincodes: ccCalls})
+	req, err := discovery.NewRequest().OfChannel(channel).AddEndorsersQuery(&ChaincodeInterest{Chaincodes: ccCalls})
 	if err != nil {
 		return errors.Wrap(err, "failed creating request")
 	}
@@ -200,7 +200,7 @@ func (ec *chaincodesAndCollections) parseInput() (map[string][]string, error) {
 	return res, nil
 }
 
-func parseEndorsementDescriptors(descriptors []*discovery.EndorsementDescriptor) []endorsermentDescriptor {
+func parseEndorsementDescriptors(descriptors []*EndorsementDescriptor) []endorsermentDescriptor {
 	var res []endorsermentDescriptor
 	for _, desc := range descriptors {
 		endorsersByGroups := make(map[string][]endorser)
@@ -228,10 +228,10 @@ type endorser struct {
 type endorsermentDescriptor struct {
 	Chaincode         string
 	EndorsersByGroups map[string][]endorser
-	Layouts           []*discovery.Layout
+	Layouts           []*Layout
 }
 
-func endorserFromRaw(p *discovery.Peer) endorser {
+func endorserFromRaw(p *Peer) endorser {
 	sId := &msp.SerializedIdentity{}
 	proto.Unmarshal(p.Identity, sId)
 	return endorser{

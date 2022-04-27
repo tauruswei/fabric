@@ -9,10 +9,12 @@ package orderers
 import (
 	"bytes"
 	"crypto/sha256"
+	"github.com/tjfoc/gmsm/sm2"
 	"math/rand"
 	"sync"
 
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/internal/pkg/comm"
 
 	"github.com/pkg/errors"
 )
@@ -27,7 +29,7 @@ type ConnectionSource struct {
 
 type Endpoint struct {
 	Address   string
-	RootCerts [][]byte
+	CertPool  *sm2.CertPool
 	Refreshed chan struct{}
 }
 
@@ -146,25 +148,31 @@ func (cs *ConnectionSource) Update(globalAddrs []string, orgs map[string]Orderer
 
 	cs.allEndpoints = nil
 
-	var globalRootCerts [][]byte
+	globalCertPool := sm2.NewCertPool()
 
-	for _, org := range orgs {
-		var rootCerts [][]byte
+	for orgName, org := range orgs {
+		certPool := sm2.NewCertPool()
 		for _, rootCert := range org.RootCerts {
 			if hasOrgEndpoints {
-				rootCerts = append(rootCerts, rootCert)
+				if err := comm.AddPemToCertPool(rootCert, certPool); err != nil {
+					cs.logger.Warningf("Could not add orderer cert for org '%s' to cert pool: %s", orgName, err)
+				}
 			} else {
-				globalRootCerts = append(globalRootCerts, rootCert)
+				if err := comm.AddPemToCertPool(rootCert, globalCertPool); err != nil {
+					cs.logger.Warningf("Could not add orderer cert for org '%s' to global cert pool: %s", orgName, err)
+
+				}
 			}
 		}
 
-		// Note, if !hasOrgEndpoints, this for loop is a no-op
+		// Note, if !hasOrgEndpoints, this for loop is a no-op, so
+		// certPool is never referenced.
 		for _, address := range org.Addresses {
 			overrideEndpoint, ok := cs.overrides[address]
 			if ok {
 				cs.allEndpoints = append(cs.allEndpoints, &Endpoint{
 					Address:   overrideEndpoint.Address,
-					RootCerts: overrideEndpoint.RootCerts,
+					CertPool:  overrideEndpoint.CertPool,
 					Refreshed: make(chan struct{}),
 				})
 				continue
@@ -172,7 +180,7 @@ func (cs *ConnectionSource) Update(globalAddrs []string, orgs map[string]Orderer
 
 			cs.allEndpoints = append(cs.allEndpoints, &Endpoint{
 				Address:   address,
-				RootCerts: rootCerts,
+				CertPool:  certPool,
 				Refreshed: make(chan struct{}),
 			})
 		}
@@ -190,7 +198,7 @@ func (cs *ConnectionSource) Update(globalAddrs []string, orgs map[string]Orderer
 		if ok {
 			cs.allEndpoints = append(cs.allEndpoints, &Endpoint{
 				Address:   overrideEndpoint.Address,
-				RootCerts: overrideEndpoint.RootCerts,
+				CertPool:  overrideEndpoint.CertPool,
 				Refreshed: make(chan struct{}),
 			})
 			continue
@@ -198,7 +206,7 @@ func (cs *ConnectionSource) Update(globalAddrs []string, orgs map[string]Orderer
 
 		cs.allEndpoints = append(cs.allEndpoints, &Endpoint{
 			Address:   address,
-			RootCerts: globalRootCerts,
+			CertPool:  globalCertPool,
 			Refreshed: make(chan struct{}),
 		})
 	}

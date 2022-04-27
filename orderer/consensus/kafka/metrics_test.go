@@ -17,14 +17,18 @@ import (
 )
 
 var _ = Describe("Metrics", func() {
-	var fakeMetricsRegistry *mock.MetricsRegistry
+	var (
+		fakeMetricsRegistry *mock.MetricsRegistry
+	)
 
 	BeforeEach(func() {
 		fakeMetricsRegistry = &mock.MetricsRegistry{}
 	})
 
 	Describe("NewMetrics", func() {
-		var fakeMetricsProvider *mock.MetricsProvider
+		var (
+			fakeMetricsProvider *mock.MetricsProvider
+		)
 
 		BeforeEach(func() {
 			fakeMetricsProvider = &mock.MetricsProvider{}
@@ -242,7 +246,9 @@ var _ = Describe("Metrics", func() {
 		})
 
 		Context("when the go-metrics source contains unknown metrics", func() {
-			var fakeMeter *mock.MetricsMeter
+			var (
+				fakeMeter *mock.MetricsMeter
+			)
 
 			BeforeEach(func() {
 				fakeMeter = &mock.MetricsMeter{}
@@ -271,7 +277,9 @@ var _ = Describe("Metrics", func() {
 		})
 
 		Context("when a histogram metric does not have a histogram value", func() {
-			var fakeMeter *mock.MetricsMeter
+			var (
+				fakeMeter *mock.MetricsMeter
+			)
 
 			BeforeEach(func() {
 				fakeMeter = &mock.MetricsMeter{}
@@ -288,7 +296,9 @@ var _ = Describe("Metrics", func() {
 		})
 
 		Context("when a meter metric does not have a meter value", func() {
-			var fakeHistogram *mock.MetricsHistogram
+			var (
+				fakeHistogram *mock.MetricsHistogram
+			)
 
 			BeforeEach(func() {
 				fakeHistogram = &mock.MetricsHistogram{}

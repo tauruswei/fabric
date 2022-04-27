@@ -57,7 +57,7 @@ func (conf Config) ToSecureOptions(newSelfSignedTLSCert genTLSCertFunc) (comm.Se
 	return comm.SecureOptions{
 		Key:               keyBytes,
 		Certificate:       certBytes,
-		UseTLS:            true,
+		UseTLS:            false,
 		ServerRootCAs:     [][]byte{caBytes},
 		RequireClientCert: true,
 	}, nil

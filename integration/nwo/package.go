@@ -56,9 +56,8 @@ func writeMetadataJSON(tw *tar.Writer, path, ccType, label string) {
 	err = tw.WriteHeader(&tar.Header{
 		Name: "metadata.json",
 		Size: int64(len(metadata)),
-		Mode: 0o100644,
+		Mode: 0100644,
 	})
-	Expect(err).NotTo(HaveOccurred())
 	_, err = tw.Write(metadata)
 	Expect(err).NotTo(HaveOccurred())
 }

@@ -65,6 +65,7 @@ func GlobalConfig() *ServiceConfig {
 }
 
 func (c *ServiceConfig) loadGossipConfig() {
+
 	c.PeerTLSEnabled = viper.GetBool("peer.tls.enabled")
 	c.Endpoint = viper.GetString("peer.gossip.endpoint")
 	c.NonBlockingCommitMode = viper.GetBool("peer.gossip.nonBlockingCommitMode")

@@ -23,7 +23,7 @@ import (
 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
 	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 var signer msp.SigningIdentity
@@ -44,7 +44,7 @@ func init() {
 	}
 }
 
-// BlockGenerator generates a series of blocks for testing
+//BlockGenerator generates a series of blocks for testing
 type BlockGenerator struct {
 	blockNum     uint64
 	previousHash []byte
@@ -74,7 +74,7 @@ type signingIdentity interface {
 // NewBlockGenerator instantiates new BlockGenerator for testing
 func NewBlockGenerator(t *testing.T, ledgerID string, signTxs bool) (*BlockGenerator, *common.Block) {
 	gb, err := test.MakeGenesisBlock(ledgerID)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	gb.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER] = txflags.NewWithValues(len(gb.Data.Data), pb.TxValidationCode_VALID)
 	return &BlockGenerator{1, protoutil.BlockHeaderHash(gb.GetHeader()), signTxs, t}, gb
 }
@@ -266,7 +266,7 @@ func ConstructBlock(
 	return NewBlock(envs, blockNum, previousHash)
 }
 
-// ConstructTestBlock constructs a single block with random contents
+//ConstructTestBlock constructs a single block with random contents
 func ConstructTestBlock(t *testing.T, blockNum uint64, numTx int, txSize int) *common.Block {
 	simulationResults := [][]byte{}
 	for i := 0; i < numTx; i++ {
@@ -342,6 +342,7 @@ func ConstructSignedTxEnvWithDefaultSigner(
 	visibility []byte,
 	headerType common.HeaderType,
 ) (*common.Envelope, string, error) {
+
 	return ConstructSignedTxEnv(
 		chainID,
 		ccid,
@@ -366,6 +367,7 @@ func ConstructUnsignedTxEnv(
 	visibility []byte,
 	headerType common.HeaderType,
 ) (*common.Envelope, string, error) {
+
 	sigId := &fakes.SigningIdentity{}
 
 	return ConstructSignedTxEnv(
@@ -411,6 +413,7 @@ func ConstructSignedTxEnv(
 			},
 			ss,
 		)
+
 	} else {
 		// if txid is set, we should not generate a txid instead reuse the given txid
 		var nonce []byte

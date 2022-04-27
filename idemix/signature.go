@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package idemix
 
 import (
-	"crypto/ecdsa"
+	"github.com/tjfoc/gmsm/sm2"
 	"sort"
 
 	"github.com/hyperledger/fabric-amcl/amcl"
@@ -190,7 +190,7 @@ func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP2
 	index = 0
 	proofData = proofData[:2*FieldBytes]
 	index = appendBytesBig(proofData, index, c)
-	appendBytesBig(proofData, index, Nonce)
+	index = appendBytesBig(proofData, index, Nonce)
 	ProofC := HashModOrder(proofData)
 
 	// Step 3: reply to the challenge message (s-values)
@@ -232,8 +232,7 @@ func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP2
 			RevocationEpochPk:  cri.EpochPk,
 			RevocationPkSig:    cri.EpochPkSig,
 			Epoch:              cri.Epoch,
-			NonRevocationProof: nonRevokedProof,
-		},
+			NonRevocationProof: nonRevokedProof},
 		nil
 }
 
@@ -241,7 +240,7 @@ func NewSignature(cred *Credential, sk *FP256BN.BIG, Nym *FP256BN.ECP, RNym *FP2
 // Disclosure steers which attributes it expects to be disclosed
 // attributeValues contains the desired attribute values.
 // This function will check that if attribute i is disclosed, the i-th attribute equals attributeValues[i].
-func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, attributeValues []*FP256BN.BIG, rhIndex int, revPk *ecdsa.PublicKey, epoch int) error {
+func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, attributeValues []*FP256BN.BIG, rhIndex int, revPk *sm2.PublicKey, epoch int) error {
 	// Validate inputs
 	if ipk == nil || revPk == nil {
 		return errors.Errorf("cannot verify idemix signature: received nil input")
@@ -370,7 +369,7 @@ func (sig *Signature) Ver(Disclosure []byte, ipk *IssuerPublicKey, msg []byte, a
 	index = 0
 	proofData = proofData[:2*FieldBytes]
 	index = appendBytesBig(proofData, index, c)
-	appendBytesBig(proofData, index, Nonce)
+	index = appendBytesBig(proofData, index, Nonce)
 
 	if *ProofC != *HashModOrder(proofData) {
 		// This debug line helps identify where the mismatch happened

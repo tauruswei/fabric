@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"net/http"
 	"strings"
 
 	"github.com/docker/docker/api/types/swarm"
@@ -23,7 +22,7 @@ func (c *Client) Version() (*Env, error) {
 
 // VersionWithContext returns version information about the docker server.
 func (c *Client) VersionWithContext(ctx context.Context) (*Env, error) {
-	resp, err := c.do(http.MethodGet, "/version", doOptions{context: ctx})
+	resp, err := c.do("GET", "/version", doOptions{context: ctx})
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +162,7 @@ type IndexInfo struct {
 //
 // See https://goo.gl/ElTHi2 for more details.
 func (c *Client) Info() (*DockerInfo, error) {
-	resp, err := c.do(http.MethodGet, "/info", doOptions{})
+	resp, err := c.do("GET", "/info", doOptions{})
 	if err != nil {
 		return nil, err
 	}

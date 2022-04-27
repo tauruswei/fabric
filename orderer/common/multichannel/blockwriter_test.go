@@ -17,6 +17,7 @@ import (
 	"github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric/common/channelconfig"
+	newchannelconfig "github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/configtx"
 	"github.com/hyperledger/fabric/common/ledger/blockledger"
 	"github.com/hyperledger/fabric/common/ledger/blockledger/fileledger"
@@ -28,6 +29,7 @@ import (
 	"github.com/hyperledger/fabric/orderer/common/blockcutter/mock"
 	"github.com/hyperledger/fabric/orderer/common/multichannel/mocks"
 	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,15 +45,18 @@ type mockBlockWriterSupport struct {
 	blockledger.ReadWriter
 	fakeConfig *mock.OrdererConfig
 	bccsp      bccsp.BCCSP
+	sequence   uint64
 }
 
-func (mbws mockBlockWriterSupport) Update(bundle *channelconfig.Bundle) {}
+func (mbws mockBlockWriterSupport) Update(bundle *newchannelconfig.Bundle) {
+	return
+}
 
-func (mbws mockBlockWriterSupport) CreateBundle(channelID string, config *cb.Config) (*channelconfig.Bundle, error) {
+func (mbws mockBlockWriterSupport) CreateBundle(channelID string, config *cb.Config) (*newchannelconfig.Bundle, error) {
 	return channelconfig.NewBundle(channelID, config, mbws.bccsp)
 }
 
-func (mbws mockBlockWriterSupport) SharedConfig() channelconfig.Orderer {
+func (mbws mockBlockWriterSupport) SharedConfig() newchannelconfig.Orderer {
 	return mbws.fakeConfig
 }
 
@@ -64,9 +69,9 @@ func TestCreateBlock(t *testing.T) {
 		{Payload: []byte("some other bytes")},
 	})
 
-	require.Equal(t, seedBlock.Header.Number+1, block.Header.Number)
-	require.Equal(t, protoutil.BlockDataHash(block.Data), block.Header.DataHash)
-	require.Equal(t, protoutil.BlockHeaderHash(seedBlock.Header), block.Header.PreviousHash)
+	assert.Equal(t, seedBlock.Header.Number+1, block.Header.Number)
+	assert.Equal(t, protoutil.BlockDataHash(block.Data), block.Header.DataHash)
+	assert.Equal(t, protoutil.BlockHeaderHash(seedBlock.Header), block.Header.PreviousHash)
 }
 
 func TestBlockSignature(t *testing.T) {
@@ -78,7 +83,7 @@ func TestBlockSignature(t *testing.T) {
 	require.NoError(t, err)
 
 	l, err := rlf.GetOrCreate("mychannel")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	lastBlock := protoutil.NewBlock(0, nil)
 	l.Append(lastBlock)
 
@@ -96,9 +101,9 @@ func TestBlockSignature(t *testing.T) {
 	bw.commitBlock(consensusMetadata)
 
 	it, seq := l.Iterator(&orderer.SeekPosition{Type: &orderer.SeekPosition_Newest{}})
-	require.Equal(t, uint64(1), seq)
+	assert.Equal(t, uint64(1), seq)
 	committedBlock, status := it.Next()
-	require.Equal(t, cb.Status_SUCCESS, status)
+	assert.Equal(t, cb.Status_SUCCESS, status)
 
 	md := protoutil.GetMetadataFromBlockOrPanic(committedBlock, cb.BlockMetadataIndex_SIGNATURES)
 
@@ -107,8 +112,8 @@ func TestBlockSignature(t *testing.T) {
 		ConsenterMetadata: protoutil.MarshalOrPanic(&cb.Metadata{Value: consensusMetadata}),
 	})
 
-	require.Equal(t, expectedMetadataValue, md.Value, "Value contains the consensus metadata and the last config")
-	require.NotNil(t, md.Signatures, "Should have signature")
+	assert.Equal(t, expectedMetadataValue, md.Value, "Value contains the consensus metadata and the last config")
+	assert.NotNil(t, md.Signatures, "Should have signature")
 }
 
 func TestBlockLastConfig(t *testing.T) {
@@ -129,24 +134,24 @@ func TestBlockLastConfig(t *testing.T) {
 	block := protoutil.NewBlock(newBlockNum, []byte("foo"))
 	bw.addLastConfig(block)
 
-	require.Equal(t, newBlockNum, bw.lastConfigBlockNum)
-	require.Equal(t, newConfigSeq, bw.lastConfigSeq)
+	assert.Equal(t, newBlockNum, bw.lastConfigBlockNum)
+	assert.Equal(t, newConfigSeq, bw.lastConfigSeq)
 
 	md := protoutil.GetMetadataFromBlockOrPanic(block, cb.BlockMetadataIndex_LAST_CONFIG)
-	require.NotNil(t, md.Value, "Value not be empty in this case")
-	require.Nil(t, md.Signatures, "Should not have signature")
+	assert.NotNil(t, md.Value, "Value not be empty in this case")
+	assert.Nil(t, md.Signatures, "Should not have signature")
 
 	lc := protoutil.GetLastConfigIndexFromBlockOrPanic(block)
-	require.Equal(t, newBlockNum, lc)
+	assert.Equal(t, newBlockNum, lc)
 }
 
 func TestWriteConfigBlock(t *testing.T) {
 	// TODO, use assert.PanicsWithValue once available
 	t.Run("EmptyBlock", func(t *testing.T) {
-		require.Panics(t, func() { (&BlockWriter{}).WriteConfigBlock(&cb.Block{}, nil) })
+		assert.Panics(t, func() { (&BlockWriter{}).WriteConfigBlock(&cb.Block{}, nil) })
 	})
 	t.Run("BadPayload", func(t *testing.T) {
-		require.Panics(t, func() {
+		assert.Panics(t, func() {
 			(&BlockWriter{}).WriteConfigBlock(&cb.Block{
 				Data: &cb.BlockData{
 					Data: [][]byte{
@@ -157,7 +162,7 @@ func TestWriteConfigBlock(t *testing.T) {
 		})
 	})
 	t.Run("MissingHeader", func(t *testing.T) {
-		require.Panics(t, func() {
+		assert.Panics(t, func() {
 			(&BlockWriter{}).WriteConfigBlock(&cb.Block{
 				Data: &cb.BlockData{
 					Data: [][]byte{
@@ -170,7 +175,7 @@ func TestWriteConfigBlock(t *testing.T) {
 		})
 	})
 	t.Run("BadChannelHeader", func(t *testing.T) {
-		require.Panics(t, func() {
+		assert.Panics(t, func() {
 			(&BlockWriter{}).WriteConfigBlock(&cb.Block{
 				Data: &cb.BlockData{
 					Data: [][]byte{
@@ -187,7 +192,7 @@ func TestWriteConfigBlock(t *testing.T) {
 		})
 	})
 	t.Run("BadChannelHeaderType", func(t *testing.T) {
-		require.Panics(t, func() {
+		assert.Panics(t, func() {
 			(&BlockWriter{}).WriteConfigBlock(&cb.Block{
 				Data: &cb.BlockData{
 					Data: [][]byte{
@@ -219,7 +224,7 @@ func TestGoodWriteConfig(t *testing.T) {
 	fakeConfig.ConsensusTypeReturns("solo")
 
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	mockValidator := &mocks.ConfigTXValidator{}
 	mockValidator.ChannelIDReturns("testchannelid")
@@ -241,15 +246,15 @@ func TestGoodWriteConfig(t *testing.T) {
 
 	// Wait for the commit to complete
 	bw.committingBlock.Lock()
-	bw.committingBlock.Unlock() //lint:ignore SA2001 syncpoint
+	bw.committingBlock.Unlock()
 
 	cBlock := blockledger.GetBlock(l, block.Header.Number)
-	require.Equal(t, block.Header, cBlock.Header)
-	require.Equal(t, block.Data, cBlock.Data)
+	assert.Equal(t, block.Header, cBlock.Header)
+	assert.Equal(t, block.Data, cBlock.Data)
 
 	omd, err := protoutil.GetConsenterMetadataFromBlock(block)
 	require.NoError(t, err)
-	require.Equal(t, consenterMetadata, omd.Value)
+	assert.Equal(t, consenterMetadata, omd.Value)
 }
 
 func TestMigrationWriteConfig(t *testing.T) {
@@ -267,7 +272,7 @@ func TestMigrationWriteConfig(t *testing.T) {
 	fakeConfig.ConsensusStateReturns(orderer.ConsensusType_STATE_MAINTENANCE)
 
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	mockValidator := &mocks.ConfigTXValidator{}
 	mockValidator.ChannelIDReturns("testchannelid")
@@ -290,14 +295,14 @@ func TestMigrationWriteConfig(t *testing.T) {
 
 	// Wait for the commit to complete
 	bw.committingBlock.Lock()
-	bw.committingBlock.Unlock() //lint:ignore SA2001 syncpoint
+	bw.committingBlock.Unlock()
 
 	cBlock := blockledger.GetBlock(l, block.Header.Number)
-	require.Equal(t, block.Header, cBlock.Header)
-	require.Equal(t, block.Data, cBlock.Data)
+	assert.Equal(t, block.Header, cBlock.Header)
+	assert.Equal(t, block.Data, cBlock.Data)
 
 	omd := protoutil.GetMetadataFromBlockOrPanic(block, cb.BlockMetadataIndex_ORDERER)
-	require.Equal(t, []byte(nil), omd.Value)
+	assert.Equal(t, []byte(nil), omd.Value)
 }
 
 func TestRaceWriteConfig(t *testing.T) {
@@ -314,7 +319,7 @@ func TestRaceWriteConfig(t *testing.T) {
 	fakeConfig.ConsensusTypeReturns("solo")
 
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	mockValidator := &mocks.ConfigTXValidator{}
 	bw := newBlockWriter(genesisBlockSys, nil,
@@ -344,39 +349,39 @@ func TestRaceWriteConfig(t *testing.T) {
 
 	// Wait for the commit to complete
 	bw.committingBlock.Lock()
-	bw.committingBlock.Unlock() //lint:ignore SA2001 syncpoint
+	bw.committingBlock.Unlock()
 
 	cBlock := blockledger.GetBlock(l, block1.Header.Number)
-	require.Equal(t, block1.Header, cBlock.Header)
-	require.Equal(t, block1.Data, cBlock.Data)
+	assert.Equal(t, block1.Header, cBlock.Header)
+	assert.Equal(t, block1.Data, cBlock.Data)
 	expectedLastConfigBlockNumber := block1.Header.Number
 	testLastConfigBlockNumber(t, block1, expectedLastConfigBlockNumber)
 
 	cBlock = blockledger.GetBlock(l, block2.Header.Number)
-	require.Equal(t, block2.Header, cBlock.Header)
-	require.Equal(t, block2.Data, cBlock.Data)
+	assert.Equal(t, block2.Header, cBlock.Header)
+	assert.Equal(t, block2.Data, cBlock.Data)
 	expectedLastConfigBlockNumber = block2.Header.Number
 	testLastConfigBlockNumber(t, block2, expectedLastConfigBlockNumber)
 
 	omd, err := protoutil.GetConsenterMetadataFromBlock(block1)
 	require.NoError(t, err)
-	require.Equal(t, consenterMetadata1, omd.Value)
+	assert.Equal(t, consenterMetadata1, omd.Value)
 }
 
 func testLastConfigBlockNumber(t *testing.T, block *cb.Block, expectedBlockNumber uint64) {
 	metadata := &cb.Metadata{}
 	err := proto.Unmarshal(block.Metadata.Metadata[cb.BlockMetadataIndex_SIGNATURES], metadata)
-	require.NoError(t, err, "Block should carry SIGNATURES metadata item")
+	assert.NoError(t, err, "Block should carry SIGNATURES metadata item")
 	obm := &cb.OrdererBlockMetadata{}
 	err = proto.Unmarshal(metadata.Value, obm)
-	require.NoError(t, err, "Block SIGNATURES should carry OrdererBlockMetadata")
-	require.Equal(t, expectedBlockNumber, obm.LastConfig.Index, "SIGNATURES value should point to last config block")
+	assert.NoError(t, err, "Block SIGNATURES should carry OrdererBlockMetadata")
+	assert.Equal(t, expectedBlockNumber, obm.LastConfig.Index, "SIGNATURES value should point to last config block")
 
 	metadata = &cb.Metadata{}
 	err = proto.Unmarshal(block.Metadata.Metadata[cb.BlockMetadataIndex_LAST_CONFIG], metadata)
-	require.NoError(t, err, "Block should carry LAST_CONFIG metadata item")
+	assert.NoError(t, err, "Block should carry LAST_CONFIG metadata item")
 	lastConfig := &cb.LastConfig{}
 	err = proto.Unmarshal(metadata.Value, lastConfig)
-	require.NoError(t, err, "LAST_CONFIG metadata item should carry last config value")
-	require.Equal(t, expectedBlockNumber, lastConfig.Index, "LAST_CONFIG value should point to last config block")
+	assert.NoError(t, err, "LAST_CONFIG metadata item should carry last config value")
+	assert.Equal(t, expectedBlockNumber, lastConfig.Index, "LAST_CONFIG value should point to last config block")
 }

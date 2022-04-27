@@ -14,17 +14,17 @@ import (
 	"syscall"
 
 	docker "github.com/fsouza/go-dockerclient"
-	ab "github.com/hyperledger/fabric-protos-go/orderer"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/integration/nwo"
 	"github.com/hyperledger/fabric/integration/nwo/commands"
+	"github.com/hyperledger/fabric/internal/peer/common"
+	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/protoutil"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gbytes"
 	"github.com/onsi/gomega/gexec"
 	"github.com/tedsuo/ifrit"
-	"google.golang.org/grpc"
 )
 
 var _ = Describe("Release interoperability", func() {
@@ -90,7 +90,7 @@ var _ = Describe("Release interoperability", func() {
 		RunQueryInvokeQuery(network, orderer, "mycc", 90, endorsers...)
 
 		By("restarting the network from persistence")
-		process = RestartNetwork(process, network)
+		RestartNetwork(&process, network)
 
 		By("ensuring that the chaincode is still operational after the upgrade and restart")
 		RunQueryInvokeQuery(network, orderer, "mycc", 80, endorsers...)
@@ -128,7 +128,7 @@ var _ = Describe("Release interoperability", func() {
 		RunQueryInvokeQuery(network, orderer, "mycc", 70, endorsers[0])
 
 		By("restarting the network from persistence")
-		process = RestartNetwork(process, network)
+		RestartNetwork(&process, network)
 
 		By("querying/invoking/querying the chaincode with the new definition again")
 		RunQueryInvokeQuery(network, orderer, "mycc", 60, endorsers[1])
@@ -136,33 +136,27 @@ var _ = Describe("Release interoperability", func() {
 
 	Describe("Interoperability scenarios", func() {
 		var (
-			occ, pcc       *grpc.ClientConn
-			userSigner     *nwo.SigningIdentity
-			endorserClient pb.EndorserClient
-			deliveryClient pb.DeliverClient
-			ordererClient  ab.AtomicBroadcast_BroadcastClient
+			userSigner           msp.SigningIdentity
+			serialisedUserSigner []byte
+			endorserClient       pb.EndorserClient
+			deliveryClient       pb.DeliverClient
+			ordererClient        common.BroadcastClient
 		)
 
 		BeforeEach(func() {
-			userSigner = network.PeerUserSigner(endorsers[0], "User1")
-
-			pcc = network.PeerClientConn(endorsers[0])
-			endorserClient = pb.NewEndorserClient(pcc)
-			deliveryClient = pb.NewDeliverClient(pcc)
-
-			var err error
-			occ = network.OrdererClientConn(orderer)
-			ordererClient, err = ab.NewAtomicBroadcastClient(occ).Broadcast(context.Background())
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		AfterEach(func() {
-			if occ != nil {
-				occ.Close()
-			}
-			if pcc != nil {
-				pcc.Close()
-			}
+			userSigner, serialisedUserSigner = Signer(network.PeerUserMSPDir(endorsers[0], "User1"))
+			endorserClient = EndorserClient(
+				network.PeerAddress(endorsers[0], nwo.ListenPort),
+				filepath.Join(network.PeerLocalTLSDir(endorsers[0]), "ca.crt"),
+			)
+			deliveryClient = DeliverClient(
+				network.PeerAddress(endorsers[0], nwo.ListenPort),
+				filepath.Join(network.PeerLocalTLSDir(endorsers[0]), "ca.crt"),
+			)
+			ordererClient = OrdererClient(
+				network.OrdererAddress(orderer, nwo.ListenPort),
+				filepath.Join(network.OrdererLocalTLSDir(orderer), "ca.crt"),
+			)
 		})
 
 		It("deploys a chaincode with the legacy lifecycle, invokes it and the tx is committed only after the chaincode is upgraded via _lifecycle", func() {
@@ -184,6 +178,7 @@ var _ = Describe("Release interoperability", func() {
 				"testchannel",
 				"mycc",
 				userSigner,
+				serialisedUserSigner,
 				"invoke",
 				"a",
 				"b",
@@ -246,6 +241,7 @@ var _ = Describe("Release interoperability", func() {
 				"testchannel",
 				"mycc",
 				userSigner,
+				serialisedUserSigner,
 				"invoke",
 				"a",
 				"b",
@@ -337,6 +333,7 @@ var _ = Describe("Release interoperability", func() {
 					"testchannel",
 					"caller",
 					userSigner,
+					serialisedUserSigner,
 					"INVOKE",
 					"callee",
 				)
@@ -439,6 +436,7 @@ var _ = Describe("Release interoperability", func() {
 						"testchannel",
 						"caller",
 						userSigner,
+						serialisedUserSigner,
 						"INVOKE",
 						"callee",
 					)
@@ -481,6 +479,7 @@ var _ = Describe("Release interoperability", func() {
 						"testchannel",
 						"caller",
 						userSigner,
+						serialisedUserSigner,
 						"INVOKE",
 						"callee",
 					)
@@ -528,6 +527,7 @@ var _ = Describe("Release interoperability", func() {
 						"testchannel",
 						"caller",
 						userSigner,
+						serialisedUserSigner,
 						"INVOKE",
 						"callee",
 					)
@@ -591,6 +591,7 @@ var _ = Describe("Release interoperability", func() {
 						"testchannel",
 						"caller",
 						userSigner,
+						serialisedUserSigner,
 						"INVOKE",
 						"callee",
 					)
@@ -636,6 +637,7 @@ var _ = Describe("Release interoperability", func() {
 						"testchannel",
 						"caller",
 						userSigner,
+						serialisedUserSigner,
 						"INVOKE",
 						"callee",
 					)
@@ -678,6 +680,7 @@ var _ = Describe("Release interoperability", func() {
 						"testchannel",
 						"caller",
 						userSigner,
+						serialisedUserSigner,
 						"INVOKE",
 						"callee",
 					)
@@ -723,6 +726,7 @@ var _ = Describe("Release interoperability", func() {
 						"testchannel",
 						"caller",
 						userSigner,
+						serialisedUserSigner,
 						"INVOKE",
 						"callee",
 					)

@@ -102,9 +102,10 @@ func (provider *storeProvider) Close() {
 // in the transient store based on txid and the block height the private data was received at
 func (s *Store) Persist(txid string, blockHeight uint64,
 	privateSimulationResultsWithConfig *transientstore.TxPvtReadWriteSetWithConfigInfo) error {
+
 	logger.Debugf("Persisting private data to transient store for txid [%s] at block height [%d]", txid, blockHeight)
 
-	dbBatch := s.db.NewUpdateBatch()
+	dbBatch := leveldbhelper.NewUpdateBatch()
 
 	// Create compositeKey with appropriate prefix, txid, uuid and blockHeight
 	// Due to the fact that the txid may have multiple private write sets persisted from different
@@ -153,16 +154,14 @@ func (s *Store) Persist(txid string, blockHeight uint64,
 // GetTxPvtRWSetByTxid returns an iterator due to the fact that the txid may have multiple private
 // write sets persisted from different endorsers.
 func (s *Store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) (RWSetScanner, error) {
+
 	logger.Debugf("Getting private data from transient store for transaction %s", txid)
 
 	// Construct startKey and endKey to do an range query
 	startKey := createTxidRangeStartKey(txid)
 	endKey := createTxidRangeEndKey(txid)
 
-	iter, err := s.db.GetIterator(startKey, endKey)
-	if err != nil {
-		return nil, err
-	}
+	iter := s.db.GetIterator(startKey, endKey)
 	return &RwsetScanner{txid, iter, filter}, nil
 }
 
@@ -170,19 +169,17 @@ func (s *Store) GetTxPvtRWSetByTxid(txid string, filter ledger.PvtNsCollFilter) 
 // transient store. PurgeByTxids() is expected to be called by coordinator after
 // committing a block to ledger.
 func (s *Store) PurgeByTxids(txids []string) error {
+
 	logger.Debug("Purging private data from transient store for committed txids")
 
-	dbBatch := s.db.NewUpdateBatch()
+	dbBatch := leveldbhelper.NewUpdateBatch()
 
 	for _, txid := range txids {
 		// Construct startKey and endKey to do an range query
 		startKey := createPurgeIndexByTxidRangeStartKey(txid)
 		endKey := createPurgeIndexByTxidRangeEndKey(txid)
 
-		iter, err := s.db.GetIterator(startKey, endKey)
-		if err != nil {
-			return err
-		}
+		iter := s.db.GetIterator(startKey, endKey)
 
 		// Get all txid and uuid from above result and remove it from transient store (both
 		// write set and the corresponding indexes.
@@ -221,17 +218,15 @@ func (s *Store) PurgeByTxids(txids []string) error {
 // after successful block commit, PurgeBelowHeight() is still required to remove orphan entries (as
 // transaction that gets endorsed may not be submitted by the client for commit)
 func (s *Store) PurgeBelowHeight(maxBlockNumToRetain uint64) error {
+
 	logger.Debugf("Purging orphaned private data from transient store received prior to block [%d]", maxBlockNumToRetain)
 
 	// Do a range query with 0 as startKey and maxBlockNumToRetain-1 as endKey
 	startKey := createPurgeIndexByHeightRangeStartKey(0)
 	endKey := createPurgeIndexByHeightRangeEndKey(maxBlockNumToRetain - 1)
-	iter, err := s.db.GetIterator(startKey, endKey)
-	if err != nil {
-		return err
-	}
+	iter := s.db.GetIterator(startKey, endKey)
 
-	dbBatch := s.db.NewUpdateBatch()
+	dbBatch := leveldbhelper.NewUpdateBatch()
 
 	// Get all txid and uuid from above result and remove it from transient store (both
 	// write set and the corresponding index.
@@ -268,10 +263,7 @@ func (s *Store) GetMinTransientBlkHt() (uint64, error) {
 	// the lowest block height remaining in transient store. An alternative approach
 	// is to explicitly store the minBlockHeight in the transientStore.
 	startKey := createPurgeIndexByHeightRangeStartKey(0)
-	iter, err := s.db.GetIterator(startKey, nil)
-	if err != nil {
-		return 0, err
-	}
+	iter := s.db.GetIterator(startKey, nil)
 	defer iter.Release()
 	// Fetch the minimum transient block height
 	if iter.Next() {
@@ -303,17 +295,15 @@ func (scanner *RwsetScanner) Next() (*EndorserPvtSimulationResults, error) {
 	}
 
 	txPvtRWSet := &rwset.TxPvtReadWriteSet{}
+	var filteredTxPvtRWSet *rwset.TxPvtReadWriteSet = nil
 	txPvtRWSetWithConfig := &transientstore.TxPvtReadWriteSetWithConfigInfo{}
 
-	var filteredTxPvtRWSet *rwset.TxPvtReadWriteSet
 	if dbVal[0] == nilByte {
 		// new proto, i.e., TxPvtReadWriteSetWithConfigInfo
 		if err := proto.Unmarshal(dbVal[1:], txPvtRWSetWithConfig); err != nil {
 			return nil, err
 		}
 
-		// trim the tx rwset based on the current collection filter,
-		// nil will be returned to filteredTxPvtRWSet if the transient store txid entry does not contain the data for the collection
 		filteredTxPvtRWSet = trimPvtWSet(txPvtRWSetWithConfig.GetPvtRwset(), scanner.filter)
 		configs, err := trimPvtCollectionConfigs(txPvtRWSetWithConfig.CollectionConfigs, scanner.filter)
 		if err != nil {

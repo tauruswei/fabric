@@ -28,8 +28,8 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	fake "github.com/hyperledger/fabric/core/peer/mock"
 	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/metadata"
 	peer2 "google.golang.org/grpc/peer"
 )
@@ -77,6 +77,7 @@ func (m *mockIterator) ReadyChan() <-chan struct{} {
 }
 
 func (m *mockIterator) Close() {
+
 }
 
 // mockReader mock structure implementing
@@ -178,7 +179,7 @@ type testConfig struct {
 	chaincodeName string
 	txID          string
 	payload       *common.Payload
-	*require.Assertions
+	*assert.Assertions
 }
 
 type testCase struct {
@@ -189,8 +190,8 @@ type testCase struct {
 func TestFilteredBlockResponseSenderIsFiltered(t *testing.T) {
 	var fbrs interface{} = &filteredBlockResponseSender{}
 	filtered, ok := fbrs.(deliver.Filtered)
-	require.True(t, ok, "should be filtered")
-	require.True(t, filtered.IsFiltered(), "should return true from IsFiltered")
+	assert.True(t, ok, "should be filtered")
+	assert.True(t, filtered.IsFiltered(), "should return true from IsFiltered")
 }
 
 func TestEventsServer_DeliverFiltered(t *testing.T) {
@@ -268,7 +269,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
 					}),
 				},
-				Assertions: require.New(t),
+				Assertions: assert.New(t),
 			}),
 		},
 		{
@@ -341,7 +342,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
 					}),
 				},
-				Assertions: require.New(t),
+				Assertions: assert.New(t),
 			}),
 		},
 		{
@@ -395,7 +396,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
 					}),
 				},
-				Assertions: require.New(t),
+				Assertions: assert.New(t),
 			}),
 		},
 	}
@@ -413,7 +414,7 @@ func TestEventsServer_DeliverFiltered(t *testing.T) {
 			err := server.DeliverFiltered(deliverServer)
 			wg.Wait()
 			// no error expected
-			require.NoError(t, err)
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -503,7 +504,7 @@ func TestEventsServer_DeliverWithPrivateData(t *testing.T) {
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
 					}),
 				},
-				Assertions: require.New(t),
+				Assertions: assert.New(t),
 			}),
 		},
 		{
@@ -552,7 +553,7 @@ func TestEventsServer_DeliverWithPrivateData(t *testing.T) {
 						Behavior: orderer.SeekInfo_BLOCK_UNTIL_READY,
 					}),
 				},
-				Assertions: require.New(t),
+				Assertions: assert.New(t),
 			}),
 		},
 	}
@@ -573,7 +574,7 @@ func TestEventsServer_DeliverWithPrivateData(t *testing.T) {
 			err := server.DeliverWithPrivateData(deliverServer)
 			wg.Wait()
 			// no error expected
-			require.NoError(t, err)
+			assert.NoError(t, err)
 		})
 	}
 }
@@ -593,8 +594,7 @@ func createDefaultSupportMamangerMock(config testConfig, chaincodeActionPayload 
 
 	block, err := createTestBlock([]*common.Envelope{{
 		Payload:   payloadBytes,
-		Signature: []byte{},
-	}})
+		Signature: []byte{}}})
 	config.NoError(err)
 
 	iter.On("Next").Return(block, common.Status_SUCCESS)

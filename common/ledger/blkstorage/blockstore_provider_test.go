@@ -16,6 +16,7 @@ import (
 	"github.com/hyperledger/fabric/common/ledger/testutil"
 	"github.com/hyperledger/fabric/internal/pkg/txflags"
 	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,10 +28,10 @@ func TestIndexConfig(t *testing.T) {
 		},
 	}
 
-	require := require.New(t)
-	require.True(ic.Contains(IndexableAttrBlockNum))
-	require.True(ic.Contains(IndexableAttrTxID))
-	require.False(ic.Contains(IndexableAttrBlockNumTranNum))
+	assert := assert.New(t)
+	assert.True(ic.Contains(IndexableAttrBlockNum))
+	assert.True(ic.Contains(IndexableAttrTxID))
+	assert.False(ic.Contains(IndexableAttrBlockNumTranNum))
 }
 
 func TestMultipleBlockStores(t *testing.T) {
@@ -52,9 +53,17 @@ func TestMultipleBlockStores(t *testing.T) {
 	require.NoError(t, err)
 	defer store2.Shutdown()
 
-	blocks1 := addBlocksToStore(t, store1, 5)
-	blocks2 := addBlocksToStore(t, store2, 10)
+	blocks1 := testutil.ConstructTestBlocks(t, 5)
+	for _, b := range blocks1 {
+		err := store1.AddBlock(b)
+		require.NoError(t, err)
+	}
 
+	blocks2 := testutil.ConstructTestBlocks(t, 10)
+	for _, b := range blocks2 {
+		err := store2.AddBlock(b)
+		require.NoError(t, err)
+	}
 	checkBlocks(t, blocks1, store1)
 	checkBlocks(t, blocks2, store2)
 	checkWithWrongInputs(t, store1, 5)
@@ -86,77 +95,68 @@ func TestMultipleBlockStores(t *testing.T) {
 	checkWithWrongInputs(t, newstore2, 10)
 }
 
-func addBlocksToStore(t *testing.T, store *BlockStore, numBlocks int) []*common.Block {
-	blocks := testutil.ConstructTestBlocks(t, numBlocks)
-	for _, b := range blocks {
-		err := store.AddBlock(b)
-		require.NoError(t, err)
-	}
-	return blocks
-}
-
 func checkBlocks(t *testing.T, expectedBlocks []*common.Block, store *BlockStore) {
 	bcInfo, _ := store.GetBlockchainInfo()
-	require.Equal(t, uint64(len(expectedBlocks)), bcInfo.Height)
-	require.Equal(t, protoutil.BlockHeaderHash(expectedBlocks[len(expectedBlocks)-1].GetHeader()), bcInfo.CurrentBlockHash)
+	assert.Equal(t, uint64(len(expectedBlocks)), bcInfo.Height)
+	assert.Equal(t, protoutil.BlockHeaderHash(expectedBlocks[len(expectedBlocks)-1].GetHeader()), bcInfo.CurrentBlockHash)
 
 	itr, _ := store.RetrieveBlocks(0)
 	for i := 0; i < len(expectedBlocks); i++ {
 		block, _ := itr.Next()
-		require.Equal(t, expectedBlocks[i], block)
+		assert.Equal(t, expectedBlocks[i], block)
 	}
 
 	for blockNum := 0; blockNum < len(expectedBlocks); blockNum++ {
 		block := expectedBlocks[blockNum]
 		flags := txflags.ValidationFlags(block.Metadata.Metadata[common.BlockMetadataIndex_TRANSACTIONS_FILTER])
 		retrievedBlock, _ := store.RetrieveBlockByNumber(uint64(blockNum))
-		require.Equal(t, block, retrievedBlock)
+		assert.Equal(t, block, retrievedBlock)
 
 		retrievedBlock, _ = store.RetrieveBlockByHash(protoutil.BlockHeaderHash(block.Header))
-		require.Equal(t, block, retrievedBlock)
+		assert.Equal(t, block, retrievedBlock)
 
 		for txNum := 0; txNum < len(block.Data.Data); txNum++ {
 			txEnvBytes := block.Data.Data[txNum]
 			txEnv, _ := protoutil.GetEnvelopeFromBlock(txEnvBytes)
 			txid, err := protoutil.GetOrComputeTxIDFromEnvelope(txEnvBytes)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 
 			retrievedBlock, _ := store.RetrieveBlockByTxID(txid)
-			require.Equal(t, block, retrievedBlock)
+			assert.Equal(t, block, retrievedBlock)
 
 			retrievedTxEnv, _ := store.RetrieveTxByID(txid)
-			require.Equal(t, txEnv, retrievedTxEnv)
+			assert.Equal(t, txEnv, retrievedTxEnv)
 
 			retrievedTxEnv, _ = store.RetrieveTxByBlockNumTranNum(uint64(blockNum), uint64(txNum))
-			require.Equal(t, txEnv, retrievedTxEnv)
+			assert.Equal(t, txEnv, retrievedTxEnv)
 
 			retrievedTxValCode, err := store.RetrieveTxValidationCodeByTxID(txid)
-			require.NoError(t, err)
-			require.Equal(t, flags.Flag(txNum), retrievedTxValCode)
+			assert.NoError(t, err)
+			assert.Equal(t, flags.Flag(txNum), retrievedTxValCode)
 		}
 	}
 }
 
 func checkWithWrongInputs(t *testing.T, store *BlockStore, numBlocks int) {
 	block, err := store.RetrieveBlockByHash([]byte("non-existent-hash"))
-	require.Nil(t, block)
-	require.EqualError(t, err, fmt.Sprintf("no such block hash [%x] in index", []byte("non-existent-hash")))
+	assert.Nil(t, block)
+	assert.Equal(t, ErrNotFoundInIndex, err)
 
 	block, err = store.RetrieveBlockByTxID("non-existent-txid")
-	require.Nil(t, block)
-	require.EqualError(t, err, "no such transaction ID [non-existent-txid] in index")
+	assert.Nil(t, block)
+	assert.Equal(t, ErrNotFoundInIndex, err)
 
 	tx, err := store.RetrieveTxByID("non-existent-txid")
-	require.Nil(t, tx)
-	require.EqualError(t, err, "no such transaction ID [non-existent-txid] in index")
+	assert.Nil(t, tx)
+	assert.Equal(t, ErrNotFoundInIndex, err)
 
 	tx, err = store.RetrieveTxByBlockNumTranNum(uint64(numBlocks+1), uint64(0))
-	require.Nil(t, tx)
-	require.EqualError(t, err, fmt.Sprintf("no such blockNumber, transactionNumber <%d, 0> in index", numBlocks+1))
+	assert.Nil(t, tx)
+	assert.Equal(t, ErrNotFoundInIndex, err)
 
 	txCode, err := store.RetrieveTxValidationCodeByTxID("non-existent-txid")
-	require.Equal(t, peer.TxValidationCode(-1), txCode)
-	require.EqualError(t, err, "no such transaction ID [non-existent-txid] in index")
+	assert.Equal(t, peer.TxValidationCode(-1), txCode)
+	assert.Equal(t, ErrNotFoundInIndex, err)
 }
 
 func TestBlockStoreProvider(t *testing.T) {
@@ -165,8 +165,8 @@ func TestBlockStoreProvider(t *testing.T) {
 
 	provider := env.provider
 	storeNames, err := provider.List()
-	require.NoError(t, err)
-	require.Empty(t, storeNames)
+	assert.NoError(t, err)
+	assert.Empty(t, storeNames)
 
 	var stores []*BlockStore
 	numStores := 10
@@ -175,74 +175,22 @@ func TestBlockStoreProvider(t *testing.T) {
 		defer store.Shutdown()
 		stores = append(stores, store)
 	}
-	require.Equal(t, numStores, len(stores))
+	assert.Equal(t, numStores, len(stores))
 
 	storeNames, err = provider.List()
-	require.NoError(t, err)
-	require.Equal(t, numStores, len(storeNames))
+	assert.NoError(t, err)
+	assert.Equal(t, numStores, len(storeNames))
 
 	for i := 0; i < numStores; i++ {
 		exists, err := provider.Exists(constructLedgerid(i))
-		require.NoError(t, err)
-		require.Equal(t, true, exists)
+		assert.NoError(t, err)
+		assert.Equal(t, true, exists)
 	}
 
 	exists, err := provider.Exists(constructLedgerid(numStores + 1))
-	require.NoError(t, err)
-	require.Equal(t, false, exists)
-}
+	assert.NoError(t, err)
+	assert.Equal(t, false, exists)
 
-func TestDrop(t *testing.T) {
-	env := newTestEnv(t, NewConf(testPath(), 0))
-	defer env.Cleanup()
-
-	provider := env.provider
-	store1, err := provider.Open("ledger1")
-	require.NoError(t, err)
-	defer store1.Shutdown()
-	store2, err := provider.Open("ledger2")
-	require.NoError(t, err)
-	defer store2.Shutdown()
-
-	blocks1 := addBlocksToStore(t, store1, 5)
-	blocks2 := addBlocksToStore(t, store2, 10)
-
-	checkBlocks(t, blocks1, store1)
-	checkBlocks(t, blocks2, store2)
-	storeNames, err := provider.List()
-	require.NoError(t, err)
-	require.ElementsMatch(t, storeNames, []string{"ledger1", "ledger2"})
-
-	require.NoError(t, provider.Drop("ledger1"))
-
-	// verify ledger1 block dir and block indexes are deleted
-	exists, err := provider.Exists("ledger1")
-	require.NoError(t, err)
-	require.False(t, exists)
-
-	empty, err := provider.leveldbProvider.GetDBHandle("ledger1").IsEmpty()
-	require.NoError(t, err)
-	require.True(t, empty)
-
-	// verify ledger2 ledger data are remained same
-	checkBlocks(t, blocks2, store2)
-	storeNames, err = provider.List()
-	require.NoError(t, err)
-	require.ElementsMatch(t, storeNames, []string{"ledger2"})
-
-	// drop again should return no error
-	require.NoError(t, provider.Drop("ledger1"))
-
-	// verify "ledger1" store can be opened again after remove, but it is an empty store
-	newstore1, err := provider.Open("ledger1")
-	require.NoError(t, err)
-	bcInfo, err := newstore1.GetBlockchainInfo()
-	require.NoError(t, err)
-	require.Equal(t, &common.BlockchainInfo{}, bcInfo)
-
-	// negative test
-	provider.Close()
-	require.EqualError(t, provider.Drop("ledger2"), "internal leveldb error while obtaining db iterator: leveldb: closed")
 }
 
 func constructLedgerid(id int) string {

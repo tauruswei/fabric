@@ -15,7 +15,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hyperledger/fabric/core/ledger/internal/version"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRedoLogger(t *testing.T) {
@@ -28,8 +28,8 @@ func TestRedoLogger(t *testing.T) {
 	verifyLogRecords := func() {
 		for i := 0; i < len(loggers); i++ {
 			retrievedRec, err := loggers[i].load()
-			require.NoError(t, err)
-			require.Equal(t, records[i], retrievedRec)
+			assert.NoError(t, err)
+			assert.Equal(t, records[i], retrievedRec)
 		}
 	}
 
@@ -37,8 +37,8 @@ func TestRedoLogger(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		logger := provider.newRedoLogger(fmt.Sprintf("channel-%d", i))
 		rec, err := logger.load()
-		require.NoError(t, err)
-		require.Nil(t, rec)
+		assert.NoError(t, err)
+		assert.Nil(t, rec)
 		loggers = append(loggers, logger)
 		batch := statedb.NewUpdateBatch()
 		blkNum := uint64(i)
@@ -51,14 +51,14 @@ func TestRedoLogger(t *testing.T) {
 			Version:     version.NewHeight(blkNum, 10),
 		}
 		records = append(records, rec)
-		require.NoError(t, logger.persist(rec))
+		assert.NoError(t, logger.persist(rec))
 	}
 
 	verifyLogRecords()
 	// overwrite logrecord for one channel
 	records[5].UpdateBatch = statedb.NewUpdateBatch()
 	records[5].Version = version.NewHeight(5, 5)
-	require.NoError(t, loggers[5].persist(records[5]))
+	assert.NoError(t, loggers[5].persist(records[5]))
 	verifyLogRecords()
 }
 
@@ -70,10 +70,10 @@ func TestCouchdbRedoLogger(t *testing.T) {
 	commitToRedologAndRestart := func(newVal string, version *version.Height) {
 		batch := statedb.NewUpdateBatch()
 		batch.Put("ns1", "key1", []byte(newVal), version)
-		db, err := vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger", nil)
-		require.NoError(t, err)
+		db, err := vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger")
+		assert.NoError(t, err)
 		vdb := db.(*VersionedDB)
-		require.NoError(t,
+		assert.NoError(t,
 			vdb.redoLogger.persist(
 				&redoRecord{
 					UpdateBatch: batch,
@@ -85,26 +85,26 @@ func TestCouchdbRedoLogger(t *testing.T) {
 	}
 	// verifyExpectedVal - a helper function that verifies the statedb contents
 	verifyExpectedVal := func(expectedVal string, expectedSavepoint *version.Height) {
-		db, err := vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger", nil)
-		require.NoError(t, err)
+		db, err := vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger")
+		assert.NoError(t, err)
 		vdb := db.(*VersionedDB)
 		vv, err := vdb.GetState("ns1", "key1")
-		require.NoError(t, err)
-		require.Equal(t, expectedVal, string(vv.Value))
+		assert.NoError(t, err)
+		assert.Equal(t, expectedVal, string(vv.Value))
 		savepoint, err := vdb.GetLatestSavePoint()
-		require.NoError(t, err)
-		require.Equal(t, expectedSavepoint, savepoint)
+		assert.NoError(t, err)
+		assert.Equal(t, expectedSavepoint, savepoint)
 	}
 
 	// initialize statedb with initial set of writes
-	db, err := vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger", nil)
+	db, err := vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger")
 	if err != nil {
 		t.Fatalf("Failed to get database handle: %s", err)
 	}
 	vdb := db.(*VersionedDB)
 	batch1 := statedb.NewUpdateBatch()
 	batch1.Put("ns1", "key1", []byte("value1"), version.NewHeight(1, 1))
-	require.NoError(t, vdb.ApplyUpdates(batch1, version.NewHeight(1, 1)))
+	vdb.ApplyUpdates(batch1, version.NewHeight(1, 1))
 
 	// make redolog one block ahead than statedb - upon restart the redolog should get applied
 	commitToRedologAndRestart("value2", version.NewHeight(2, 1))
@@ -119,35 +119,35 @@ func TestCouchdbRedoLogger(t *testing.T) {
 	verifyExpectedVal("value2", version.NewHeight(2, 1))
 
 	// A nil height should cause skipping the writing of redo-record
-	db, _ = vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger", nil)
+	db, _ = vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger")
 	vdb = db.(*VersionedDB)
-	require.NoError(t, vdb.ApplyUpdates(batch1, nil))
+	vdb.ApplyUpdates(batch1, nil)
 	record, err := vdb.redoLogger.load()
-	require.NoError(t, err)
-	require.Equal(t, version.NewHeight(1, 5), record.Version)
-	require.Equal(t, []byte("value3"), record.UpdateBatch.Get("ns1", "key1").Value)
+	assert.NoError(t, err)
+	assert.Equal(t, version.NewHeight(1, 5), record.Version)
+	assert.Equal(t, []byte("value3"), record.UpdateBatch.Get("ns1", "key1").Value)
 
 	// A batch that does not contain PostOrderWrites should cause skipping the writing of redo-record
-	db, _ = vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger", nil)
+	db, _ = vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger")
 	vdb = db.(*VersionedDB)
 	batchWithNoGeneratedWrites := batch1
 	batchWithNoGeneratedWrites.ContainsPostOrderWrites = false
-	require.NoError(t, vdb.ApplyUpdates(batchWithNoGeneratedWrites, version.NewHeight(2, 5)))
+	vdb.ApplyUpdates(batchWithNoGeneratedWrites, version.NewHeight(2, 5))
 	record, err = vdb.redoLogger.load()
-	require.NoError(t, err)
-	require.Equal(t, version.NewHeight(1, 5), record.Version)
-	require.Equal(t, []byte("value3"), record.UpdateBatch.Get("ns1", "key1").Value)
+	assert.NoError(t, err)
+	assert.Equal(t, version.NewHeight(1, 5), record.Version)
+	assert.Equal(t, []byte("value3"), record.UpdateBatch.Get("ns1", "key1").Value)
 
 	// A batch that contains PostOrderWrites should cause writing of redo-record
-	db, _ = vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger", nil)
+	db, _ = vdbEnv.DBProvider.GetDBHandle("testcouchdbredologger")
 	vdb = db.(*VersionedDB)
 	batchWithGeneratedWrites := batch1
 	batchWithGeneratedWrites.ContainsPostOrderWrites = true
-	require.NoError(t, vdb.ApplyUpdates(batchWithNoGeneratedWrites, version.NewHeight(3, 4)))
+	vdb.ApplyUpdates(batchWithNoGeneratedWrites, version.NewHeight(3, 4))
 	record, err = vdb.redoLogger.load()
-	require.NoError(t, err)
-	require.Equal(t, version.NewHeight(3, 4), record.Version)
-	require.Equal(t, []byte("value1"), record.UpdateBatch.Get("ns1", "key1").Value)
+	assert.NoError(t, err)
+	assert.Equal(t, version.NewHeight(3, 4), record.Version)
+	assert.Equal(t, []byte("value1"), record.UpdateBatch.Get("ns1", "key1").Value)
 }
 
 func redologTestSetup(t *testing.T) (p *redoLoggerProvider, cleanup func()) {
@@ -156,21 +156,36 @@ func redologTestSetup(t *testing.T) (p *redoLoggerProvider, cleanup func()) {
 		t.Fatalf("Failed to create redo log directory: %s", err)
 	}
 	p, err = newRedoLoggerProvider(dbPath)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	cleanup = func() {
 		p.close()
-		require.NoError(t, os.RemoveAll(dbPath))
+		assert.NoError(t, os.RemoveAll(dbPath))
 	}
 	return
 }
 
+// testGenerareRedoRecord is the code that generates a serialized redo record into a
+// file based on the current version of the code, so that the file with serialized data
+// can get checked into source control. The following test function
+// 'TestReadExistingRedoRecord' verifies data compatibility in later builds/releases.
+// Specifically, it verifies that the changes in the struct statedb.NewUpdateBatch
+// are compatible such that the redo records persisted from the earlier commit/release
+// can still be deserialized on later commits/releases.
+// In order to generate this serialized record, change this function name to start with
+// uppercase "T" so that execution of go test will generate the test file.
+func testGenerareRedoRecord(t *testing.T) {
+	val, err := encodeRedologVal(constructSampleRedoRecord())
+	assert.NoError(t, err)
+	assert.NoError(t, ioutil.WriteFile("testdata/persisted_redo_record", val, 0644))
+}
+
 func TestReadExistingRedoRecord(t *testing.T) {
 	b, err := ioutil.ReadFile("testdata/persisted_redo_record")
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	rec, err := decodeRedologVal(b)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	t.Logf("rec = %s", spew.Sdump(rec))
-	require.Equal(t, constructSampleRedoRecord(), rec)
+	assert.Equal(t, constructSampleRedoRecord(), rec)
 }
 
 func constructSampleRedoRecord() *redoRecord {

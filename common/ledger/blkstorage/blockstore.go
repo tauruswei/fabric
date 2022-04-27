@@ -7,12 +7,12 @@ SPDX-License-Identifier: Apache-2.0
 package blkstorage
 
 import (
+	"hash"
 	"time"
 
 	"github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/common/ledger"
-	"github.com/hyperledger/fabric/common/ledger/snapshot"
 	"github.com/hyperledger/fabric/common/ledger/util/leveldbhelper"
 )
 
@@ -26,18 +26,15 @@ type BlockStore struct {
 
 // newBlockStore constructs a `BlockStore`
 func newBlockStore(id string, conf *Conf, indexConfig *IndexConfig,
-	dbHandle *leveldbhelper.DBHandle, stats *stats) (*BlockStore, error) {
-	fileMgr, err := newBlockfileMgr(id, conf, indexConfig, dbHandle)
-	if err != nil {
-		return nil, err
-	}
+	dbHandle *leveldbhelper.DBHandle, stats *stats) *BlockStore {
+	fileMgr := newBlockfileMgr(id, conf, indexConfig, dbHandle)
 
 	// create ledgerStats and initialize blockchain_height stat
 	ledgerStats := stats.ledgerStats(id)
 	info := fileMgr.getBlockchainInfo()
 	ledgerStats.updateBlockchainHeight(info.Height)
 
-	return &BlockStore{id, conf, fileMgr, ledgerStats}, nil
+	return &BlockStore{id, conf, fileMgr, ledgerStats}
 }
 
 // AddBlock adds a new block
@@ -72,11 +69,6 @@ func (store *BlockStore) RetrieveBlockByNumber(blockNum uint64) (*common.Block, 
 	return store.fileMgr.retrieveBlockByNumber(blockNum)
 }
 
-// TxIDExists returns true if a transaction with the txID is ever committed
-func (store *BlockStore) TxIDExists(txID string) (bool, error) {
-	return store.fileMgr.txIDExists(txID)
-}
-
 // RetrieveTxByID returns a transaction for given transaction id
 func (store *BlockStore) RetrieveTxByID(txID string) (*common.Envelope, error) {
 	return store.fileMgr.retrieveTransactionByID(txID)
@@ -101,8 +93,8 @@ func (store *BlockStore) RetrieveTxValidationCodeByTxID(txID string) (peer.TxVal
 // the mapping between the names of the files and their hashes.
 // Technically, the TxIDs appear in the sort order of radix-sort/shortlex. However,
 // since practically all the TxIDs are of same length, so the sort order would be the lexical sort order
-func (store *BlockStore) ExportTxIds(dir string, newHashFunc snapshot.NewHashFunc) (map[string][]byte, error) {
-	return store.fileMgr.index.exportUniqueTxIDs(dir, newHashFunc)
+func (store *BlockStore) ExportTxIds(dir string, hasher hash.Hash) (map[string][]byte, error) {
+	return store.fileMgr.index.exportUniqueTxIDs(dir, hasher)
 }
 
 // Shutdown shuts down the block store

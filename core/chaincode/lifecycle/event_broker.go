@@ -35,45 +35,7 @@ func NewEventBroker(chaincodeStore ChaincodeStore, pkgParser PackageParser, ebMe
 	}
 }
 
-func (b *EventBroker) RegisterListener(
-	channelID string,
-	listener ledger.ChaincodeLifecycleEventListener,
-	existingCachedChaincodes map[string]*CachedChaincodeDefinition) {
-	// when invoking chaincode event listener with existing invocable chaincodes, we logs
-	// errors instead of returning the error from this function to keep the consustent behavior
-	// similar to the code path when we invoke the listener later on as a response to the chaincode
-	// lifecycle events. See other functions below for details on this behavior.
-	for chaincodeName, cachedChaincode := range existingCachedChaincodes {
-		if !isChaincodeInvocable(cachedChaincode) {
-			continue
-		}
-
-		dbArtifacts, err := b.loadDBArtifacts(cachedChaincode.InstallInfo.PackageID)
-		if err != nil {
-			logger.Errorw(
-				"error while loading db artifacts for chaincode package. Continuing...",
-				"packageID", cachedChaincode.InstallInfo.PackageID,
-				"error", err,
-			)
-			continue
-		}
-		legacyDefinition := &ledger.ChaincodeDefinition{
-			Name:              chaincodeName,
-			Version:           cachedChaincode.Definition.EndorsementInfo.Version,
-			Hash:              []byte(cachedChaincode.InstallInfo.PackageID),
-			CollectionConfigs: cachedChaincode.Definition.Collections,
-		}
-
-		if err := listener.HandleChaincodeDeploy(legacyDefinition, dbArtifacts); err != nil {
-			logger.Errorw(
-				"error while invoking chaincode lifecycle events listener. Continuing...",
-				"packageID", cachedChaincode.InstallInfo.PackageID,
-				"error", err,
-			)
-		}
-		listener.ChaincodeDeployDone(true)
-	}
-
+func (b *EventBroker) RegisterListener(channelID string, listener ledger.ChaincodeLifecycleEventListener) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 	b.listeners[channelID] = append(b.listeners[channelID], listener)
@@ -91,7 +53,7 @@ func (b *EventBroker) ProcessInstallEvent(localChaincode *LocalChaincode) {
 	for channelID, channelCache := range localChaincode.References {
 		listenersInvokedOnChannel := false
 		for chaincodeName, cachedChaincode := range channelCache {
-			if !isChaincodeInvocable(cachedChaincode) {
+			if !isChaincodeInvokable(cachedChaincode) {
 				continue
 			}
 			ccdef := &ledger.ChaincodeDefinition{
@@ -116,6 +78,7 @@ func (b *EventBroker) ProcessInstallEvent(localChaincode *LocalChaincode) {
 			b.invokeDoneOnListeners(channelID, true)
 		}
 	}
+	return
 }
 
 // ProcessApproveOrDefineEvent gets invoked by an event that makes approve and define to be true
@@ -124,7 +87,7 @@ func (b *EventBroker) ProcessInstallEvent(localChaincode *LocalChaincode) {
 // invokes this function when approve and define both become true.
 func (b *EventBroker) ProcessApproveOrDefineEvent(channelID string, chaincodeName string, cachedChaincode *CachedChaincodeDefinition) {
 	logger.Debugw("processApproveOrDefineEvent()", "channelID", channelID, "chaincodeName", chaincodeName, "cachedChaincode", cachedChaincode)
-	if !isChaincodeInvocable(cachedChaincode) {
+	if !isChaincodeInvokable(cachedChaincode) {
 		return
 	}
 	dbArtifacts, err := b.loadDBArtifacts(cachedChaincode.InstallInfo.PackageID)
@@ -141,6 +104,7 @@ func (b *EventBroker) ProcessApproveOrDefineEvent(channelID string, chaincodeNam
 	}
 	b.invokeListeners(channelID, ccdef, dbArtifacts)
 	b.defineCallbackStatus.Store(channelID, struct{}{})
+	return
 }
 
 // ApproveOrDefineCommitted gets invoked after the commit of state updates that triggered the invocation of
@@ -214,7 +178,7 @@ func (b *EventBroker) loadDBArtifacts(packageID string) ([]byte, error) {
 	return pkg.DBArtifacts, nil
 }
 
-// isChaincodeInvocable returns true iff a chaincode is approved and installed and defined
-func isChaincodeInvocable(ccInfo *CachedChaincodeDefinition) bool {
+// isChaincodeInvokable returns true iff a chaincode is approved and installed and defined
+func isChaincodeInvokable(ccInfo *CachedChaincodeDefinition) bool {
 	return ccInfo.Approved && ccInfo.InstallInfo != nil && ccInfo.Definition != nil
 }

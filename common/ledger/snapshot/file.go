@@ -18,10 +18,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-type NewHashFunc func() (hash.Hash, error)
-
 // FileWriter creates a new file for ledger snapshot. This is expected to be used by various
-// components of ledger, such as blockstorage and statedb for exporting the relevant snapshot data
+// components of ledger, such as blockstorage and statedb for exporting the relevent snapshot data
 type FileWriter struct {
 	file              *os.File
 	hasher            hash.Hash
@@ -32,20 +30,16 @@ type FileWriter struct {
 
 // CreateFile creates a new file for exporting the ledger snapshot data
 // This function returns an error if the file already exists. The `dataformat` is the first byte
-// written to the file. The function newHash is used to construct an hash.Hash for computing the hash-sum of the data stream
-func CreateFile(filePath string, dataformat byte, newHashFunc NewHashFunc) (*FileWriter, error) {
-	hashImpl, err := newHashFunc()
-	if err != nil {
-		return nil, err
-	}
+// written to the file. The hasher is used for computing the hash of the data stream
+func CreateFile(filePath string, dataformat byte, hasher hash.Hash) (*FileWriter, error) {
 	// create the file only if it does not already exist.
 	// set the permission mode to read-only, as once the file is closed, we do not support modifying the file
-	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o444)
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0444)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error while creating the snapshot file: %s", filePath)
 	}
 	bufWriter := bufio.NewWriter(file)
-	multiWriter := io.MultiWriter(bufWriter, hashImpl)
+	multiWriter := io.MultiWriter(bufWriter, hasher)
 	if _, err := multiWriter.Write([]byte{dataformat}); err != nil {
 		file.Close()
 		return nil, errors.Wrapf(err, "error while writing data format to the snapshot file: %s", filePath)
@@ -54,7 +48,7 @@ func CreateFile(filePath string, dataformat byte, newHashFunc NewHashFunc) (*Fil
 		file:              file,
 		bufWriter:         bufWriter,
 		multiWriter:       multiWriter,
-		hasher:            hashImpl,
+		hasher:            hasher,
 		varintReusableBuf: make([]byte, binary.MaxVarintLen64),
 	}, nil
 }
@@ -97,9 +91,6 @@ func (c *FileWriter) EncodeUVarint(u uint64) error {
 func (c *FileWriter) Done() ([]byte, error) {
 	if err := c.bufWriter.Flush(); err != nil {
 		return nil, errors.Wrapf(err, "error while flushing to the snapshot file: %s ", c.file.Name())
-	}
-	if err := c.file.Sync(); err != nil {
-		return nil, err
 	}
 	if err := c.file.Close(); err != nil {
 		return nil, errors.Wrapf(err, "error while closing the snapshot file: %s ", c.file.Name())
@@ -200,13 +191,10 @@ func (r *FileReader) decodeBytes() ([]byte, error) {
 		return nil, err
 	}
 	size := int(sizeUint)
-	if size == 0 {
-		return []byte{}, nil
-	}
 	if len(r.reusableByteSlice) < size {
 		r.reusableByteSlice = make([]byte, size)
 	}
-	if _, err := io.ReadFull(r.bufReader, r.reusableByteSlice[0:size]); err != nil {
+	if _, err := r.bufReader.Read(r.reusableByteSlice[0:size]); err != nil {
 		return nil, errors.Wrapf(err, "error while reading from snapshot file: %s", r.file.Name())
 	}
 	return r.reusableByteSlice[0:size], nil

@@ -4,9 +4,9 @@
 #
 peer:
     BCCSP:
-        Default: SW
+        Default: GM
         SW:
-            Hash: SHA2
+            Hash: GMSM3
             Security: 256
             FileKeyStore:
                 # relative path

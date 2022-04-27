@@ -11,17 +11,17 @@ import (
 	math "math"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDataKeyEncoding(t *testing.T) {
 	dataKey1 := &dataKey{nsCollBlk: nsCollBlk{ns: "ns1", coll: "coll1", blkNum: 2}, txNum: 5}
 	datakey2, err := decodeDatakey(encodeDataKey(dataKey1))
-	require.NoError(t, err)
-	require.Equal(t, dataKey1, datakey2)
+	assert.NoError(t, err)
+	assert.Equal(t, dataKey1, datakey2)
 }
 
-func TestDataKeyRange(t *testing.T) {
+func TestDatakeyRange(t *testing.T) {
 	blockNum := uint64(20)
 	startKey, endKey := datakeyRange(blockNum)
 	var txNum uint64
@@ -44,49 +44,40 @@ func TestDataKeyRange(t *testing.T) {
 				txNum:     txNum,
 			},
 		)
-		require.Equal(t, bytes.Compare(keyOfPreviousBlock, startKey), -1)
-		require.Equal(t, bytes.Compare(keyOfBlock, startKey), 1)
-		require.Equal(t, bytes.Compare(keyOfBlock, endKey), -1)
-		require.Equal(t, bytes.Compare(keyOfNextBlock, endKey), 1)
+		assert.Equal(t, bytes.Compare(keyOfPreviousBlock, startKey), -1)
+		assert.Equal(t, bytes.Compare(keyOfBlock, startKey), 1)
+		assert.Equal(t, bytes.Compare(keyOfBlock, endKey), -1)
+		assert.Equal(t, bytes.Compare(keyOfNextBlock, endKey), 1)
 	}
 }
 
-func TestEligibleMissingDataRange(t *testing.T) {
+func TestEligibleMissingdataRange(t *testing.T) {
 	blockNum := uint64(20)
 	startKey, endKey := eligibleMissingdatakeyRange(blockNum)
 	var txNum uint64
 	for txNum = 0; txNum < 100; txNum++ {
-		keyOfBlock := encodeElgPrioMissingDataKey(
+		keyOfBlock := encodeMissingDataKey(
 			&missingDataKey{
-				nsCollBlk: nsCollBlk{
-					ns:     "ns",
-					coll:   "coll",
-					blkNum: blockNum,
-				},
+				nsCollBlk:  nsCollBlk{ns: "ns", coll: "coll", blkNum: blockNum},
+				isEligible: true,
 			},
 		)
-		keyOfPreviousBlock := encodeElgPrioMissingDataKey(
+		keyOfPreviousBlock := encodeMissingDataKey(
 			&missingDataKey{
-				nsCollBlk: nsCollBlk{
-					ns:     "ns",
-					coll:   "coll",
-					blkNum: blockNum - 1,
-				},
+				nsCollBlk:  nsCollBlk{ns: "ns", coll: "coll", blkNum: blockNum - 1},
+				isEligible: true,
 			},
 		)
-		keyOfNextBlock := encodeElgPrioMissingDataKey(
+		keyOfNextBlock := encodeMissingDataKey(
 			&missingDataKey{
-				nsCollBlk: nsCollBlk{
-					ns:     "ns",
-					coll:   "coll",
-					blkNum: blockNum + 1,
-				},
+				nsCollBlk:  nsCollBlk{ns: "ns", coll: "coll", blkNum: blockNum + 1},
+				isEligible: true,
 			},
 		)
-		require.Equal(t, bytes.Compare(keyOfNextBlock, startKey), -1)
-		require.Equal(t, bytes.Compare(keyOfBlock, startKey), 1)
-		require.Equal(t, bytes.Compare(keyOfBlock, endKey), -1)
-		require.Equal(t, bytes.Compare(keyOfPreviousBlock, endKey), 1)
+		assert.Equal(t, bytes.Compare(keyOfNextBlock, startKey), -1)
+		assert.Equal(t, bytes.Compare(keyOfBlock, startKey), 1)
+		assert.Equal(t, bytes.Compare(keyOfBlock, endKey), -1)
+		assert.Equal(t, bytes.Compare(keyOfPreviousBlock, endKey), 1)
 	}
 }
 
@@ -108,28 +99,21 @@ func testEncodeDecodeMissingdataKey(t *testing.T, blkNum uint64) {
 
 	t.Run("ineligibileKey",
 		func(t *testing.T) {
-			decodedKey := decodeInelgMissingDataKey(
-				encodeInelgMissingDataKey(key),
+			key.isEligible = false
+			decodedKey := decodeMissingDataKey(
+				encodeMissingDataKey(key),
 			)
-			require.Equal(t, key, decodedKey)
+			assert.Equal(t, key, decodedKey)
 		},
 	)
 
-	t.Run("eligiblePrioritizedKey",
+	t.Run("ineligibileKey",
 		func(t *testing.T) {
-			decodedKey := decodeElgMissingDataKey(
-				encodeElgPrioMissingDataKey(key),
+			key.isEligible = true
+			decodedKey := decodeMissingDataKey(
+				encodeMissingDataKey(key),
 			)
-			require.Equal(t, key, decodedKey)
-		},
-	)
-
-	t.Run("eligibleDeprioritizedKey",
-		func(t *testing.T) {
-			decodedKey := decodeElgMissingDataKey(
-				encodeElgDeprioMissingDataKey(key),
-			)
-			require.Equal(t, key, decodedKey)
+			assert.Equal(t, key, decodedKey)
 		},
 	)
 }
@@ -164,20 +148,4 @@ func TestDecodingAppendedValues(t *testing.T) {
 			t.Fatalf("expected value = [%d], decode value = [%d]", i, value)
 		}
 	}
-}
-
-func TestEncodingDecodingLastBlockInSnapshotVal(t *testing.T) {
-	t.Run("basic-coding-encoding", func(t *testing.T) {
-		for i := uint64(0); i < 100; i++ {
-			encoded := encodeLastBlockInBootSnapshotVal(i)
-			decoded, err := decodeLastBlockInBootSnapshotVal(encoded)
-			require.NoError(t, err)
-			require.Equal(t, i, decoded)
-		}
-	})
-
-	t.Run("error-case", func(t *testing.T) {
-		_, err := decodeLastBlockInBootSnapshotVal([]byte{0xff})
-		require.EqualError(t, err, "unexpected bytes for interpreting as varint")
-	})
 }

@@ -14,13 +14,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/hyperledger/fabric-protos-go/common"
-	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/bccsp/sw"
 	configtxtest "github.com/hyperledger/fabric/common/configtx/test"
-	"github.com/hyperledger/fabric/common/crypto/tlsgen"
 	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/committer/txvalidator/plugin"
 	"github.com/hyperledger/fabric/core/deliverservice"
@@ -28,17 +25,20 @@ import (
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt/ledgermgmttest"
+	"github.com/hyperledger/fabric/core/ledger/mock"
 	ledgermocks "github.com/hyperledger/fabric/core/ledger/mock"
 	"github.com/hyperledger/fabric/core/transientstore"
 	"github.com/hyperledger/fabric/gossip/gossip"
 	gossipmetrics "github.com/hyperledger/fabric/gossip/metrics"
 	"github.com/hyperledger/fabric/gossip/privdata"
+	"github.com/hyperledger/fabric/gossip/service"
 	gossipservice "github.com/hyperledger/fabric/gossip/service"
 	peergossip "github.com/hyperledger/fabric/internal/peer/gossip"
 	"github.com/hyperledger/fabric/internal/peer/gossip/mocks"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"github.com/hyperledger/fabric/msp/mgmt"
 	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -55,14 +55,23 @@ func NewTestPeer(t *testing.T) (*Peer, func()) {
 
 	// Initialize gossip service
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	signer := mgmt.GetLocalSigningIdentityOrPanic(cryptoProvider)
 
 	messageCryptoService := peergossip.NewMCS(&mocks.ChannelPolicyManagerGetter{}, signer, mgmt.NewDeserializersManager(cryptoProvider), cryptoProvider)
 	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager(cryptoProvider))
 	defaultSecureDialOpts := func() []grpc.DialOption { return []grpc.DialOption{grpc.WithInsecure()} }
+	defaultDeliverClientDialOpts := []grpc.DialOption{grpc.WithBlock()}
+	defaultDeliverClientDialOpts = append(
+		defaultDeliverClientDialOpts,
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize),
+			grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize)))
+	defaultDeliverClientDialOpts = append(
+		defaultDeliverClientDialOpts,
+		comm.ClientKeepaliveOptions(comm.DefaultKeepaliveOptions)...,
+	)
 	gossipConfig, err := gossip.GlobalConfig("localhost:0", nil)
-	require.NoError(t, err)
 
 	gossipService, err := gossipservice.New(
 		signer,
@@ -73,8 +82,9 @@ func NewTestPeer(t *testing.T) (*Peer, func()) {
 		secAdv,
 		defaultSecureDialOpts,
 		nil,
+		nil,
 		gossipConfig,
-		&gossipservice.ServiceConfig{},
+		&service.ServiceConfig{},
 		&privdata.PrivdataConfig{},
 		&deliverservice.DeliverServiceConfig{
 			ReConnectBackoffThreshold:   deliverservice.DefaultReConnectBackoffThreshold,
@@ -86,11 +96,11 @@ func NewTestPeer(t *testing.T) (*Peer, func()) {
 	ledgerMgr, err := constructLedgerMgrWithTestDefaults(filepath.Join(tempdir, "ledgersData"))
 	require.NoError(t, err, "failed to create ledger manager")
 
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	transientStoreProvider, err := transientstore.NewStoreProvider(
 		filepath.Join(tempdir, "transientstore"),
 	)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	peerInstance := &Peer{
 		GossipService:  gossipService,
 		StoreProvider:  transientStoreProvider,
@@ -109,23 +119,27 @@ func TestInitialize(t *testing.T) {
 	peerInstance, cleanup := NewTestPeer(t)
 	defer cleanup()
 
-	org1CA, err := tlsgen.NewCA()
+	org1CA, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-cert.pem"))
 	require.NoError(t, err)
-	org1Server1KeyPair, err := org1CA.NewServerCertKeyPair("localhost", "127.0.0.1", "::1")
+	org1Server1Key, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-server1-key.pem"))
 	require.NoError(t, err)
-
+	org1Server1Cert, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-server1-cert.pem"))
+	require.NoError(t, err)
 	serverConfig := comm.ServerConfig{
 		SecOpts: comm.SecureOptions{
 			UseTLS:            true,
-			Certificate:       org1Server1KeyPair.Cert,
-			Key:               org1Server1KeyPair.Key,
-			ServerRootCAs:     [][]byte{org1CA.CertBytes()},
+			Certificate:       org1Server1Cert,
+			Key:               org1Server1Key,
+			ServerRootCAs:     [][]byte{org1CA},
 			RequireClientCert: true,
 		},
 	}
 
 	server, err := comm.NewGRPCServer("localhost:0", serverConfig)
-	require.NoError(t, err, "failed to create gRPC server")
+	if err != nil {
+		t.Fatalf("NewGRPCServer failed with error [%s]", err)
+		return
+	}
 
 	peerInstance.Initialize(
 		nil,
@@ -136,7 +150,7 @@ func TestInitialize(t *testing.T) {
 		nil,
 		runtime.NumCPU(),
 	)
-	require.Equal(t, peerInstance.server, server)
+	assert.Equal(t, peerInstance.server, server)
 }
 
 func TestCreateChannel(t *testing.T) {
@@ -161,12 +175,12 @@ func TestCreateChannel(t *testing.T) {
 		t.FailNow()
 	}
 
-	err = peerInstance.CreateChannel(testChannelID, block, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, nil)
+	err = peerInstance.CreateChannel(testChannelID, block, &mock.DeployedChaincodeInfoProvider{}, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create chain %s", err)
 	}
 
-	require.Equal(t, testChannelID, initArg)
+	assert.Equal(t, testChannelID, initArg)
 
 	// Correct ledger
 	ledger := peerInstance.GetLedger(testChannelID)
@@ -176,9 +190,9 @@ func TestCreateChannel(t *testing.T) {
 
 	// Get config block from ledger
 	block, err = ConfigBlockFromLedger(ledger)
-	require.NoError(t, err, "Failed to get config block from ledger")
-	require.NotNil(t, block, "Config block should not be nil")
-	require.Equal(t, uint64(0), block.Header.Number, "config block should have been block 0")
+	assert.NoError(t, err, "Failed to get config block from ledger")
+	assert.NotNil(t, block, "Config block should not be nil")
+	assert.Equal(t, uint64(0), block.Header.Number, "config block should have been block 0")
 
 	// Bad ledger
 	ledger = peerInstance.GetLedger("BogusChain")
@@ -204,78 +218,6 @@ func TestCreateChannel(t *testing.T) {
 	}
 }
 
-func TestCreateChannelBySnapshot(t *testing.T) {
-	peerInstance, cleanup := NewTestPeer(t)
-	defer cleanup()
-
-	var initArg string
-	waitCh := make(chan struct{})
-	peerInstance.Initialize(
-		func(cid string) {
-			<-waitCh
-			initArg = cid
-		},
-		nil,
-		plugin.MapBasedMapper(map[string]validation.PluginFactory{}),
-		&ledgermocks.DeployedChaincodeInfoProvider{},
-		nil,
-		nil,
-		runtime.NumCPU(),
-	)
-
-	testChannelID := "createchannelbysnapshot"
-
-	// create a temp dir to store snapshot
-	tempdir, err := ioutil.TempDir("", testChannelID)
-	require.NoError(t, err)
-	defer os.Remove(tempdir)
-
-	snapshotDir := ledgermgmttest.CreateSnapshotWithGenesisBlock(t, tempdir, testChannelID, &ConfigTxProcessor{})
-	err = peerInstance.CreateChannelFromSnapshot(snapshotDir, &ledgermocks.DeployedChaincodeInfoProvider{}, nil, nil)
-	require.NoError(t, err)
-
-	expectedStatus := &pb.JoinBySnapshotStatus{InProgress: true, BootstrappingSnapshotDir: snapshotDir}
-	require.Equal(t, expectedStatus, peerInstance.JoinBySnaphotStatus())
-
-	// write a msg to waitCh to unblock channel init func
-	waitCh <- struct{}{}
-
-	// wait until ledger creation is done
-	ledgerCreationDone := func() bool {
-		return !peerInstance.JoinBySnaphotStatus().InProgress
-	}
-	require.Eventually(t, ledgerCreationDone, time.Minute, time.Second)
-
-	// verify channel init func is called
-	require.Equal(t, testChannelID, initArg)
-
-	// verify ledger created
-	ledger := peerInstance.GetLedger(testChannelID)
-	require.NotNil(t, ledger)
-
-	bcInfo, err := ledger.GetBlockchainInfo()
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), bcInfo.GetHeight())
-
-	expectedStatus = &pb.JoinBySnapshotStatus{InProgress: false, BootstrappingSnapshotDir: ""}
-	require.Equal(t, expectedStatus, peerInstance.JoinBySnaphotStatus())
-
-	// Bad ledger
-	ledger = peerInstance.GetLedger("BogusChain")
-	require.Nil(t, ledger)
-
-	// Correct PolicyManager
-	pmgr := peerInstance.GetPolicyManager(testChannelID)
-	require.NotNil(t, pmgr)
-
-	// Bad PolicyManager
-	pmgr = peerInstance.GetPolicyManager("BogusChain")
-	require.Nil(t, pmgr)
-
-	channels := peerInstance.GetChannelsInfo()
-	require.Equal(t, 1, len(channels))
-}
-
 func TestDeliverSupportManager(t *testing.T) {
 	peerInstance, cleanup := NewTestPeer(t)
 	defer cleanup()
@@ -283,11 +225,11 @@ func TestDeliverSupportManager(t *testing.T) {
 	manager := &DeliverChainManager{Peer: peerInstance}
 
 	chainSupport := manager.GetChain("fake")
-	require.Nil(t, chainSupport, "chain support should be nil")
+	assert.Nil(t, chainSupport, "chain support should be nil")
 
 	peerInstance.channels = map[string]*Channel{"testchain": {}}
 	chainSupport = manager.GetChain("testchain")
-	require.NotNil(t, chainSupport, "chain support should not be nil")
+	assert.NotNil(t, chainSupport, "chain support should not be nil")
 }
 
 func constructLedgerMgrWithTestDefaults(ledgersDataDir string) (*ledgermgmt.LedgerMgr, error) {

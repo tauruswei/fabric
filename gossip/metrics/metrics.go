@@ -82,14 +82,16 @@ func newElectionMetrics(p metrics.Provider) *ElectionMetrics {
 	}
 }
 
-var LeaderDeclerationOpts = metrics.GaugeOpts{
-	Namespace:    "gossip",
-	Subsystem:    "leader_election",
-	Name:         "leader",
-	Help:         "Peer is leader (1) or follower (0)",
-	LabelNames:   []string{"channel"},
-	StatsdFormat: "%{#fqname}.%{channel}",
-}
+var (
+	LeaderDeclerationOpts = metrics.GaugeOpts{
+		Namespace:    "gossip",
+		Subsystem:    "leader_election",
+		Name:         "leader",
+		Help:         "Peer is leader (1) or follower (0)",
+		LabelNames:   []string{"channel"},
+		StatsdFormat: "%{#fqname}.%{channel}",
+	}
+)
 
 // CommMetrics encapsulates gossip communication related metrics
 type CommMetrics struct {
@@ -143,14 +145,16 @@ func newMembershipMetrics(p metrics.Provider) *MembershipMetrics {
 	}
 }
 
-var TotalOpts = metrics.GaugeOpts{
-	Namespace:    "gossip",
-	Subsystem:    "membership",
-	Name:         "total_peers_known",
-	Help:         "Total known peers",
-	LabelNames:   []string{"channel"},
-	StatsdFormat: "%{#fqname}.%{channel}",
-}
+var (
+	TotalOpts = metrics.GaugeOpts{
+		Namespace:    "gossip",
+		Subsystem:    "membership",
+		Name:         "total_peers_known",
+		Help:         "Total known peers",
+		LabelNames:   []string{"channel"},
+		StatsdFormat: "%{#fqname}.%{channel}",
+	}
+)
 
 // PrivdataMetrics encapsulates gossip private data related metrics
 type PrivdataMetrics struct {

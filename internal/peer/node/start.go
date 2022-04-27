@@ -22,9 +22,9 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/golang/protobuf/proto"
+	"github.com/hyperledger/fabric-protos-go/common"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	discprotos "github.com/hyperledger/fabric-protos-go/discovery"
-	gatewayprotos "github.com/hyperledger/fabric-protos-go/gateway"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric/bccsp/factory"
 	"github.com/hyperledger/fabric/common/cauthdsl"
@@ -32,7 +32,6 @@ import (
 	"github.com/hyperledger/fabric/common/crypto"
 	"github.com/hyperledger/fabric/common/crypto/tlsgen"
 	"github.com/hyperledger/fabric/common/deliver"
-	"github.com/hyperledger/fabric/common/fabhttp"
 	"github.com/hyperledger/fabric/common/flogging"
 	floggingmetrics "github.com/hyperledger/fabric/common/flogging/metrics"
 	"github.com/hyperledger/fabric/common/grpclogging"
@@ -68,7 +67,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/cceventmgmt"
 	"github.com/hyperledger/fabric/core/ledger/kvledger"
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
-	"github.com/hyperledger/fabric/core/ledger/snapshotgrpc"
 	"github.com/hyperledger/fabric/core/operations"
 	"github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/core/policy"
@@ -88,11 +86,11 @@ import (
 	gossipgossip "github.com/hyperledger/fabric/gossip/gossip"
 	gossipmetrics "github.com/hyperledger/fabric/gossip/metrics"
 	gossipprivdata "github.com/hyperledger/fabric/gossip/privdata"
+	"github.com/hyperledger/fabric/gossip/service"
 	gossipservice "github.com/hyperledger/fabric/gossip/service"
 	peergossip "github.com/hyperledger/fabric/internal/peer/gossip"
 	"github.com/hyperledger/fabric/internal/peer/version"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
-	"github.com/hyperledger/fabric/internal/pkg/gateway"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/protoutil"
@@ -205,7 +203,7 @@ func serve(args []string) error {
 
 	logger.Infof("Starting %s", version.GetInfo())
 
-	// obtain coreConfiguration
+	//obtain coreConfiguration
 	coreConfig, err := peer.GlobalConfig()
 	if err != nil {
 		return err
@@ -315,13 +313,20 @@ func serve(args []string) error {
 		serverConfig.SecOpts.Certificate,
 		cs.GetClientCertificate().Certificate,
 		signingIdentityBytes,
-		expirationLogger.Infof,
 		expirationLogger.Warnf, // This can be used to piggyback a metric event in the future
 		time.Now(),
-		time.AfterFunc,
-	)
+		time.AfterFunc)
 
 	policyMgr := policies.PolicyManagerGetterFunc(peerInstance.GetPolicyManager)
+
+	deliverGRPCClient, err := comm.NewGRPCClient(comm.ClientConfig{
+		Timeout: deliverServiceConfig.ConnectionTimeout,
+		KaOpts:  deliverServiceConfig.KeepaliveOptions,
+		SecOpts: deliverServiceConfig.SecOpts,
+	})
+	if err != nil {
+		logger.Panicf("Could not create the deliver grpc client: [%+v]", err)
+	}
 
 	policyChecker := policy.NewPolicyChecker(
 		policies.PolicyManagerGetterFunc(peerInstance.GetPolicyManager),
@@ -329,8 +334,8 @@ func serve(args []string) error {
 		mgmt.NewLocalMSPPrincipalGetter(factory.GetDefault()),
 	)
 
-	// startup aclmgmt with default ACL providers (resource based and default 1.0 policies based).
-	// Users can pass in their own ACLProvider to RegisterACLProvider (currently unit tests do this)
+	//startup aclmgmt with default ACL providers (resource based and default 1.0 policies based).
+	//Users can pass in their own ACLProvider to RegisterACLProvider (currently unit tests do this)
 	aclProvider := aclmgmt.NewACLProvider(
 		aclmgmt.ResourceGetter(peerInstance.GetStableChannelConfig),
 		policyChecker,
@@ -358,10 +363,6 @@ func serve(args []string) error {
 		Resources:                    lifecycleResources,
 		LegacyDeployedCCInfoProvider: &lscc.DeployedCCInfoProvider{},
 	}
-
-	// Configure CC package storage before ccInfoFSImpl.ListInstalledChaincodes() gets called
-	lsccInstallPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "chaincodes")
-	ccprovider.SetChaincodesPath(lsccInstallPath)
 
 	ccInfoFSImpl := &ccprovider.CCInfoFSImpl{GetHasher: factory.GetDefault()}
 
@@ -401,7 +402,7 @@ func serve(args []string) error {
 	chaincodeCustodian := lifecycle.NewChaincodeCustodian()
 
 	externalBuilderOutput := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "externalbuilder", "builds")
-	if err := os.MkdirAll(externalBuilderOutput, 0o700); err != nil {
+	if err := os.MkdirAll(externalBuilderOutput, 0700); err != nil {
 		logger.Panicf("could not create externalbuilder build output dir: %s", err)
 	}
 
@@ -409,16 +410,10 @@ func serve(args []string) error {
 		DurablePath: externalBuilderOutput,
 	}
 
-	lifecycleCache := lifecycle.NewCache(
-		lifecycleResources,
-		mspID,
-		metadataManager,
-		chaincodeCustodian,
-		ebMetadataProvider,
-	)
+	lifecycleCache := lifecycle.NewCache(lifecycleResources, mspID, metadataManager, chaincodeCustodian, ebMetadataProvider)
 
-	txProcessors := map[cb.HeaderType]ledger.CustomTxProcessor{
-		cb.HeaderType_CONFIG: &peer.ConfigTxProcessor{},
+	txProcessors := map[common.HeaderType]ledger.CustomTxProcessor{
+		common.HeaderType_CONFIG: &peer.ConfigTxProcessor{},
 	}
 
 	peerInstance.LedgerMgr = ledgermgmt.NewLedgerMgr(
@@ -431,7 +426,7 @@ func serve(args []string) error {
 			HealthCheckRegistry:             opsSystem,
 			StateListeners:                  []ledger.StateListener{lifecycleCache},
 			Config:                          ledgerConfig(),
-			HashProvider:                    factory.GetDefault(),
+			Hasher:                          factory.GetDefault(),
 			EbMetadataProvider:              ebMetadataProvider,
 		},
 	)
@@ -450,6 +445,7 @@ func serve(args []string) error {
 		signingIdentity,
 		cs,
 		coreConfig.PeerAddress,
+		deliverGRPCClient,
 		deliverServiceConfig,
 		privdataConfig,
 	)
@@ -459,6 +455,10 @@ func serve(args []string) error {
 	defer gossipService.Stop()
 
 	peerInstance.GossipService = gossipService
+
+	// Configure CC package storage
+	lsccInstallPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "chaincodes")
+	ccprovider.SetChaincodesPath(lsccInstallPath)
 
 	if err := lifecycleCache.InitializeLocalChaincodes(); err != nil {
 		return errors.WithMessage(err, "could not initialize local chaincodes")
@@ -503,7 +503,7 @@ func serve(args []string) error {
 		logger.Panicf("Failed to create chaincode server: %s", err)
 	}
 
-	// get user mode
+	//get user mode
 	userRunsCC := chaincode.IsDevMode()
 	tlsEnabled := coreConfig.PeerTLSEnabled
 
@@ -608,7 +608,6 @@ func serve(args []string) error {
 		Resources:   lifecycleResources,
 		Cache:       lifecycleCache,
 		BuiltinSCCs: builtinSCCs,
-		UserRunsCC:  userRunsCC,
 	}
 
 	containerRuntime := &chaincode.ContainerRuntime{
@@ -739,7 +738,7 @@ func serve(args []string) error {
 
 	// deploy system chaincodes
 	for _, cc := range []scc.SelfDescribingSysCC{lsccInst, csccInst, qsccInst, lifecycleSCC} {
-		if enabled, ok := chaincodeConfig.SCCAllowlist[cc.Name()]; !ok || !enabled {
+		if enabled, ok := chaincodeConfig.SCCWhitelist[cc.Name()]; !ok || !enabled {
 			logger.Infof("not deploying chaincode %s as it is not enabled", cc.Name())
 			continue
 		}
@@ -792,9 +791,8 @@ func serve(args []string) error {
 		coreConfig.ValidatorPoolSize,
 	)
 
-	var discoveryService *discovery.Service
 	if coreConfig.DiscoveryEnabled {
-		discoveryService = createDiscoveryService(
+		registerDiscoveryService(
 			coreConfig,
 			peerInstance,
 			peerServer,
@@ -806,25 +804,6 @@ func serve(args []string) error {
 			),
 			gossipService,
 		)
-		logger.Info("Discovery service activated")
-		discprotos.RegisterDiscoveryServer(peerServer.Server(), discoveryService)
-	}
-
-	if coreConfig.GatewayOptions.Enabled {
-		if coreConfig.DiscoveryEnabled {
-			logger.Info("Starting peer with Gateway enabled")
-			gatewayprotos.RegisterGatewayServer(
-				peerServer.Server(),
-				gateway.CreateServer(
-					&gateway.EndorserServerAdapter{Server: serverEndorser},
-					discoveryService,
-					peerInstance.GossipService.SelfMembershipInfo().Endpoint,
-					coreConfig.GatewayOptions,
-				),
-			)
-		} else {
-			logger.Warning("Discovery service must be enabled for embedded gateway")
-		}
 	}
 
 	logger.Infof("Starting peer with ID=[%s], network ID=[%s], address=[%s]", coreConfig.PeerID, coreConfig.NetworkID, coreConfig.PeerAddress)
@@ -886,10 +865,6 @@ func serve(args []string) error {
 	// Register the Endorser server
 	pb.RegisterEndorserServer(peerServer.Server(), auth)
 
-	// register the snapshot server
-	snapshotSvc := &snapshotgrpc.SnapshotService{LedgerGetter: peerInstance, ACLProvider: aclProvider}
-	pb.RegisterSnapshotServer(peerServer.Server(), snapshotSvc)
-
 	go func() {
 		var grpcErr error
 		if grpcErr = peerServer.Start(); grpcErr != nil {
@@ -947,14 +922,14 @@ func createSelfSignedData() protoutil.SignedData {
 	}
 }
 
-func createDiscoveryService(
+func registerDiscoveryService(
 	coreConfig *peer.Config,
 	peerInstance *peer.Peer,
 	peerServer *comm.GRPCServer,
 	polMgr policies.ChannelPolicyManagerGetter,
 	metadataProvider *lifecycle.MetadataProvider,
 	gossipService *gossipservice.GossipService,
-) *discovery.Service {
+) {
 	mspID := coreConfig.LocalMSPID
 	localAccessPolicy := localPolicy(policydsl.SignedByAnyAdmin([]string{mspID}))
 	if coreConfig.DiscoveryOrgMembersAllowed {
@@ -965,25 +940,27 @@ func createDiscoveryService(
 	gSup := gossip.NewDiscoverySupport(gossipService)
 	ccSup := ccsupport.NewDiscoverySupport(metadataProvider)
 	ea := endorsement.NewEndorsementAnalyzer(gSup, ccSup, acl, metadataProvider)
-	confSup := config.NewDiscoverySupport(config.CurrentConfigGetterFunc(func(channelID string) *cb.Config {
+	confSup := config.NewDiscoverySupport(config.CurrentConfigBlockGetterFunc(func(channelID string) *common.Block {
 		channel := peerInstance.Channel(channelID)
 		if channel == nil {
 			return nil
 		}
-		config, err := peer.RetrievePersistedChannelConfig(channel.Ledger())
+		block, err := peer.ConfigBlockFromLedger(channel.Ledger())
 		if err != nil {
-			logger.Errorw("failed to get channel config", "error", err)
+			logger.Error("failed to get config block", err)
 			return nil
 		}
-		return config
+		return block
 	}))
 	support := discsupport.NewDiscoverySupport(acl, gSup, ea, confSup, acl)
-	return discovery.NewService(discovery.Config{
+	svc := discovery.NewService(discovery.Config{
 		TLS:                          peerServer.TLSEnabled(),
 		AuthCacheEnabled:             coreConfig.DiscoveryAuthCacheEnabled,
 		AuthCacheMaxSize:             coreConfig.DiscoveryAuthCacheMaxSize,
 		AuthCachePurgeRetentionRatio: coreConfig.DiscoveryAuthCachePurgeRetentionRatio,
 	}, support)
+	logger.Info("Discovery service activated")
+	discprotos.RegisterDiscoveryServer(peerServer.Server(), svc)
 }
 
 // create a CC listener using peer.chaincodeListenAddress (and if that's not set use peer.peerAddress)
@@ -1143,7 +1120,7 @@ func secureDialOpts(credSupport *comm.CredentialSupport) func() []grpc.DialOptio
 		// set max send/recv msg sizes
 		dialOpts = append(
 			dialOpts,
-			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(comm.DefaultMaxRecvMsgSize), grpc.MaxCallSendMsgSize(comm.DefaultMaxSendMsgSize)),
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize), grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize)),
 		)
 		// set the keepalive options
 		kaOpts := comm.DefaultKeepaliveOptions
@@ -1153,7 +1130,7 @@ func secureDialOpts(credSupport *comm.CredentialSupport) func() []grpc.DialOptio
 		if viper.IsSet("peer.keepalive.client.timeout") {
 			kaOpts.ClientTimeout = viper.GetDuration("peer.keepalive.client.timeout")
 		}
-		dialOpts = append(dialOpts, kaOpts.ClientKeepaliveOptions()...)
+		dialOpts = append(dialOpts, comm.ClientKeepaliveOptions(kaOpts)...)
 
 		if viper.GetBool("peer.tls.enabled") {
 			dialOpts = append(dialOpts, grpc.WithTransportCredentials(credSupport.GetPeerCredentials()))
@@ -1176,9 +1153,11 @@ func initGossipService(
 	signer msp.SigningIdentity,
 	credSupport *comm.CredentialSupport,
 	peerAddress string,
+	deliverGRPCClient *comm.GRPCClient,
 	deliverServiceConfig *deliverservice.DeliverServiceConfig,
 	privdataConfig *gossipprivdata.PrivdataConfig,
 ) (*gossipservice.GossipService, error) {
+
 	var certs *gossipcommon.TLSCertificates
 	if peerServer.TLSEnabled() {
 		serverCert := peerServer.ServerCertificate()
@@ -1200,7 +1179,7 @@ func initGossipService(
 	secAdv := peergossip.NewSecurityAdvisor(mgmt.NewDeserializersManager(factory.GetDefault()))
 	bootstrap := viper.GetStringSlice("peer.gossip.bootstrap")
 
-	serviceConfig := gossipservice.GlobalConfig()
+	serviceConfig := service.GlobalConfig()
 	if serviceConfig.Endpoint != "" {
 		peerAddress = serviceConfig.Endpoint
 	}
@@ -1218,6 +1197,7 @@ func initGossipService(
 		secAdv,
 		secureDialOpts(credSupport),
 		credSupport,
+		deliverGRPCClient,
 		gossipConfig,
 		serviceConfig,
 		privdataConfig,
@@ -1227,17 +1207,8 @@ func initGossipService(
 
 func newOperationsSystem(coreConfig *peer.Config) *operations.System {
 	return operations.NewSystem(operations.Options{
-		Options: fabhttp.Options{
-			Logger:        flogging.MustGetLogger("peer.operations"),
-			ListenAddress: coreConfig.OperationsListenAddress,
-			TLS: fabhttp.TLS{
-				Enabled:            coreConfig.OperationsTLSEnabled,
-				CertFile:           coreConfig.OperationsTLSCertFile,
-				KeyFile:            coreConfig.OperationsTLSKeyFile,
-				ClientCertRequired: coreConfig.OperationsTLSClientAuthRequired,
-				ClientCACertFiles:  coreConfig.OperationsTLSClientRootCAs,
-			},
-		},
+		Logger:        flogging.MustGetLogger("peer.operations"),
+		ListenAddress: coreConfig.OperationsListenAddress,
 		Metrics: operations.MetricsOptions{
 			Provider: coreConfig.MetricsProvider,
 			Statsd: &operations.Statsd{
@@ -1246,6 +1217,13 @@ func newOperationsSystem(coreConfig *peer.Config) *operations.System {
 				WriteInterval: coreConfig.StatsdWriteInterval,
 				Prefix:        coreConfig.StatsdPrefix,
 			},
+		},
+		TLS: operations.TLS{
+			Enabled:            coreConfig.OperationsTLSEnabled,
+			CertFile:           coreConfig.OperationsTLSCertFile,
+			KeyFile:            coreConfig.OperationsTLSKeyFile,
+			ClientCertRequired: coreConfig.OperationsTLSClientAuthRequired,
+			ClientCACertFiles:  coreConfig.OperationsTLSClientRootCAs,
 		},
 		Version: metadata.Version,
 	})
@@ -1315,74 +1293,74 @@ func resetLoop(
 	pLedger getLedger,
 	interval time.Duration,
 ) {
-	ledgerDataPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "ledgersData")
-
 	// periodically check to see if current ledger height(s) surpass prereset height(s)
 	ticker := time.NewTicker(interval)
+
 	defer ticker.Stop()
-
-	for range ticker.C {
-		logger.Info("Ledger rebuild: Checking if current ledger heights surpass prereset ledger heights")
-		logger.Debugf("Ledger rebuild: Number of ledgers still rebuilding before check: %d", len(preResetHeights))
-
-		for cid, height := range preResetHeights {
-			l := pLedger(cid)
-			if l == nil {
-				logger.Warningf("No ledger found for channel [%s]", cid)
-				continue
+	for {
+		select {
+		case <-ticker.C:
+			logger.Info("Ledger rebuild: Checking if current ledger heights surpass prereset ledger heights")
+			logger.Debugf("Ledger rebuild: Number of ledgers still rebuilding before check: %d", len(preResetHeights))
+			for cid, height := range preResetHeights {
+				var l peerLedger
+				l = pLedger(cid)
+				if l == nil {
+					logger.Warningf("No ledger found for channel [%s]", cid)
+					continue
+				}
+				bcInfo, err := l.GetBlockchainInfo()
+				if bcInfo != nil {
+					logger.Debugf("Ledger rebuild: channel [%s]: currentHeight [%d] : preresetHeight [%d]", cid, bcInfo.GetHeight(), height)
+					if bcInfo.GetHeight() >= height {
+						delete(preResetHeights, cid)
+					} else {
+						break
+					}
+				} else {
+					if err != nil {
+						logger.Warningf("Ledger rebuild: could not retrieve info for channel [%s]: %s", cid, err.Error())
+					}
+				}
 			}
 
-			bcInfo, err := l.GetBlockchainInfo()
-			if err != nil {
-				logger.Warningf("Ledger rebuild: could not retrieve info for channel [%s]: %s", cid, err.Error())
-				continue
+			logger.Debugf("Ledger rebuild: Number of ledgers still rebuilding after check: %d", len(preResetHeights))
+			if len(preResetHeights) == 0 {
+				logger.Infof("Ledger rebuild: Complete, all ledgers surpass prereset heights. Endorsement request processing will be enabled.")
+				rootFSPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "ledgersData")
+				err := kvledger.ClearPreResetHeight(rootFSPath, ledgerIDs)
+				if err != nil {
+					logger.Warningf("Ledger rebuild: could not clear off prerest files: error=%s", err)
+				}
+				resetFilter.setReject(false)
+				return
 			}
-			if bcInfo == nil {
-				continue
-			}
-
-			logger.Debugf("Ledger rebuild: channel [%s]: currentHeight [%d] : preresetHeight [%d]", cid, bcInfo.GetHeight(), height)
-			if bcInfo.GetHeight() >= height {
-				delete(preResetHeights, cid)
-			}
-		}
-
-		logger.Debugf("Ledger rebuild: Number of ledgers still rebuilding after check: %d", len(preResetHeights))
-		if len(preResetHeights) == 0 {
-			logger.Infof("Ledger rebuild: Complete, all ledgers surpass prereset heights. Endorsement request processing will be enabled.")
-
-			err := kvledger.ClearPreResetHeight(ledgerDataPath, ledgerIDs)
-			if err != nil {
-				logger.Warningf("Ledger rebuild: could not clear off prerest files: error=%s", err)
-			}
-			resetFilter.setReject(false)
-			return
 		}
 	}
 }
 
-// reset implements the auth.Filter interface.
+//implements the auth.Filter interface
 type reset struct {
-	lock   sync.RWMutex
+	sync.RWMutex
 	next   pb.EndorserServer
 	reject bool
 }
 
 func (r *reset) setReject(reject bool) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
+	r.Lock()
+	defer r.Unlock()
 	r.reject = reject
 }
 
-// Init initializes Reset with the next EndorserServer.
+// Init initializes Reset with the next EndorserServer
 func (r *reset) Init(next pb.EndorserServer) {
 	r.next = next
 }
 
-// ProcessProposal processes a signed proposal.
+// ProcessProposal processes a signed proposal
 func (r *reset) ProcessProposal(ctx context.Context, signedProp *pb.SignedProposal) (*pb.ProposalResponse, error) {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
+	r.RLock()
+	defer r.RUnlock()
 	if r.reject {
 		return nil, errors.New("endorse requests are blocked while ledgers are being rebuilt")
 	}

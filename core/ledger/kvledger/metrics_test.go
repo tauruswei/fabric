@@ -17,9 +17,9 @@ import (
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/common/metrics/metricsfakes"
 	lgr "github.com/hyperledger/fabric/core/ledger"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/validation"
+	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/txmgr"
 	"github.com/hyperledger/fabric/core/ledger/mock"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStatsBlockCommit(t *testing.T) {
@@ -28,13 +28,13 @@ func TestStatsBlockCommit(t *testing.T) {
 	testMetricProvider := testutilConstructMetricProvider()
 
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	provider, err := NewProvider(
 		&lgr.Initializer{
 			DeployedChaincodeInfoProvider: &mock.DeployedChaincodeInfoProvider{},
 			MetricsProvider:               testMetricProvider.fakeProvider,
 			Config:                        conf,
-			HashProvider:                  cryptoProvider,
+			Hasher:                        cryptoProvider,
 		},
 	)
 	if err != nil {
@@ -45,25 +45,25 @@ func TestStatsBlockCommit(t *testing.T) {
 	// create a ledger
 	ledgerid := "ledger1"
 	_, gb := testutil.NewBlockGenerator(t, ledgerid, false)
-	l, err := provider.CreateFromGenesisBlock(gb)
-	require.NoError(t, err)
+	l, err := provider.Create(gb)
+	assert.NoError(t, err)
 	ledger := l.(*kvLedger)
 	defer ledger.Close()
 
 	// calls during committing genesis block
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", ledgerid},
 		testMetricProvider.fakeBlockProcessingTimeHist.WithArgsForCall(0),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", ledgerid},
 		testMetricProvider.fakeBlockstorageCommitWithPvtDataTimeHist.WithArgsForCall(0),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", ledgerid},
 		testMetricProvider.fakeStatedbCommitTimeHist.WithArgsForCall(0),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{
 			"channel", ledgerid,
 			"transaction_type", common.HeaderType_CONFIG.String(),
@@ -76,7 +76,7 @@ func TestStatsBlockCommit(t *testing.T) {
 	// invoke updateBlockStats api explicitly and verify the calls with fake metrics
 	ledger.updateBlockStats(
 		1*time.Second, 2*time.Second, 3*time.Second,
-		[]*validation.TxStatInfo{
+		[]*txmgr.TxStatInfo{
 			{
 				ValidationCode: peer.TxValidationCode_VALID,
 				TxType:         common.HeaderType_ENDORSER_TRANSACTION,
@@ -89,31 +89,31 @@ func TestStatsBlockCommit(t *testing.T) {
 			},
 		},
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", ledgerid},
 		testMetricProvider.fakeBlockProcessingTimeHist.WithArgsForCall(1),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		float64(1),
 		testMetricProvider.fakeBlockProcessingTimeHist.ObserveArgsForCall(1),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", ledgerid},
 		testMetricProvider.fakeBlockstorageCommitWithPvtDataTimeHist.WithArgsForCall(1),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		float64(2),
 		testMetricProvider.fakeBlockstorageCommitWithPvtDataTimeHist.ObserveArgsForCall(1),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{"channel", ledgerid},
 		testMetricProvider.fakeStatedbCommitTimeHist.WithArgsForCall(1),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		float64(3),
 		testMetricProvider.fakeStatedbCommitTimeHist.ObserveArgsForCall(1),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{
 			"channel", ledgerid,
 			"transaction_type", common.HeaderType_ENDORSER_TRANSACTION.String(),
@@ -122,12 +122,12 @@ func TestStatsBlockCommit(t *testing.T) {
 		},
 		testMetricProvider.fakeTransactionsCount.WithArgsForCall(1),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		float64(1),
 		testMetricProvider.fakeTransactionsCount.AddArgsForCall(1),
 	)
 
-	require.Equal(t,
+	assert.Equal(t,
 		[]string{
 			"channel", ledgerid,
 			"transaction_type", "unknown",
@@ -136,7 +136,7 @@ func TestStatsBlockCommit(t *testing.T) {
 		},
 		testMetricProvider.fakeTransactionsCount.WithArgsForCall(2),
 	)
-	require.Equal(t,
+	assert.Equal(t,
 		float64(1),
 		testMetricProvider.fakeTransactionsCount.AddArgsForCall(2),
 	)

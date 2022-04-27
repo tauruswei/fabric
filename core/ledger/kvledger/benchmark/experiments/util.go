@@ -12,7 +12,11 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+
+	"github.com/hyperledger/fabric/common/flogging"
 )
+
+var logger = flogging.MustGetLogger("experiments")
 
 type marbleRecord struct {
 	ID          string `json:"_id,omitempty"`
@@ -45,7 +49,7 @@ var owners = []string{
 	"john",
 }
 
-// TestValue is a struct for holding the test value
+//TestValue is a struct for holding the test value
 type TestValue struct {
 	Value string
 }
@@ -61,6 +65,7 @@ func constructValue(keyNumber int, kvSize int) []byte {
 }
 
 func constructJSONValue(keyNumber int, kvSize int) []byte {
+
 	prefix := constructValuePrefix(keyNumber)
 
 	rand.Seed(int64(keyNumber))
@@ -76,13 +81,14 @@ func constructJSONValue(keyNumber int, kvSize int) []byte {
 	if kvSize > len(jsonValue) {
 		randomJSONBytes := constructRandomBytes(kvSize - len(jsonValue))
 
-		// add in extra bytes
+		//add in extra bytes
 		testRecord.DataPadding = string(randomJSONBytes)
 
 		jsonValue, _ = json.Marshal(testRecord)
 	}
 
 	return jsonValue
+
 }
 
 func constructValuePrefix(keyNumber int) []byte {

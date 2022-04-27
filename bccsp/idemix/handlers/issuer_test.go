@@ -16,6 +16,7 @@ import (
 )
 
 var _ = Describe("Issuer", func() {
+
 	Describe("when creating an issuer key-pair", func() {
 		var (
 			IssuerKeyGen *handlers.IssuerKeyGen
@@ -112,6 +113,7 @@ var _ = Describe("Issuer", func() {
 					Expect(err).To(MatchError("not exportable"))
 					Expect(raw).To(BeNil())
 				})
+
 			})
 		})
 
@@ -128,6 +130,7 @@ var _ = Describe("Issuer", func() {
 		})
 
 		Context("and the options are not well formed", func() {
+
 			Context("and the option is nil", func() {
 				It("returns error", func() {
 					sk, err := IssuerKeyGen.KeyGen(nil)
@@ -218,6 +221,7 @@ var _ = Describe("Issuer", func() {
 		})
 
 		Context("and the arguments are not well formed", func() {
+
 			Context("and the raw is nil", func() {
 				It("returns error", func() {
 					pk, err := IssuerPublicKeyImporter.KeyImport(nil, &bccsp.IdemixIssuerPublicKeyImportOpts{})
@@ -250,5 +254,6 @@ var _ = Describe("Issuer", func() {
 				})
 			})
 		})
+
 	})
 })

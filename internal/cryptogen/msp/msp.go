@@ -8,6 +8,7 @@ package msp
 import (
 	"crypto/x509"
 	"encoding/pem"
+	"github.com/tjfoc/gmsm/sm2"
 	"os"
 	"path/filepath"
 
@@ -48,6 +49,7 @@ func GenerateLocalMSP(
 	nodeType int,
 	nodeOUs bool,
 ) error {
+
 	// create folder structure
 	mspDir := filepath.Join(baseDir, "msp")
 	tlsDir := filepath.Join(baseDir, "tls")
@@ -57,7 +59,7 @@ func GenerateLocalMSP(
 		return err
 	}
 
-	err = os.MkdirAll(tlsDir, 0o755)
+	err = os.MkdirAll(tlsDir, 0755)
 	if err != nil {
 		return err
 	}
@@ -95,17 +97,18 @@ func GenerateLocalMSP(
 	// write artifacts to MSP folders
 
 	// the signing CA certificate goes into cacerts
-	err = x509Export(
+	//TODO
+	err = sm2Export(
 		filepath.Join(mspDir, "cacerts", x509Filename(signCA.Name)),
-		signCA.SignCert,
+		signCA.SignSm2Cert,
 	)
 	if err != nil {
 		return err
 	}
 	// the TLS CA certificate goes into tlscacerts
-	err = x509Export(
+	err = sm2Export(
 		filepath.Join(mspDir, "tlscacerts", x509Filename(tlsCA.Name)),
-		tlsCA.SignCert,
+		tlsCA.SignSm2Cert,
 	)
 	if err != nil {
 		return err
@@ -113,6 +116,7 @@ func GenerateLocalMSP(
 
 	// generate config.yaml if required
 	if nodeOUs {
+
 		exportConfig(mspDir, filepath.Join("cacerts", x509Filename(signCA.Name)), true)
 	}
 
@@ -124,7 +128,7 @@ func GenerateLocalMSP(
 	// we leave a valid admin for now for the sake
 	// of unit tests
 	if !nodeOUs {
-		err = x509Export(filepath.Join(mspDir, "admincerts", x509Filename(name)), cert)
+		err = sm2Export(filepath.Join(mspDir, "admincerts", x509Filename(name)), cert)
 		if err != nil {
 			return err
 		}
@@ -148,15 +152,13 @@ func GenerateLocalMSP(
 		sans,
 		&tlsPrivKey.PublicKey,
 		x509.KeyUsageDigitalSignature|x509.KeyUsageKeyEncipherment,
-		[]x509.ExtKeyUsage{
-			x509.ExtKeyUsageServerAuth,
-			x509.ExtKeyUsageClientAuth,
-		},
+		[]x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth,
+			x509.ExtKeyUsageClientAuth},
 	)
 	if err != nil {
 		return err
 	}
-	err = x509Export(filepath.Join(tlsDir, "ca.crt"), tlsCA.SignCert)
+	err = sm2Export(filepath.Join(tlsDir, "ca.crt"), tlsCA.SignSm2Cert)
 	if err != nil {
 		return err
 	}
@@ -186,23 +188,24 @@ func GenerateVerifyingMSP(
 	tlsCA *ca.CA,
 	nodeOUs bool,
 ) error {
+
 	// create folder structure and write artifacts to proper locations
 	err := createFolderStructure(baseDir, false)
 	if err != nil {
 		return err
 	}
 	// the signing CA certificate goes into cacerts
-	err = x509Export(
+	err = sm2Export(
 		filepath.Join(baseDir, "cacerts", x509Filename(signCA.Name)),
-		signCA.SignCert,
+		signCA.SignSm2Cert,
 	)
 	if err != nil {
 		return err
 	}
 	// the TLS CA certificate goes into tlscacerts
-	err = x509Export(
+	err = sm2Export(
 		filepath.Join(baseDir, "tlscacerts", x509Filename(tlsCA.Name)),
-		tlsCA.SignCert,
+		tlsCA.SignSm2Cert,
 	)
 	if err != nil {
 		return err
@@ -223,7 +226,7 @@ func GenerateVerifyingMSP(
 	}
 
 	ksDir := filepath.Join(baseDir, "keystore")
-	err = os.Mkdir(ksDir, 0o755)
+	err = os.Mkdir(ksDir, 0755)
 	defer os.RemoveAll(ksDir)
 	if err != nil {
 		return errors.WithMessage(err, "failed to create keystore directory")
@@ -249,6 +252,7 @@ func GenerateVerifyingMSP(
 }
 
 func createFolderStructure(rootDir string, local bool) error {
+
 	var folders []string
 	// create admincerts, cacerts, keystore and signcerts folders
 	folders = []string{
@@ -262,7 +266,7 @@ func createFolderStructure(rootDir string, local bool) error {
 	}
 
 	for _, folder := range folders {
-		err := os.MkdirAll(folder, 0o755)
+		err := os.MkdirAll(folder, 0755)
 		if err != nil {
 			return err
 		}
@@ -279,12 +283,16 @@ func x509Export(path string, cert *x509.Certificate) error {
 	return pemExport(path, "CERTIFICATE", cert.Raw)
 }
 
+func sm2Export(path string, cert *sm2.Certificate) error {
+	return pemExport(path, "CERTIFICATE", cert.Raw)
+}
+
 func keyExport(keystore, output string) error {
 	return os.Rename(filepath.Join(keystore, "priv_sk"), output)
 }
 
 func pemExport(path, pemType string, bytes []byte) error {
-	// write pem out to file
+	//write pem out to file
 	file, err := os.Create(path)
 	if err != nil {
 		return err
@@ -295,7 +303,7 @@ func pemExport(path, pemType string, bytes []byte) error {
 }
 
 func exportConfig(mspDir, caFile string, enable bool) error {
-	config := &fabricmsp.Configuration{
+	var config = &fabricmsp.Configuration{
 		NodeOUs: &fabricmsp.NodeOUs{
 			Enable: enable,
 			ClientOUIdentifier: &fabricmsp.OrganizationalUnitIdentifiersConfiguration{

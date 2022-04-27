@@ -15,21 +15,21 @@ type Dispatcher struct {
 }
 
 // Dispatch provides a mock function with given fields: seq, payload, envBytes, block
-func (_m *Dispatcher) Dispatch(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (peer.TxValidationCode, error) {
+func (_m *Dispatcher) Dispatch(seq int, payload *common.Payload, envBytes []byte, block *common.Block) (error, peer.TxValidationCode) {
 	ret := _m.Called(seq, payload, envBytes, block)
 
-	var r0 peer.TxValidationCode
-	if rf, ok := ret.Get(0).(func(int, *common.Payload, []byte, *common.Block) peer.TxValidationCode); ok {
+	var r0 error
+	if rf, ok := ret.Get(0).(func(int, *common.Payload, []byte, *common.Block) error); ok {
 		r0 = rf(seq, payload, envBytes, block)
 	} else {
-		r0 = ret.Get(1).(peer.TxValidationCode)
+		r0 = ret.Error(0)
 	}
 
-	var r1 error
-	if rf, ok := ret.Get(1).(func(int, *common.Payload, []byte, *common.Block) error); ok {
+	var r1 peer.TxValidationCode
+	if rf, ok := ret.Get(1).(func(int, *common.Payload, []byte, *common.Block) peer.TxValidationCode); ok {
 		r1 = rf(seq, payload, envBytes, block)
 	} else {
-		r1 = ret.Error(0)
+		r1 = ret.Get(1).(peer.TxValidationCode)
 	}
 
 	return r0, r1

@@ -73,7 +73,6 @@ func TestResetToGenesisBlkMultipleBlkFiles(t *testing.T) {
 
 	ledgerDir := (&Conf{blockStorageDir: blockStoreRootDir}).getLedgerBlockDir("ledger1")
 	files, err := ioutil.ReadDir(ledgerDir)
-	require.NoError(t, err)
 	require.Len(t, files, 5)
 	resetToGenesisBlk(ledgerDir)
 	assertBlocksDirOnlyFileWithGenesisBlock(t, ledgerDir, blocks[0])
@@ -109,7 +108,6 @@ func TestResetBlockStore(t *testing.T) {
 	// test load and clear preResetHeight for ledger1 and ledger2
 	ledgerIDs := []string{"ledger1", "ledger2"}
 	h, err := LoadPreResetHeight(blockStoreRootDir, ledgerIDs)
-	require.NoError(t, err)
 	require.Equal(t,
 		map[string]uint64{
 			"ledger1": 20,
@@ -127,7 +125,6 @@ func TestResetBlockStore(t *testing.T) {
 
 	require.NoError(t, ClearPreResetHeight(blockStoreRootDir, ledgerIDs))
 	h, err = LoadPreResetHeight(blockStoreRootDir, ledgerIDs)
-	require.NoError(t, err)
 	require.Equal(t,
 		map[string]uint64{},
 		h,
@@ -137,7 +134,6 @@ func TestResetBlockStore(t *testing.T) {
 	require.NoError(t, ResetBlockStore(blockStoreRootDir))
 	ledgerIDs = []string{"ledger2"}
 	h, err = LoadPreResetHeight(blockStoreRootDir, ledgerIDs)
-	require.NoError(t, err)
 	require.Equal(t,
 		map[string]uint64{
 			"ledger2": 40,
@@ -147,7 +143,6 @@ func TestResetBlockStore(t *testing.T) {
 	require.NoError(t, ClearPreResetHeight(blockStoreRootDir, ledgerIDs))
 	// verify that ledger1 has preResetHeight file is not deleted
 	h, err = LoadPreResetHeight(blockStoreRootDir, []string{"ledger1", "ledger2"})
-	require.NoError(t, err)
 	require.Equal(t,
 		map[string]uint64{
 			"ledger1": 20,
@@ -191,16 +186,15 @@ func TestRecordHeight(t *testing.T) {
 	fileInfo, err := os.Stat(lastFile)
 	require.NoError(t, err)
 	require.NoError(t, os.Truncate(lastFile, fileInfo.Size()/2))
-	blkfilesInfo, err := constructBlockfilesInfo(ledgerDir)
+	checkpointInfo, err := constructCheckpointInfoFromBlockFiles(ledgerDir)
 	require.NoError(t, err)
-	require.True(t, blkfilesInfo.lastPersistedBlock < 59)
+	require.True(t, checkpointInfo.lastBlockNumber < 59)
 	require.NoError(t, recordHeightIfGreaterThanPreviousRecording(ledgerDir))
 	assertRecordedHeight(t, ledgerDir, "60")
 }
 
 func assertBlocksDirOnlyFileWithGenesisBlock(t *testing.T, ledgerDir string, genesisBlock *common.Block) {
 	files, err := ioutil.ReadDir(ledgerDir)
-	require.NoError(t, err)
 	require.Len(t, files, 2)
 	require.Equal(t, "__backupGenesisBlockBytes", files[0].Name())
 	require.Equal(t, "blockfile_000000", files[1].Name())
@@ -231,8 +225,9 @@ func assertBlockStorePostReset(t *testing.T, store *BlockStore, originallyCommit
 	require.NoError(t, err)
 	require.Equal(t, originallyCommittedBlocks[0], blk)
 
-	_, err = store.RetrieveBlockByNumber(1)
-	require.EqualError(t, err, "no such block number [1] in index")
+	blk, err = store.RetrieveBlockByNumber(1)
+	require.Error(t, err)
+	require.Equal(t, err, ErrNotFoundInIndex)
 
 	err = store.AddBlock(originallyCommittedBlocks[0])
 	require.EqualError(t, err, "block number should have been 1 but was 0")

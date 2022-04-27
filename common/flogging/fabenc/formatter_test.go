@@ -16,13 +16,13 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/common/flogging/fabenc"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 func TestParseFormat(t *testing.T) {
-	tests := []struct {
+	var tests = []struct {
 		desc       string
 		spec       string
 		formatters []fabenc.Formatter
@@ -52,8 +52,7 @@ func TestParseFormat(t *testing.T) {
 			spec: "%{color} suffix",
 			formatters: []fabenc.Formatter{
 				fabenc.ColorFormatter{},
-				fabenc.StringFormatter{Value: " suffix"},
-			},
+				fabenc.StringFormatter{Value: " suffix"}},
 		},
 		{
 			desc: "with prefix and suffix",
@@ -77,19 +76,19 @@ func TestParseFormat(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf(tc.desc), func(t *testing.T) {
 			formatters, err := fabenc.ParseFormat(tc.spec)
-			require.NoError(t, err)
-			require.Equal(t, tc.formatters, formatters)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.formatters, formatters)
 		})
 	}
 }
 
 func TestParseFormatError(t *testing.T) {
 	_, err := fabenc.ParseFormat("%{color:bad}")
-	require.EqualError(t, err, "invalid color option: bad")
+	assert.EqualError(t, err, "invalid color option: bad")
 }
 
 func TestNewFormatter(t *testing.T) {
-	tests := []struct {
+	var tests = []struct {
 		verb      string
 		format    string
 		formatter fabenc.Formatter
@@ -118,17 +117,17 @@ func TestNewFormatter(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			f, err := fabenc.NewFormatter(tc.verb, tc.format)
 			if tc.errorMsg == "" {
-				require.NoError(t, err)
-				require.Equal(t, tc.formatter, f)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.formatter, f)
 			} else {
-				require.EqualError(t, err, tc.errorMsg)
+				assert.EqualError(t, err, tc.errorMsg)
 			}
 		})
 	}
 }
 
 func TestColorFormatter(t *testing.T) {
-	tests := []struct {
+	var tests = []struct {
 		f         fabenc.ColorFormatter
 		level     zapcore.Level
 		formatted string
@@ -157,13 +156,13 @@ func TestColorFormatter(t *testing.T) {
 			buf := &bytes.Buffer{}
 			entry := zapcore.Entry{Level: tc.level}
 			tc.f.Format(buf, entry, nil)
-			require.Equal(t, tc.formatted, buf.String())
+			assert.Equal(t, tc.formatted, buf.String())
 		})
 	}
 }
 
 func TestLevelFormatter(t *testing.T) {
-	tests := []struct {
+	var tests = []struct {
 		level     zapcore.Level
 		formatted string
 	}{
@@ -182,7 +181,7 @@ func TestLevelFormatter(t *testing.T) {
 			buf := &bytes.Buffer{}
 			entry := zapcore.Entry{Level: tc.level}
 			fabenc.LevelFormatter{FormatVerb: "%s"}.Format(buf, entry, nil)
-			require.Equal(t, tc.formatted, buf.String())
+			assert.Equal(t, tc.formatted, buf.String())
 		})
 	}
 }
@@ -192,7 +191,7 @@ func TestMessageFormatter(t *testing.T) {
 	entry := zapcore.Entry{Message: "some message text \n\n"}
 	f := fabenc.MessageFormatter{FormatVerb: "%s"}
 	f.Format(buf, entry, nil)
-	require.Equal(t, "some message text ", buf.String())
+	assert.Equal(t, "some message text ", buf.String())
 }
 
 func TestModuleFormatter(t *testing.T) {
@@ -200,7 +199,7 @@ func TestModuleFormatter(t *testing.T) {
 	entry := zapcore.Entry{LoggerName: "logger/name"}
 	f := fabenc.ModuleFormatter{FormatVerb: "%s"}
 	f.Format(buf, entry, nil)
-	require.Equal(t, "logger/name", buf.String())
+	assert.Equal(t, "logger/name", buf.String())
 }
 
 func TestSequenceFormatter(t *testing.T) {
@@ -234,22 +233,22 @@ func TestSequenceFormatter(t *testing.T) {
 
 	finished.Wait()
 	for i := 1; i <= 100; i++ {
-		require.Contains(t, results, strconv.Itoa(i))
+		assert.Contains(t, results, strconv.Itoa(i))
 	}
 }
 
 func TestShortFuncFormatter(t *testing.T) {
 	callerpc, _, _, ok := runtime.Caller(0)
-	require.True(t, ok)
+	assert.True(t, ok)
 	buf := &bytes.Buffer{}
 	entry := zapcore.Entry{Caller: zapcore.EntryCaller{PC: callerpc}}
 	fabenc.ShortFuncFormatter{FormatVerb: "%s"}.Format(buf, entry, nil)
-	require.Equal(t, "TestShortFuncFormatter", buf.String())
+	assert.Equal(t, "TestShortFuncFormatter", buf.String())
 
 	buf = &bytes.Buffer{}
 	entry = zapcore.Entry{Caller: zapcore.EntryCaller{PC: 0}}
 	fabenc.ShortFuncFormatter{FormatVerb: "%s"}.Format(buf, entry, nil)
-	require.Equal(t, "(unknown)", buf.String())
+	assert.Equal(t, "(unknown)", buf.String())
 }
 
 func TestTimeFormatter(t *testing.T) {
@@ -257,7 +256,7 @@ func TestTimeFormatter(t *testing.T) {
 	entry := zapcore.Entry{Time: time.Date(1975, time.August, 15, 12, 0, 0, 333, time.UTC)}
 	f := fabenc.TimeFormatter{Layout: time.RFC3339Nano}
 	f.Format(buf, entry, nil)
-	require.Equal(t, "1975-08-15T12:00:00.000000333Z", buf.String())
+	assert.Equal(t, "1975-08-15T12:00:00.000000333Z", buf.String())
 }
 
 func TestMultiFormatter(t *testing.T) {
@@ -269,7 +268,7 @@ func TestMultiFormatter(t *testing.T) {
 		zap.String("name", "value"),
 	}
 
-	tests := []struct {
+	var tests = []struct {
 		desc     string
 		initial  []fabenc.Formatter
 		update   []fabenc.Formatter
@@ -313,6 +312,6 @@ func TestMultiFormatter(t *testing.T) {
 
 		buf := &bytes.Buffer{}
 		mf.Format(buf, entry, fields)
-		require.Equal(t, tc.expected, buf.String())
+		assert.Equal(t, tc.expected, buf.String())
 	}
 }

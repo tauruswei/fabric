@@ -8,23 +8,24 @@ package builtin
 
 import (
 	"github.com/hyperledger/fabric-protos-go/peer"
-	endorsement "github.com/hyperledger/fabric/core/handlers/endorsement/api"
-	identities "github.com/hyperledger/fabric/core/handlers/endorsement/api/identities"
+	. "github.com/hyperledger/fabric/core/handlers/endorsement/api"
+	. "github.com/hyperledger/fabric/core/handlers/endorsement/api/identities"
 	"github.com/pkg/errors"
 )
 
 // DefaultEndorsementFactory returns an endorsement plugin factory which returns plugins
 // that behave as the default endorsement system chaincode
-type DefaultEndorsementFactory struct{}
+type DefaultEndorsementFactory struct {
+}
 
 // New returns an endorsement plugin that behaves as the default endorsement system chaincode
-func (*DefaultEndorsementFactory) New() endorsement.Plugin {
+func (*DefaultEndorsementFactory) New() Plugin {
 	return &DefaultEndorsement{}
 }
 
 // DefaultEndorsement is an endorsement plugin that behaves as the default endorsement system chaincode
 type DefaultEndorsement struct {
-	identities.SigningIdentityFetcher
+	SigningIdentityFetcher
 }
 
 // Endorse signs the given payload(ProposalResponsePayload bytes), and optionally mutates it.
@@ -53,9 +54,9 @@ func (e *DefaultEndorsement) Endorse(prpBytes []byte, sp *peer.SignedProposal) (
 }
 
 // Init injects dependencies into the instance of the Plugin
-func (e *DefaultEndorsement) Init(dependencies ...endorsement.Dependency) error {
+func (e *DefaultEndorsement) Init(dependencies ...Dependency) error {
 	for _, dep := range dependencies {
-		sIDFetcher, isSigningIdentityFetcher := dep.(identities.SigningIdentityFetcher)
+		sIDFetcher, isSigningIdentityFetcher := dep.(SigningIdentityFetcher)
 		if !isSigningIdentityFetcher {
 			continue
 		}

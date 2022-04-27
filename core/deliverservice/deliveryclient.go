@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/tjfoc/gmsm/sm2"
 	"sync"
 	"time"
 
@@ -67,7 +68,10 @@ type Config struct {
 	OrdererSource *orderers.ConnectionSource
 	// Signer is the identity used to sign requests.
 	Signer identity.SignerSerializer
-	// DeliverServiceConfig is the configuration object.
+	// GRPC Client
+	DeliverGRPCClient *comm.GRPCClient
+	// Configuration values for deliver service.
+	// TODO: merge 2 Config struct
 	DeliverServiceConfig *DeliverServiceConfig
 }
 
@@ -84,13 +88,11 @@ func NewDeliverService(conf *Config) DeliverService {
 }
 
 type DialerAdapter struct {
-	ClientConfig comm.ClientConfig
+	Client *comm.GRPCClient
 }
 
-func (da DialerAdapter) Dial(address string, rootCerts [][]byte) (*grpc.ClientConn, error) {
-	cc := da.ClientConfig
-	cc.SecOpts.ServerRootCAs = rootCerts
-	return cc.Dial(address)
+func (da DialerAdapter) Dial(address string, certPool *sm2.CertPool) (*grpc.ClientConn, error) {
+	return da.Client.NewConnection(address, comm.CertPoolOverride(certPool))
 }
 
 type DeliverAdapter struct{}
@@ -124,11 +126,7 @@ func (d *deliverServiceImpl) StartDeliverForChannel(chainID string, ledgerInfo b
 		Ledger:        ledgerInfo,
 		BlockVerifier: d.conf.CryptoSvc,
 		Dialer: DialerAdapter{
-			ClientConfig: comm.ClientConfig{
-				DialTimeout: d.conf.DeliverServiceConfig.ConnectionTimeout,
-				KaOpts:      d.conf.DeliverServiceConfig.KeepaliveOptions,
-				SecOpts:     d.conf.DeliverServiceConfig.SecOpts,
-			},
+			Client: d.conf.DeliverGRPCClient,
 		},
 		Orderers:          d.conf.OrdererSource,
 		DoneC:             make(chan struct{}),
@@ -141,12 +139,8 @@ func (d *deliverServiceImpl) StartDeliverForChannel(chainID string, ledgerInfo b
 		YieldLeadership:   !d.conf.IsStaticLeader,
 	}
 
-	if d.conf.DeliverServiceConfig.SecOpts.RequireClientCert {
-		cert, err := d.conf.DeliverServiceConfig.SecOpts.ClientCertificate()
-		if err != nil {
-			return fmt.Errorf("failed to access client TLS configuration: %w", err)
-		}
-		dc.TLSCertHash = util.ComputeSHA256(cert.Certificate[0])
+	if d.conf.DeliverGRPCClient.MutualTLSRequired() {
+		dc.TLSCertHash = util.ComputeGMSM3(d.conf.DeliverGRPCClient.Certificate().Certificate[0])
 	}
 
 	d.blockProviders[chainID] = dc

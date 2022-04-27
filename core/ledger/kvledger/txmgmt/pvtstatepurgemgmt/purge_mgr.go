@@ -18,8 +18,6 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/util"
 )
 
-// PurgeMgr keeps track of the expiry of private data and the private data hashes based on block-to-live
-// parameter specified in the corresponding collection config
 type PurgeMgr struct {
 	btlPolicy pvtdatapolicy.BTLPolicy
 	db        *privacyenabledstate.DB
@@ -47,7 +45,7 @@ type keyAndVersion struct {
 }
 
 // InstantiatePurgeMgr instantiates a PurgeMgr.
-func InstantiatePurgeMgr(ledgerid string, db *privacyenabledstate.DB, btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider *bookkeeping.Provider) (*PurgeMgr, error) {
+func InstantiatePurgeMgr(ledgerid string, db *privacyenabledstate.DB, btlPolicy pvtdatapolicy.BTLPolicy, bookkeepingProvider bookkeeping.Provider) (*PurgeMgr, error) {
 	return &PurgeMgr{
 		btlPolicy: btlPolicy,
 		db:        db,
@@ -72,17 +70,15 @@ func (p *PurgeMgr) PrepareForExpiringKeys(expiringAtBlk uint64) {
 // WaitForPrepareToFinish holds the caller till the background goroutine launched by 'PrepareForExpiringKeys' is finished
 func (p *PurgeMgr) WaitForPrepareToFinish() {
 	p.lock.Lock()
-	p.lock.Unlock() //lint:ignore SA2001 syncpoint
+	p.lock.Unlock()
 }
 
-// UpdateExpiryInfoOfPvtDataOfOldBlocks updates the existing expiry entries in the expiryKeeper with the given pvtUpdates
+// UpdateExpirtyInfoPvtDataOfOldBlocks updates the existing expiry entries in the expiryKeeper with the given pvtUpdates
 func (p *PurgeMgr) UpdateExpiryInfoOfPvtDataOfOldBlocks(pvtUpdates *privacyenabledstate.PvtUpdateBatch) error {
 	builder := newExpiryScheduleBuilder(p.btlPolicy)
 	pvtUpdateCompositeKeyMap := pvtUpdates.ToCompositeKeyMap()
 	for k, vv := range pvtUpdateCompositeKeyMap {
-		if err := builder.add(k.Namespace, k.CollectionName, k.Key, util.ComputeStringHash(k.Key), vv); err != nil {
-			return err
-		}
+		builder.add(k.Namespace, k.CollectionName, k.Key, util.ComputeStringHash(k.Key), vv)
 	}
 
 	var expiryInfoUpdates []*expiryInfo
@@ -117,8 +113,7 @@ func (p *PurgeMgr) addMissingPvtDataToWorkingSet(pvtKeys privacyenabledstate.Pvt
 		hashedCompositeKey := privacyenabledstate.HashedCompositeKey{
 			Namespace:      k.Namespace,
 			CollectionName: k.CollectionName,
-			KeyHash:        string(util.ComputeStringHash(k.Key)),
-		}
+			KeyHash:        string(util.ComputeStringHash(k.Key))}
 
 		toPurgeKey, ok := p.workingset.toPurge[hashedCompositeKey]
 		if !ok {
@@ -142,9 +137,6 @@ func (p *PurgeMgr) addMissingPvtDataToWorkingSet(pvtKeys privacyenabledstate.Pvt
 	}
 }
 
-// UpdateExpiryInfo persists the expiry information for the private data and private data hashes
-// This function is expected to be invoked before the updates are applied to the statedb for the block
-// commit
 func (p *PurgeMgr) UpdateExpiryInfo(
 	pvtUpdates *privacyenabledstate.PvtUpdateBatch,
 	hashedUpdates *privacyenabledstate.HashedUpdateBatch) error {
@@ -220,10 +212,7 @@ func (p *PurgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 	// Transform the keys into the form such that for each hashed key that is eligible for purge appears in 'toPurge'
 	toPurge := transformToExpiryInfoMap(expiryInfo)
 	// Load the latest versions of the hashed keys
-	if err = p.preloadCommittedVersionsInCache(toPurge); err != nil {
-		workingset.err = err
-		return workingset
-	}
+	p.preloadCommittedVersionsInCache(toPurge)
 	var expiryInfoKeysToClear []*expiryInfoKey
 
 	if len(toPurge) == 0 {
@@ -277,15 +266,15 @@ func (p *PurgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 	return workingset
 }
 
-func (p *PurgeMgr) preloadCommittedVersionsInCache(expInfoMap expiryInfoMap) error {
+func (p *PurgeMgr) preloadCommittedVersionsInCache(expInfoMap expiryInfoMap) {
 	if !p.db.IsBulkOptimizable() {
-		return nil
+		return
 	}
 	var hashedKeys []*privacyenabledstate.HashedCompositeKey
 	for k := range expInfoMap {
 		hashedKeys = append(hashedKeys, &k)
 	}
-	return p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys)
+	p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys)
 }
 
 func transformToExpiryInfoMap(expiryInfo []*expiryInfo) expiryInfoMap {

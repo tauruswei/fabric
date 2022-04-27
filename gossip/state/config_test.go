@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric/gossip/state"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGlobalConfig(t *testing.T) {
@@ -23,7 +24,7 @@ func TestGlobalConfig(t *testing.T) {
 	viper.Set("peer.gossip.state.maxRetries", 4)
 	viper.Set("peer.gossip.state.blockBufferSize", 5)
 	viper.Set("peer.gossip.state.channelSize", 6)
-	viper.Set("peer.gossip.state.enabled", true)
+	viper.Set("peer.gossip.state.enabled", false)
 
 	coreConfig := state.GlobalConfig()
 
@@ -34,10 +35,10 @@ func TestGlobalConfig(t *testing.T) {
 		StateMaxRetries:      4,
 		StateBlockBufferSize: 5,
 		StateChannelSize:     6,
-		StateEnabled:         true,
+		StateEnabled:         false,
 	}
 
-	require.Equal(t, expectedConfig, coreConfig)
+	assert.Equal(t, expectedConfig, coreConfig)
 }
 
 func TestGlobalConfigDefaults(t *testing.T) {
@@ -50,10 +51,10 @@ func TestGlobalConfigDefaults(t *testing.T) {
 		StateResponseTimeout: 3 * time.Second,
 		StateBatchSize:       uint64(10),
 		StateMaxRetries:      3,
-		StateBlockBufferSize: 20,
+		StateBlockBufferSize: 100,
 		StateChannelSize:     100,
-		StateEnabled:         false,
+		StateEnabled:         true,
 	}
 
-	require.Equal(t, expectedConfig, coreConfig)
+	assert.Equal(t, expectedConfig, coreConfig)
 }

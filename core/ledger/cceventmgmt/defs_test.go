@@ -9,7 +9,7 @@ package cceventmgmt
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestChaincodeDefinitionStringer(t *testing.T) {
@@ -26,6 +26,6 @@ func TestChaincodeDefinitionStringer(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		require.Equalf(t, tt.str, tt.cd.String(), "want %s, got %s", tt.str, tt.cd.String())
+		assert.Equalf(t, tt.str, tt.cd.String(), "want %s, got %s", tt.str, tt.cd.String())
 	}
 }

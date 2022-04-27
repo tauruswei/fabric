@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package blocksprovider_test
 
 import (
+	"crypto/x509"
 	"fmt"
 	"sync"
 	"time"
@@ -58,7 +59,7 @@ var _ = Describe("Blocksprovider", func() {
 
 		fakeDialer = &fake.Dialer{}
 		ccs = nil
-		fakeDialer.DialStub = func(string, [][]byte) (*grpc.ClientConn, error) {
+		fakeDialer.DialStub = func(string, *x509.CertPool) (*grpc.ClientConn, error) {
 			mutex.Lock()
 			defer mutex.Unlock()
 			cc, err := grpc.Dial("", grpc.WithInsecure())
@@ -367,7 +368,7 @@ var _ = Describe("Blocksprovider", func() {
 			}
 		})
 
-		It("disconnects, sleeps, and retries until the recv is successful", func() {
+		It("disconnects, sleeps, and retries until the recv is successfull", func() {
 			Eventually(fakeDeliverClient.RecvCallCount).Should(Equal(2))
 			Expect(fakeSleeper.SleepCallCount()).To(Equal(1))
 			Expect(fakeSleeper.SleepArgsForCall(0)).To(Equal(100 * time.Millisecond))
@@ -415,7 +416,7 @@ var _ = Describe("Blocksprovider", func() {
 			}
 		})
 
-		It("disconnects, sleeps, and retries until the recv is successful and resets the failure count", func() {
+		It("disconnects, sleeps, and retries until the recv is successfull and resets the failure count", func() {
 			Eventually(fakeDeliverClient.RecvCallCount).Should(Equal(5))
 			Expect(fakeSleeper.SleepCallCount()).To(Equal(3))
 			Expect(fakeSleeper.SleepArgsForCall(0)).To(Equal(100 * time.Millisecond))
@@ -535,7 +536,9 @@ var _ = Describe("Blocksprovider", func() {
 	})
 
 	When("the deliver client returns a status", func() {
-		var status common.Status
+		var (
+			status common.Status
+		)
 
 		BeforeEach(func() {
 			// appease the race detector

@@ -7,17 +7,17 @@ SPDX-License-Identifier: Apache-2.0
 package cluster
 
 import (
-	"crypto/x509"
+	"bytes"
+	"github.com/tjfoc/gmsm/sm2"
 	"sync"
 
-	"github.com/hyperledger/fabric/common/crypto"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
 // RemoteVerifier verifies the connection to the remote host
-type RemoteVerifier func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error
+type RemoteVerifier func(rawCerts [][]byte, verifiedChains [][]*sm2.Certificate) error
 
 //go:generate mockery -dir . -name SecureDialer -case underscore -output ./mocks/
 
@@ -56,13 +56,11 @@ func NewConnectionStore(dialer SecureDialer, tlsConnectionCount metrics.Gauge) *
 // verifyHandshake returns a predicate that verifies that the remote node authenticates
 // itself with the given TLS certificate
 func (c *ConnectionStore) verifyHandshake(endpoint string, certificate []byte) RemoteVerifier {
-	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-		err := crypto.CertificatesWithSamePublicKey(certificate, rawCerts[0])
-		if err == nil {
+	return func(rawCerts [][]byte, verifiedChains [][]*sm2.Certificate) error {
+		if bytes.Equal(certificate, rawCerts[0]) {
 			return nil
 		}
-		return errors.Errorf("public key of server certificate presented by %s doesn't match the expected public key",
-			endpoint)
+		return errors.Errorf("certificate presented by %s doesn't match any authorized certificate", endpoint)
 	}
 }
 

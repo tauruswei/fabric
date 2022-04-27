@@ -41,7 +41,9 @@ var _ = Describe("Blockcutter", func() {
 	})
 
 	Describe("Ordered", func() {
-		var message *cb.Envelope
+		var (
+			message *cb.Envelope
+		)
 
 		BeforeEach(func() {
 			fakeConfig.BatchSizeReturns(&ab.BatchSize{
@@ -141,7 +143,9 @@ var _ = Describe("Blockcutter", func() {
 			})
 
 			Context("when the new message is larger than the preferred max bytes", func() {
-				var bigMessage *cb.Envelope
+				var (
+					bigMessage *cb.Envelope
+				)
 
 				BeforeEach(func() {
 					bigMessage = &cb.Envelope{Payload: make([]byte, 1000)}

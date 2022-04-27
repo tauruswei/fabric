@@ -9,9 +9,8 @@ package util
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/base32"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"runtime"
 	"strings"
@@ -19,85 +18,67 @@ import (
 
 	docker "github.com/fsouza/go-dockerclient"
 	"github.com/hyperledger/fabric/common/metadata"
-	"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/core/config/configtest"
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestDockerBuild(t *testing.T) {
+func TestDockerPull(t *testing.T) {
+	codepackage, output := io.Pipe()
+	go func() {
+		tw := tar.NewWriter(output)
+
+		tw.Close()
+		output.Close()
+	}()
+
+	binpackage := bytes.NewBuffer(nil)
+
+	// Perform a nop operation within a fixed target.  We choose 1.1.0 because we know it's
+	// published and available.  Ideally we could choose something that we know is both multi-arch
+	// and ok to delete prior to executing DockerBuild.  This would ensure that we exercise the
+	// image pull logic.  However, no suitable target exists that meets all the criteria.  Therefore
+	// we settle on using a known released image.  We don't know if the image is already
+	// downloaded per se, and we don't want to explicitly delete this particular image first since
+	// it could be in use legitimately elsewhere.  Instead, we just know that this should always
+	// work and call that "close enough".
+	//
+	// Future considerations: publish a known dummy image that is multi-arch and free to randomly
+	// delete, and use that here instead.
+	image := fmt.Sprintf("hyperledger/fabric-ccenv:%s-1.1.0", runtime.GOARCH)
 	client, err := docker.NewClientFromEnv()
-	require.NoError(t, err, "failed to get docker client")
-
-	is := bytes.NewBuffer(nil)
-	tw := tar.NewWriter(is)
-
-	const dockerfile = "FROM busybox:1.33\nADD . /\n"
-	err = tw.WriteHeader(&tar.Header{
-		Name: "Dockerfile",
-		Size: int64(len(dockerfile)),
-		Mode: 0o644,
-	})
-	require.NoError(t, err)
-	_, err = tw.Write([]byte(dockerfile))
-	require.NoError(t, err)
-
-	err = tw.WriteHeader(&tar.Header{
-		Name:     "chaincode/input/",
-		Typeflag: tar.TypeDir,
-		Mode:     0o40755,
-	})
-	require.NoError(t, err)
-	err = tw.WriteHeader(&tar.Header{
-		Name:     "chaincode/output/",
-		Typeflag: tar.TypeDir,
-		Mode:     0o40755,
-	})
-	require.NoError(t, err)
-	tw.Close()
-
-	imageName := uniqueName()
-	err = client.BuildImage(docker.BuildImageOptions{
-		Name:         imageName,
-		InputStream:  is,
-		OutputStream: ioutil.Discard,
-	})
-	require.NoError(t, err, "failed to build base image")
-	defer client.RemoveImageExtended(imageName, docker.RemoveImageOptions{Force: true})
-
-	codepackage := bytes.NewBuffer(nil)
-	tw = tar.NewWriter(codepackage)
-	tw.Close()
+	if err != nil {
+		t.Errorf("failed to get docker client: %s", err)
+	}
 
 	err = DockerBuild(
 		DockerBuildOptions{
-			Image:        imageName,
+			Image:        image,
 			Cmd:          "/bin/true",
 			InputStream:  codepackage,
-			OutputStream: ioutil.Discard,
+			OutputStream: binpackage,
 		},
 		client,
 	)
-	require.NoError(t, err, "build failed")
-}
-
-func uniqueName() string {
-	name := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(util.GenerateBytesUUID())
-	return strings.ToLower(name)
+	if err != nil {
+		t.Errorf("Error during build: %s", err)
+	}
 }
 
 func TestUtil_GetDockerImageFromConfig(t *testing.T) {
+
 	path := "dt"
 
 	expected := "FROM " + metadata.DockerNamespace + ":" + runtime.GOARCH + "-" + metadata.Version
 	viper.Set(path, "FROM $(DOCKER_NS):$(ARCH)-$(PROJECT_VERSION)")
 	actual := GetDockerImageFromConfig(path)
-	require.Equal(t, expected, actual, `Error parsing Dockerfile Template. Expected "%s", got "%s"`, expected, actual)
+	assert.Equal(t, expected, actual, `Error parsing Dockerfile Template. Expected "%s", got "%s"`, expected, actual)
 
 	expected = "FROM " + metadata.DockerNamespace + ":" + runtime.GOARCH + "-" + twoDigitVersion(metadata.Version)
 	viper.Set(path, "FROM $(DOCKER_NS):$(ARCH)-$(TWO_DIGIT_VERSION)")
 	actual = GetDockerImageFromConfig(path)
-	require.Equal(t, expected, actual, `Error parsing Dockerfile Template. Expected "%s", got "%s"`, expected, actual)
+	assert.Equal(t, expected, actual, `Error parsing Dockerfile Template. Expected "%s", got "%s"`, expected, actual)
+
 }
 
 func TestMain(m *testing.M) {
@@ -117,10 +98,10 @@ func TestTwoDigitVersion(t *testing.T) {
 	version := "2.0.0"
 	expected := "2.0"
 	actual := twoDigitVersion(version)
-	require.Equal(t, expected, actual, `Error parsing two digit version. Expected "%s", got "%s"`, expected, actual)
+	assert.Equal(t, expected, actual, `Error parsing two digit version. Expected "%s", got "%s"`, expected, actual)
 
 	version = "latest"
 	expected = "latest"
 	actual = twoDigitVersion(version)
-	require.Equal(t, expected, actual, `Error parsing two digit version. Expected "%s", got "%s"`, expected, actual)
+	assert.Equal(t, expected, actual, `Error parsing two digit version. Expected "%s", got "%s"`, expected, actual)
 }

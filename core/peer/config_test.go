@@ -7,7 +7,7 @@ package peer
 
 import (
 	"crypto/tls"
-	"io/ioutil"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,11 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger/fabric/common/crypto/tlsgen"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
-	"github.com/hyperledger/fabric/internal/pkg/gateway"
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCacheConfigurationNegative(t *testing.T) {
@@ -27,25 +25,44 @@ func TestCacheConfigurationNegative(t *testing.T) {
 	viper.Set("peer.addressAutoDetect", true)
 	viper.Set("peer.address", "testing.com")
 	_, err := GlobalConfig()
-	require.Error(t, err, "Expected error for bad configuration")
+	assert.Error(t, err, "Expected error for bad configuration")
 
 	viper.Set("peer.addressAutoDetect", false)
 	viper.Set("peer.address", "")
 	_, err = GlobalConfig()
-	require.Error(t, err, "Expected error for bad configuration")
+	assert.Error(t, err, "Expected error for bad configuration")
 
 	viper.Set("peer.address", "wrongAddress")
 	_, err = GlobalConfig()
-	require.Error(t, err, "Expected error for bad configuration")
+	assert.Error(t, err, "Expected error for bad configuration")
+
 }
 
-func TestPeerAddress(t *testing.T) {
-	localIP, err := getLocalIP()
-	require.NoError(t, err)
+func TestConfiguration(t *testing.T) {
+	// get the interface addresses
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal("Failed to get interface addresses")
+	}
 
-	tests := []struct {
+	var ips []string
+	for _, address := range addresses {
+		// eliminate loopback interfaces
+		if ip, ok := address.(*net.IPNet); ok && !ip.IP.IsLoopback() {
+			ips = append(ips, ip.IP.String()+":7051")
+			t.Logf("found interface address [%s]", ip.IP.String())
+		}
+	}
+
+	// There is a flake where sometimes this returns no IP address.
+	localIP, err := comm.GetLocalIP()
+	assert.NoError(t, err)
+
+	var tests = []struct {
 		name                string
 		settings            map[string]interface{}
+		validAddresses      []string
+		invalidAddresses    []string
 		expectedPeerAddress string
 	}{
 		{
@@ -53,7 +70,10 @@ func TestPeerAddress(t *testing.T) {
 			settings: map[string]interface{}{
 				"peer.addressAutoDetect": false,
 				"peer.address":           "testing.com:7051",
+				"peer.id":                "testPeer",
 			},
+			validAddresses:      []string{"testing.com:7051"},
+			invalidAddresses:    ips,
 			expectedPeerAddress: "testing.com:7051",
 		},
 		{
@@ -61,7 +81,10 @@ func TestPeerAddress(t *testing.T) {
 			settings: map[string]interface{}{
 				"peer.addressAutoDetect": true,
 				"peer.address":           "testing.com:7051",
+				"peer.id":                "testPeer",
 			},
+			validAddresses:      ips,
+			invalidAddresses:    []string{"testing.com:7051"},
 			expectedPeerAddress: net.JoinHostPort(localIP, "7051"),
 		},
 		{
@@ -69,15 +92,10 @@ func TestPeerAddress(t *testing.T) {
 			settings: map[string]interface{}{
 				"peer.addressAutoDetect": false,
 				"peer.address":           "0.0.0.0:7051",
+				"peer.id":                "testPeer",
 			},
-			expectedPeerAddress: net.JoinHostPort(localIP, "7051"),
-		},
-		{
-			name: "test4",
-			settings: map[string]interface{}{
-				"peer.addressAutoDetect": true,
-				"peer.address":           "127.0.0.1:7051",
-			},
+			validAddresses:      []string{fmt.Sprintf("%s:7051", localIP)},
+			invalidAddresses:    []string{"0.0.0.0:7051"},
 			expectedPeerAddress: net.JoinHostPort(localIP, "7051"),
 		},
 	}
@@ -88,82 +106,57 @@ func TestPeerAddress(t *testing.T) {
 			for k, v := range test.settings {
 				viper.Set(k, v)
 			}
-			c, err := GlobalConfig()
-			require.NoError(t, err, "GlobalConfig returned unexpected error")
-			require.Equal(t, test.expectedPeerAddress, c.PeerAddress)
+			// load Config file
+			_, err := GlobalConfig()
+			assert.NoError(t, err, "GlobalConfig returned unexpected error")
 		})
 	}
 }
 
 func TestGetServerConfig(t *testing.T) {
-	tempdir, err := ioutil.TempDir("", "peer-clientcert")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
-
 	// good config without TLS
 	viper.Set("peer.tls.enabled", false)
 	viper.Set("peer.connectiontimeout", "7s")
-	sc, err := GetServerConfig()
-	require.NoError(t, err)
-	require.Equal(t, false, sc.SecOpts.UseTLS, "ServerConfig.SecOpts.UseTLS should be false")
-	require.Equal(t, sc.ConnectionTimeout, 7*time.Second, "ServerConfig.ConnectionTimeout should be 7 seconds")
+	sc, _ := GetServerConfig()
+	assert.Equal(t, false, sc.SecOpts.UseTLS, "ServerConfig.SecOpts.UseTLS should be false")
+	assert.Equal(t, sc.ConnectionTimeout, 7*time.Second, "ServerConfig.ConnectionTimeout should be 7 seconds")
 
 	// keepalive options
-	require.Equal(t, comm.DefaultKeepaliveOptions, sc.KaOpts, "ServerConfig.KaOpts should be set to default values")
+	assert.Equal(t, comm.DefaultKeepaliveOptions, sc.KaOpts, "ServerConfig.KaOpts should be set to default values")
 	viper.Set("peer.keepalive.interval", "60m")
 	sc, _ = GetServerConfig()
-	require.Equal(t, time.Duration(60)*time.Minute, sc.KaOpts.ServerInterval, "ServerConfig.KaOpts.ServerInterval should be set to 60 min")
+	assert.Equal(t, time.Duration(60)*time.Minute, sc.KaOpts.ServerInterval, "ServerConfig.KaOpts.ServerInterval should be set to 60 min")
 	viper.Set("peer.keepalive.timeout", "30s")
 	sc, _ = GetServerConfig()
-	require.Equal(t, time.Duration(30)*time.Second, sc.KaOpts.ServerTimeout, "ServerConfig.KaOpts.ServerTimeout should be set to 30 sec")
+	assert.Equal(t, time.Duration(30)*time.Second, sc.KaOpts.ServerTimeout, "ServerConfig.KaOpts.ServerTimeout should be set to 30 sec")
 	viper.Set("peer.keepalive.minInterval", "2m")
 	sc, _ = GetServerConfig()
-	require.Equal(t, time.Duration(2)*time.Minute, sc.KaOpts.ServerMinInterval, "ServerConfig.KaOpts.ServerMinInterval should be set to 2 min")
+	assert.Equal(t, time.Duration(2)*time.Minute, sc.KaOpts.ServerMinInterval, "ServerConfig.KaOpts.ServerMinInterval should be set to 2 min")
 
 	// good config with TLS
-	org1CA, err := tlsgen.NewCA()
-	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tempdir, "org1-ca-cert.pem"), org1CA.CertBytes(), 0o644)
-	require.NoError(t, err)
-	org2CA, err := tlsgen.NewCA()
-	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tempdir, "org2-ca-cert.pem"), org2CA.CertBytes(), 0o644)
-	require.NoError(t, err)
-
-	org1ServerKP, err := org1CA.NewServerCertKeyPair("localhost")
-	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tempdir, "org1-server1-cert.pem"), org1ServerKP.Cert, 0o644)
-	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tempdir, "org1-server1-key.pem"), org1ServerKP.Key, 0o600)
-	require.NoError(t, err)
-
 	viper.Set("peer.tls.enabled", true)
-	viper.Set("peer.tls.cert.file", filepath.Join(tempdir, "org1-server1-cert.pem"))
-	viper.Set("peer.tls.key.file", filepath.Join(tempdir, "org1-server1-key.pem"))
-	viper.Set("peer.tls.rootcert.file", filepath.Join(tempdir, "org1-ca-cert.pem"))
-
-	sc, err = GetServerConfig()
-	require.NoError(t, err, "failed to build server config")
-	require.Equal(t, true, sc.SecOpts.UseTLS, "ServerConfig.SecOpts.UseTLS should be true")
-	require.Equal(t, false, sc.SecOpts.RequireClientCert, "ServerConfig.SecOpts.RequireClientCert should be false")
+	viper.Set("peer.tls.cert.file", filepath.Join("testdata", "Org1-server1-cert.pem"))
+	viper.Set("peer.tls.key.file", filepath.Join("testdata", "Org1-server1-key.pem"))
+	viper.Set("peer.tls.rootcert.file", filepath.Join("testdata", "Org1-cert.pem"))
+	sc, _ = GetServerConfig()
+	assert.Equal(t, true, sc.SecOpts.UseTLS, "ServerConfig.SecOpts.UseTLS should be true")
+	assert.Equal(t, false, sc.SecOpts.RequireClientCert, "ServerConfig.SecOpts.RequireClientCert should be false")
 	viper.Set("peer.tls.clientAuthRequired", true)
 	viper.Set("peer.tls.clientRootCAs.files", []string{
-		filepath.Join(tempdir, "org1-ca-cert.pem"),
-		filepath.Join(tempdir, "org2-ca-cert.pem"),
+		filepath.Join("testdata", "Org1-cert.pem"),
+		filepath.Join("testdata", "Org2-cert.pem"),
 	})
 	sc, _ = GetServerConfig()
-	require.Equal(t, true, sc.SecOpts.RequireClientCert, "ServerConfig.SecOpts.RequireClientCert should be true")
-	require.Equal(t, 2, len(sc.SecOpts.ClientRootCAs), "ServerConfig.SecOpts.ClientRootCAs should contain 2 entries")
+	assert.Equal(t, true, sc.SecOpts.RequireClientCert, "ServerConfig.SecOpts.RequireClientCert should be true")
+	assert.Equal(t, 2, len(sc.SecOpts.ClientRootCAs), "ServerConfig.SecOpts.ClientRootCAs should contain 2 entries")
 
 	// bad config with TLS
-	viper.Set("peer.tls.rootcert.file", "non-existent-file.pem")
+	viper.Set("peer.tls.rootcert.file", filepath.Join("testdata", "Org11-cert.pem"))
+	_, err := GetServerConfig()
+	assert.Error(t, err, "GetServerConfig should return error with bad root cert path")
+	viper.Set("peer.tls.cert.file", filepath.Join("testdata", "Org11-cert.pem"))
 	_, err = GetServerConfig()
-	require.Error(t, err, "GetServerConfig should return error with bad root cert path")
-
-	viper.Set("peer.tls.rootcert.file", filepath.Join(tempdir, "org1-ca-cert.pem"))
-	viper.Set("peer.tls.cert.file", "non-existent-file.pem")
-	_, err = GetServerConfig()
-	require.Error(t, err, "GetServerConfig should return error with bad tls cert path")
+	assert.Error(t, err, "GetServerConfig should return error with bad tls cert path")
 
 	// disable TLS for remaining tests
 	viper.Set("peer.tls.enabled", false)
@@ -171,90 +164,79 @@ func TestGetServerConfig(t *testing.T) {
 }
 
 func TestGetClientCertificate(t *testing.T) {
-	tempdir, err := ioutil.TempDir("", "peer-clientcert")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempdir)
-
-	ca, err := tlsgen.NewCA()
-	require.NoError(t, err)
-	kp, err := ca.NewServerCertKeyPair("localhost")
-	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tempdir, "server1-cert.pem"), kp.Cert, 0o644)
-	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tempdir, "server1-key.pem"), kp.Key, 0o600)
-	require.NoError(t, err)
-
 	viper.Set("peer.tls.key.file", "")
 	viper.Set("peer.tls.cert.file", "")
 	viper.Set("peer.tls.clientKey.file", "")
 	viper.Set("peer.tls.clientCert.file", "")
 
 	// neither client nor server key pairs set - expect error
-	_, err = GetClientCertificate()
-	require.Error(t, err)
+	_, err := GetClientCertificate()
+	assert.Error(t, err)
 
 	viper.Set("peer.tls.key.file", "")
-	viper.Set("peer.tls.cert.file", filepath.Join(tempdir, "server1-cert.pem"))
+	viper.Set("peer.tls.cert.file", filepath.Join("testdata", "Org1-server1-cert.pem"))
 	// missing server key file - expect error
 	_, err = GetClientCertificate()
-	require.Error(t, err)
+	assert.Error(t, err)
 
-	viper.Set("peer.tls.key.file", filepath.Join(tempdir, "server1-key.pem"))
+	viper.Set("peer.tls.key.file", filepath.Join("testdata", "Org1-server1-key.pem"))
 	viper.Set("peer.tls.cert.file", "")
 	// missing server cert file - expect error
 	_, err = GetClientCertificate()
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// set server TLS settings to ensure we get the client TLS settings
 	// when they are set properly
-	viper.Set("peer.tls.key.file", filepath.Join(tempdir, "server1-key.pem"))
-	viper.Set("peer.tls.cert.file", filepath.Join(tempdir, "server1-cert.pem"))
+	viper.Set("peer.tls.key.file", filepath.Join("testdata", "Org1-server1-key.pem"))
+	viper.Set("peer.tls.cert.file", filepath.Join("testdata", "Org1-server1-cert.pem"))
 
 	// peer.tls.clientCert.file not set - expect error
-	viper.Set("peer.tls.clientKey.file", filepath.Join(tempdir, "server1-key.pem"))
+	viper.Set("peer.tls.clientKey.file", filepath.Join("testdata", "Org2-server1-key.pem"))
 	_, err = GetClientCertificate()
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// peer.tls.clientKey.file not set - expect error
 	viper.Set("peer.tls.clientKey.file", "")
-	viper.Set("peer.tls.clientCert.file", filepath.Join(tempdir, "server1-cert.pem"))
+	viper.Set("peer.tls.clientCert.file", filepath.Join("testdata", "Org2-server1-cert.pem"))
 	_, err = GetClientCertificate()
-	require.Error(t, err)
+	assert.Error(t, err)
 
 	// client auth required and clientKey/clientCert set
 	expected, err := tls.LoadX509KeyPair(
-		filepath.Join(tempdir, "server1-cert.pem"),
-		filepath.Join(tempdir, "server1-key.pem"),
+		filepath.Join("testdata", "Org2-server1-cert.pem"),
+		filepath.Join("testdata", "Org2-server1-key.pem"),
 	)
 	if err != nil {
 		t.Fatalf("Failed to load test certificate (%s)", err)
 	}
-	viper.Set("peer.tls.clientKey.file", filepath.Join(tempdir, "server1-key.pem"))
+	viper.Set("peer.tls.clientKey.file", filepath.Join("testdata", "Org2-server1-key.pem"))
 	cert, err := GetClientCertificate()
-	require.NoError(t, err)
-	require.Equal(t, expected, cert)
+	assert.NoError(t, err)
+	assert.Equal(t, expected, cert)
 
 	// client auth required and clientKey/clientCert not set - expect
 	// client cert to be the server cert
 	viper.Set("peer.tls.clientKey.file", "")
 	viper.Set("peer.tls.clientCert.file", "")
 	expected, err = tls.LoadX509KeyPair(
-		filepath.Join(tempdir, "server1-cert.pem"),
-		filepath.Join(tempdir, "server1-key.pem"),
+		filepath.Join("testdata", "Org1-server1-cert.pem"),
+		filepath.Join("testdata", "Org1-server1-key.pem"),
 	)
-	require.NoError(t, err, "failed to load test certificate")
+	if err != nil {
+		t.Fatalf("Failed to load test certificate (%s)", err)
+	}
 	cert, err = GetClientCertificate()
-	require.NoError(t, err)
-	require.Equal(t, expected, cert)
+	assert.NoError(t, err)
+	assert.Equal(t, expected, cert)
 }
 
 func TestGlobalConfig(t *testing.T) {
 	defer viper.Reset()
 	cwd, err := os.Getwd()
-	require.NoError(t, err, "failed to get current working directory")
+	assert.NoError(t, err, "failed to get current working directory")
 	viper.SetConfigFile(filepath.Join(cwd, "core.yaml"))
 
-	// Capture the configuration from viper
+	//Capture the configuration from viper
 	viper.Set("peer.addressAutoDetect", false)
 	viper.Set("peer.address", "localhost:8080")
 	viper.Set("peer.id", "testPeerID")
@@ -275,8 +257,6 @@ func TestGlobalConfig(t *testing.T) {
 	viper.Set("peer.chaincodeListenAddress", "0.0.0.0:7052")
 	viper.Set("peer.chaincodeAddress", "0.0.0.0:7052")
 	viper.Set("peer.validatorPoolSize", 1)
-	viper.Set("peer.gateway.enabled", true)
-	viper.Set("peer.gateway.endorsementTimeout", 10*time.Second)
 
 	viper.Set("vm.endpoint", "unix:///var/run/docker.sock")
 	viper.Set("vm.docker.tls.enabled", false)
@@ -312,7 +292,7 @@ func TestGlobalConfig(t *testing.T) {
 	})
 
 	coreConfig, err := GlobalConfig()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	expectedConfig := &Config{
 		LocalMSPID:                            "SampleOrg",
@@ -371,14 +351,9 @@ func TestGlobalConfig(t *testing.T) {
 		DockerCert: filepath.Join(cwd, "test/vm/tls/cert/file"),
 		DockerKey:  filepath.Join(cwd, "test/vm/tls/key/file"),
 		DockerCA:   filepath.Join(cwd, "test/vm/tls/ca/file"),
-
-		GatewayOptions: gateway.Options{
-			Enabled:            true,
-			EndorsementTimeout: 10 * time.Second,
-		},
 	}
 
-	require.Equal(t, coreConfig, expectedConfig)
+	assert.Equal(t, coreConfig, expectedConfig)
 }
 
 func TestGlobalConfigDefault(t *testing.T) {
@@ -386,7 +361,7 @@ func TestGlobalConfigDefault(t *testing.T) {
 	viper.Set("peer.address", "localhost:8080")
 
 	coreConfig, err := GlobalConfig()
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	expectedConfig := &Config{
 		AuthenticationTimeWindow:      15 * time.Minute,
@@ -394,64 +369,9 @@ func TestGlobalConfigDefault(t *testing.T) {
 		ValidatorPoolSize:             runtime.NumCPU(),
 		VMNetworkMode:                 "host",
 		DeliverClientKeepaliveOptions: comm.DefaultKeepaliveOptions,
-		GatewayOptions:                gateway.GetOptions(viper.GetViper()),
 	}
 
-	require.Equal(t, expectedConfig, coreConfig)
-}
-
-func TestPropagateEnvironment(t *testing.T) {
-	defer viper.Reset()
-	viper.Set("peer.address", "localhost:8080")
-	viper.Set("chaincode.externalBuilders", &[]ExternalBuilder{
-		{
-			Name:        "testName",
-			Environment: []string{"KEY=VALUE"},
-			Path:        "/testPath",
-		},
-		{
-			Name:                 "testName",
-			PropagateEnvironment: []string{"KEY=VALUE"},
-			Path:                 "/testPath",
-		},
-		{
-			Name:                 "testName",
-			Environment:          []string{"KEY=VALUE"},
-			PropagateEnvironment: []string{"KEY=VALUE2"},
-			Path:                 "/testPath",
-		},
-	})
-	coreConfig, err := GlobalConfig()
-	require.NoError(t, err)
-
-	expectedConfig := &Config{
-		AuthenticationTimeWindow:      15 * time.Minute,
-		PeerAddress:                   "localhost:8080",
-		ValidatorPoolSize:             runtime.NumCPU(),
-		VMNetworkMode:                 "host",
-		DeliverClientKeepaliveOptions: comm.DefaultKeepaliveOptions,
-		ExternalBuilders: []ExternalBuilder{
-			{
-				Name:                 "testName",
-				Environment:          []string{"KEY=VALUE"},
-				PropagateEnvironment: []string{"KEY=VALUE"},
-				Path:                 "/testPath",
-			},
-			{
-				Name:                 "testName",
-				PropagateEnvironment: []string{"KEY=VALUE"},
-				Path:                 "/testPath",
-			},
-			{
-				Name:                 "testName",
-				Environment:          []string{"KEY=VALUE"},
-				PropagateEnvironment: []string{"KEY=VALUE2"},
-				Path:                 "/testPath",
-			},
-		},
-		GatewayOptions: gateway.GetOptions(viper.GetViper()),
-	}
-	require.Equal(t, expectedConfig, coreConfig)
+	assert.Equal(t, expectedConfig, coreConfig)
 }
 
 func TestMissingExternalBuilderPath(t *testing.T) {
@@ -463,7 +383,7 @@ func TestMissingExternalBuilderPath(t *testing.T) {
 		},
 	})
 	_, err := GlobalConfig()
-	require.EqualError(t, err, "invalid external builder configuration, path attribute missing in one or more builders")
+	assert.EqualError(t, err, "invalid external builder configuration, path attribute missing in one or more builders")
 }
 
 func TestMissingExternalBuilderName(t *testing.T) {
@@ -475,5 +395,5 @@ func TestMissingExternalBuilderName(t *testing.T) {
 		},
 	})
 	_, err := GlobalConfig()
-	require.EqualError(t, err, "external builder at path relative/plugin_dir has no name attribute")
+	assert.EqualError(t, err, "external builder at path relative/plugin_dir has no name attribute")
 }

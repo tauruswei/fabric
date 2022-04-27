@@ -14,10 +14,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// AcceptAll returns a predicate that accepts all Metadata
-var AcceptAll ChaincodePredicate = func(cc chaincode.Metadata) bool {
-	return true
-}
+var (
+	// AcceptAll returns a predicate that accepts all Metadata
+	AcceptAll ChaincodePredicate = func(cc chaincode.Metadata) bool {
+		return true
+	}
+)
 
 // ChaincodePredicate accepts or rejects chaincode based on its metadata
 type ChaincodePredicate func(cc chaincode.Metadata) bool

@@ -36,7 +36,7 @@ type channelImpl struct {
 // Returns a new channel for a given topic name and partition number.
 func newChannel(topic string, partition int32) channel {
 	return &channelImpl{
-		tpc: topic,
+		tpc: fmt.Sprintf("%s", topic),
 		prt: partition,
 	}
 }

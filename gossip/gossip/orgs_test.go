@@ -27,7 +27,7 @@ import (
 	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -106,7 +106,7 @@ func newGossipInstanceWithGRPCWithExternalEndpoint(id int, port int, gRPCServer 
 	conf := &Config{
 		BootstrapPeers:               bootPeersWithPorts(boot...),
 		ID:                           fmt.Sprintf("p%d", id),
-		MaxBlockCountToStore:         10,
+		MaxBlockCountToStore:         100,
 		MaxPropagationBurstLatency:   time.Duration(500) * time.Millisecond,
 		MaxPropagationBurstSize:      20,
 		PropagateIterations:          1,
@@ -132,12 +132,10 @@ func newGossipInstanceWithGRPCWithExternalEndpoint(id int, port int, gRPCServer 
 		AliveExpirationTimeout:       discoveryConfig.AliveExpirationTimeout,
 		AliveExpirationCheckInterval: discoveryConfig.AliveExpirationCheckInterval,
 		ReconnectInterval:            discoveryConfig.ReconnectInterval,
-		MaxConnectionAttempts:        discoveryConfig.MaxConnectionAttempts,
-		MsgExpirationFactor:          discoveryConfig.MsgExpirationFactor,
 	}
 	selfID := api.PeerIdentityType(conf.InternalEndpoint)
 	g := New(conf, gRPCServer.Server(), mcs, mcs, selfID,
-		secureDialOpts, metrics.NewGossipMetrics(&disabled.Provider{}), nil)
+		secureDialOpts, metrics.NewGossipMetrics(&disabled.Provider{}))
 	go func() {
 		gRPCServer.Start()
 	}()
@@ -244,7 +242,7 @@ func TestMultipleOrgEndpointLeakage(t *testing.T) {
 			}
 			for _, knownPeer := range peersKnown {
 				if !shouldAKnowB(pkiID, knownPeer.PKIid) {
-					require.Fail(t, fmt.Sprintf("peer %#v doesn't know %#v", peerNetMember.Endpoint, knownPeer.Endpoint))
+					assert.Fail(t, fmt.Sprintf("peer %#v doesn't know %#v", peerNetMember.Endpoint, knownPeer.Endpoint))
 					return false
 				}
 				internalEndpointLen := len(knownPeer.InternalEndpoint)
@@ -255,7 +253,7 @@ func TestMultipleOrgEndpointLeakage(t *testing.T) {
 					}
 				} else {
 					if internalEndpointLen != 0 {
-						require.Fail(t, fmt.Sprintf("peer: %v knows internal endpoint of %v (%#v)", peerNetMember.InternalEndpoint, string(knownPeer.PKIid), knownPeer.InternalEndpoint))
+						assert.Fail(t, fmt.Sprintf("peer: %v knows internal endpoint of %v (%#v)", peerNetMember.InternalEndpoint, string(knownPeer.PKIid), knownPeer.InternalEndpoint))
 						return false
 					}
 				}
@@ -453,7 +451,7 @@ func TestConfidentiality(t *testing.T) {
 					return false
 				}
 				// Make sure no one knows too much
-				require.True(t, membersCount <= expMemberSize, "%s knows too much (%d > %d) peers: %v",
+				assert.True(t, membersCount <= expMemberSize, "%s knows too much (%d > %d) peers: %v",
 					membersCount, expMemberSize, peerNetMember.PKIid, members)
 			}
 		}
@@ -565,16 +563,16 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
 		// The total organizations of the message must be a subset of s U d.
 		orgs := extractOrgsFromMsg(msg.GossipMessage, sec)
 		s := []string{msg.src, msg.dst}
-		require.True(t, isSubset(orgs, s), "%v isn't a subset of %v", orgs, s)
+		assert.True(t, isSubset(orgs, s), "%v isn't a subset of %v", orgs, s)
 
 		// Ensure no one but B knows about D and vice versa
 		if msg.dst == "D" {
-			require.NotContains(t, "A", orgs)
-			require.NotContains(t, "C", orgs)
+			assert.NotContains(t, "A", orgs)
+			assert.NotContains(t, "C", orgs)
 		}
 
 		if msg.dst == "A" || msg.dst == "C" {
-			require.NotContains(t, "D", orgs)
+			assert.NotContains(t, "D", orgs)
 		}
 
 		// If this is an identity snapshot, make sure that only identities of peers
@@ -587,7 +585,7 @@ func inspectMsgs(t *testing.T, msgChan chan *msg, sec api.SecurityAdvisor, peers
 			identityMsg, _ := protoext.EnvelopeToGossipMessage(envp)
 			pkiID := identityMsg.GetPeerIdentity().PkiId
 			_, hasExternalEndpoint := peersWithExternalEndpoints[string(pkiID)]
-			require.True(t, hasExternalEndpoint,
+			assert.True(t, hasExternalEndpoint,
 				"Peer %s doesn't have an external endpoint but its identity was gossiped", string(pkiID))
 		}
 	}
@@ -597,7 +595,7 @@ func inspectStateInfoMsg(t *testing.T, m *msg, peersWithExternalEndpoints map[st
 	if protoext.IsStateInfoMsg(m.GossipMessage) {
 		pkiID := m.GetStateInfo().PkiId
 		_, hasExternalEndpoint := peersWithExternalEndpoints[string(pkiID)]
-		require.True(t, hasExternalEndpoint, "peer %s has no external endpoint but crossed an org", string(pkiID))
+		assert.True(t, hasExternalEndpoint, "peer %s has no external endpoint but crossed an org", string(pkiID))
 		return
 	}
 
@@ -605,7 +603,7 @@ func inspectStateInfoMsg(t *testing.T, m *msg, peersWithExternalEndpoints map[st
 		msg, _ := protoext.EnvelopeToGossipMessage(envp)
 		pkiID := msg.GetStateInfo().PkiId
 		_, hasExternalEndpoint := peersWithExternalEndpoints[string(pkiID)]
-		require.True(t, hasExternalEndpoint, "peer %s has no external endpoint but crossed an org", string(pkiID))
+		assert.True(t, hasExternalEndpoint, "peer %s has no external endpoint but crossed an org", string(pkiID))
 	}
 }
 

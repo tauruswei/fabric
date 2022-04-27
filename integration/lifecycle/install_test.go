@@ -48,7 +48,7 @@ var _ = Describe("chaincode install", func() {
 		network.ExternalBuilders = append(network.ExternalBuilders, fabricconfig.ExternalBuilder{
 			Path:                 filepath.Join(cwd, "..", "externalbuilders", "golang"),
 			Name:                 "external-golang",
-			PropagateEnvironment: []string{"GOPATH", "GOCACHE", "GOPROXY", "HOME", "PATH"},
+			EnvironmentWhitelist: []string{"GOPATH", "GOCACHE", "GOPROXY", "HOME", "PATH"},
 		})
 		network.GenerateConfigTree()
 		network.Bootstrap()

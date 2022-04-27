@@ -8,17 +8,18 @@ package validation
 
 import (
 	"github.com/hyperledger/fabric-protos-go/ledger/rwset/kvrwset"
+	"github.com/hyperledger/fabric/core/ledger/internal/version"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/privacyenabledstate"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statedb"
 	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/statemetadata"
 )
 
-func prepareTxOps(rwset *rwsetutil.TxRwSet, precedingUpdates *publicAndHashUpdates, db *privacyenabledstate.DB) (txOps, error) {
+func prepareTxOps(rwset *rwsetutil.TxRwSet, txht *version.Height,
+	precedingUpdates *publicAndHashUpdates, db *privacyenabledstate.DB) (txOps, error) {
 	txops := txOps{}
-	if err := txops.applyTxRwset(rwset); err != nil {
-		return nil, err
-	}
+	txops.applyTxRwset(rwset)
+	//logger.Debugf("prepareTxOps() txops after applying raw rwset=%#v", spew.Sdump(txops))
 	for ck, keyop := range txops {
 		// check if the final state of the key, value and metadata, is already present in the transaction, then skip
 		// otherwise we need to retrieve latest state and merge in the current value or metadata update
@@ -48,7 +49,7 @@ func prepareTxOps(rwset *rwsetutil.TxRwSet, precedingUpdates *publicAndHashUpdat
 			delete(txops, ck)
 		}
 	}
-	// logger.Debugf("prepareTxOps() txops after final processing=%#v", spew.Sdump(txops))
+	//logger.Debugf("prepareTxOps() txops after final processing=%#v", spew.Sdump(txops))
 	return txops, nil
 }
 
@@ -61,9 +62,7 @@ func (txops txOps) applyTxRwset(rwset *rwsetutil.TxRwSet) error {
 			txops.applyKVWrite(ns, "", kvWrite)
 		}
 		for _, kvMetadataWrite := range nsRWSet.KvRwSet.MetadataWrites {
-			if err := txops.applyMetadata(ns, "", kvMetadataWrite); err != nil {
-				return err
-			}
+			txops.applyMetadata(ns, "", kvMetadataWrite)
 		}
 
 		// apply collection level kvwrite and kvMetadataWrite
@@ -74,20 +73,18 @@ func (txops txOps) applyTxRwset(rwset *rwsetutil.TxRwSet) error {
 					&kvrwset.KVWrite{
 						Key:      string(hashedWrite.KeyHash),
 						Value:    hashedWrite.ValueHash,
-						IsDelete: rwsetutil.IsKVWriteHashDelete(hashedWrite),
+						IsDelete: hashedWrite.IsDelete,
 					},
 				)
 			}
 
 			for _, metadataWrite := range collHashRWset.HashedRwSet.MetadataWrites {
-				if err := txops.applyMetadata(ns, coll,
+				txops.applyMetadata(ns, coll,
 					&kvrwset.KVMetadataWrite{
 						Key:     string(metadataWrite.KeyHash),
 						Entries: metadataWrite.Entries,
 					},
-				); err != nil {
-					return err
-				}
+				)
 			}
 		}
 	}
@@ -96,7 +93,7 @@ func (txops txOps) applyTxRwset(rwset *rwsetutil.TxRwSet) error {
 
 // applyKVWrite records upsertion/deletion of a kvwrite
 func (txops txOps) applyKVWrite(ns, coll string, kvWrite *kvrwset.KVWrite) {
-	if rwsetutil.IsKVWriteDelete(kvWrite) {
+	if kvWrite.IsDelete {
 		txops.delete(compositeKey{ns, coll, kvWrite.Key})
 	} else {
 		txops.upsert(compositeKey{ns, coll, kvWrite.Key}, kvWrite.Value)
@@ -160,10 +157,10 @@ func retrieveLatestMetadata(ns, coll, key string,
 type keyOpsFlag uint8
 
 const (
-	upsertVal keyOpsFlag = 1 << iota
-	metadataUpdate
-	metadataDelete
-	keyDelete
+	upsertVal      keyOpsFlag = 1 // 1 << 0
+	metadataUpdate            = 2 // 1 << 1
+	metadataDelete            = 4 // 1 << 2
+	keyDelete                 = 8 // 1 << 3
 )
 
 type compositeKey struct {

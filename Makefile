@@ -7,50 +7,47 @@
 # This makefile defines the following targets
 #
 #   - all (default) - builds all targets and runs all non-integration tests/checks
-#   - basic-checks - performs basic checks like license, spelling, trailing spaces and linter
-#   - check-deps - check for vendored dependencies that are no longer used
 #   - checks - runs all non-integration tests/checks
-#   - clean-all - superset of 'clean' that also removes persistent state
-#   - clean - cleans the build area
+#   - desk-check - runs linters and verify to test changed packages
 #   - configtxgen - builds a native configtxgen binary
 #   - configtxlator - builds a native configtxlator binary
-#   - cryptogen - builds a native cryptogen binary
-#   - desk-check - runs linters and verify to test changed packages
-#   - dist-clean - clean release packages for all target platforms
-#   - docker[-clean] - ensures all docker images are available[/cleaned]
-#   - docker-list - generates a list of docker images that 'make docker' produces
-#   - docker-tag-latest - re-tags the images made by 'make docker' with the :latest tag
-#   - docker-tag-stable - re-tags the images made by 'make docker' with the :stable tag
-#   - docker-thirdparty - pulls thirdparty images (kafka,zookeeper,couchdb)
-#   - docs - builds the documentation in html format
-#   - gotools - installs go tools like golint
-#   - help-docs - generate the command reference docs
-#   - idemixgen - builds a native idemixgen binary
-#   - integration-test-prereqs - setup prerequisites for integration tests
-#   - integration-test - runs the integration tests
-#   - license - checks go source files for Apache license header
-#   - linter - runs all code checks
-#   - native - ensures all native binaries are available
-#   - orderer - builds a native fabric orderer binary
-#   - orderer-docker[-clean] - ensures the orderer container is available[/cleaned]
+#   - cryptogen  -  builds a native cryptogen binary
+#   - idemixgen  -  builds a native idemixgen binary
 #   - peer - builds a native fabric peer binary
-#   - peer-docker[-clean] - ensures the peer container is available[/cleaned]
-#   - profile - runs unit tests for all packages in coverprofile mode (slow)
-#   - protos - generate all protobuf artifacts based on .proto files
-#   - publish-images - publishes release docker images to nexus3 or docker hub.
-#   - release-all - builds release packages for all target platforms
+#   - orderer - builds a native fabric orderer binary
 #   - release - builds release packages for the host platform
-#   - tools-docker[-clean] - ensures the tools container is available[/cleaned]
-#   - unit-test-clean - cleans unit test state (particularly from docker)
+#   - release-all - builds release packages for all target platforms
+#   - publish-images - publishes release docker images to nexus3 or docker hub.
 #   - unit-test - runs the go-test based unit tests
 #   - verify - runs unit tests for only the changed package tree
+#   - profile - runs unit tests for all packages in coverprofile mode (slow)
+#   - gotools - installs go tools like golint
+#   - linter - runs all code checks
+#   - check-deps - check for vendored dependencies that are no longer used
+#   - license - checks go source files for Apache license header
+#   - native - ensures all native binaries are available
+#   - docker[-clean] - ensures all docker images are available[/cleaned]
+#   - docker-list - generates a list of docker images that 'make docker' produces
+#   - peer-docker[-clean] - ensures the peer container is available[/cleaned]
+#   - orderer-docker[-clean] - ensures the orderer container is available[/cleaned]
+#   - tools-docker[-clean] - ensures the tools container is available[/cleaned]
+#   - protos - generate all protobuf artifacts based on .proto files
+#   - clean - cleans the build area
+#   - clean-all - superset of 'clean' that also removes persistent state
+#   - dist-clean - clean release packages for all target platforms
+#   - unit-test-clean - cleans unit test state (particularly from docker)
+#   - basic-checks - performs basic checks like license, spelling, trailing spaces and linter
+#   - docker-thirdparty - pulls thirdparty images (kafka,zookeeper,couchdb)
+#   - docker-tag-latest - re-tags the images made by 'make docker' with the :latest tag
+#   - docker-tag-stable - re-tags the images made by 'make docker' with the :stable tag
+#   - help-docs - generate the command reference docs
 
-ALPINE_VER ?= 3.13
-BASE_VERSION = 2.4.0
+ALPINE_VER ?= 3.11
+BASE_VERSION = 2.2.0
 
 # 3rd party image version
 # These versions are also set in the runners in ./integration/runners/
-COUCHDB_VER ?= 3.1.1
+COUCHDB_VER ?= 2.3
 KAFKA_VER ?= 5.3.1
 ZOOKEEPER_VER ?= 5.3.1
 
@@ -77,13 +74,13 @@ METADATA_VAR += CommitSHA=$(EXTRA_VERSION)
 METADATA_VAR += BaseDockerLabel=$(BASE_DOCKER_LABEL)
 METADATA_VAR += DockerNamespace=$(DOCKER_NS)
 
-GO_VER = 1.15.7
+GO_VER = 1.14.1
 GO_TAGS ?=
 
 RELEASE_EXES = orderer $(TOOLS_EXES)
 RELEASE_IMAGES = baseos ccenv orderer peer tools
-RELEASE_PLATFORMS = darwin-amd64 linux-amd64 windows-amd64
-TOOLS_EXES = configtxgen configtxlator cryptogen discover idemixgen osnadmin peer
+RELEASE_PLATFORMS = darwin-amd64 linux-amd64 linux-ppc64le linux-s390x windows-amd64
+TOOLS_EXES = configtxgen configtxlator cryptogen discover idemixgen peer
 
 pkgmap.configtxgen    := $(PKGNAME)/cmd/configtxgen
 pkgmap.configtxlator  := $(PKGNAME)/cmd/configtxlator
@@ -91,7 +88,6 @@ pkgmap.cryptogen      := $(PKGNAME)/cmd/cryptogen
 pkgmap.discover       := $(PKGNAME)/cmd/discover
 pkgmap.idemixgen      := $(PKGNAME)/cmd/idemixgen
 pkgmap.orderer        := $(PKGNAME)/cmd/orderer
-pkgmap.osnadmin       := $(PKGNAME)/cmd/osnadmin
 pkgmap.peer           := $(PKGNAME)/cmd/peer
 
 .DEFAULT_GOAL := all
@@ -106,18 +102,14 @@ all: check-go-version native docker checks
 checks: basic-checks unit-test integration-test
 
 .PHONY: basic-checks
-basic-checks: check-go-version license spelling references trailing-spaces linter check-help-docs check-metrics-doc filename-spaces check-swagger
+basic-checks: check-go-version license spelling references trailing-spaces linter check-metrics-doc filename-spaces
 
 .PHONY: desk-checks
 desk-check: checks verify
 
 .PHONY: help-docs
 help-docs: native
-	@scripts/help_docs.sh
-
-.PHONY: check-help-docs
-check-help-docs: native
-	@scripts/help_docs.sh check
+	@scripts/generateHelpDocs.sh
 
 .PHONY: spelling
 spelling: gotool.misspell
@@ -143,11 +135,8 @@ check-go-version:
 	@scripts/check_go_version.sh $(GO_VER)
 
 .PHONY: integration-test
-integration-test: integration-test-prereqs
+integration-test: gotool.ginkgo baseos-docker ccenv-docker docker-thirdparty
 	./scripts/run-integration-tests.sh
-
-.PHONY: integration-test-prereqs
-integration-test-prereqs: gotool.ginkgo baseos-docker ccenv-docker docker-thirdparty
 
 .PHONY: unit-test
 unit-test: unit-test-clean docker-thirdparty-couchdb
@@ -178,7 +167,7 @@ profile: export JOB_TYPE=PROFILE
 profile: unit-test
 
 .PHONY: linter
-linter: check-deps gotool.goimports gotool.gofumpt gotool.staticcheck
+linter: check-deps gotool.goimports
 	@echo "LINT: Running code checks.."
 	./scripts/golinter.sh
 
@@ -197,16 +186,6 @@ generate-metrics-doc:
 	@echo "Generating metrics reference documentation..."
 	./scripts/metrics_doc.sh generate
 
-.PHONY: check-swagger
-check-swagger: gotool.swagger
-	@echo "SWAGGER: Checking for outdated swagger..."
-	./scripts/swagger.sh check
-
-.PHONY: generate-swagger
-generate-swagger: gotool.swagger
-	@echo "Generating swagger..."
-	./scripts/swagger.sh generate
-
 .PHONY: protos
 protos: gotool.protoc-gen-go
 	@echo "Compiling non-API protos..."
@@ -214,9 +193,6 @@ protos: gotool.protoc-gen-go
 
 .PHONY: native
 native: $(RELEASE_EXES)
-
-.PHONY: tools
-tools: $(TOOLS_EXES)
 
 .PHONY: $(RELEASE_EXES)
 $(RELEASE_EXES): %: $(BUILD_DIR)/bin/%
@@ -234,11 +210,10 @@ docker: $(RELEASE_IMAGES:%=%-docker)
 .PHONY: $(RELEASE_IMAGES:%=%-docker)
 $(RELEASE_IMAGES:%=%-docker): %-docker: $(BUILD_DIR)/images/%/$(DUMMY)
 
-$(BUILD_DIR)/images/baseos/$(DUMMY):  BUILD_CONTEXT=images/baseos
 $(BUILD_DIR)/images/ccenv/$(DUMMY):   BUILD_CONTEXT=images/ccenv
+$(BUILD_DIR)/images/baseos/$(DUMMY):  BUILD_CONTEXT=images/baseos
 $(BUILD_DIR)/images/peer/$(DUMMY):    BUILD_ARGS=--build-arg GO_TAGS=${GO_TAGS}
 $(BUILD_DIR)/images/orderer/$(DUMMY): BUILD_ARGS=--build-arg GO_TAGS=${GO_TAGS}
-$(BUILD_DIR)/images/tools/$(DUMMY):   BUILD_ARGS=--build-arg GO_TAGS=${GO_TAGS}
 
 $(BUILD_DIR)/images/%/$(DUMMY):
 	@echo "Building Docker image $(DOCKER_NS)/fabric-$*"
@@ -339,7 +314,3 @@ unit-test-clean:
 .PHONY: filename-spaces
 spaces:
 	@scripts/check_file_name_spaces.sh
-
-.PHONY: docs
-docs:
-	@docker run --rm -v $$(pwd):/docs n42org/tox:3.4.0 sh -c 'cd /docs && tox -e docs'

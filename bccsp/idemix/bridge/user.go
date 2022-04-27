@@ -69,10 +69,10 @@ func (u *User) MakeNym(sk handlers.Big, ipk handlers.IssuerPublicKey) (r1 handle
 	return
 }
 
-func (*User) NewPublicNymFromBytes(raw []byte) (res handlers.Ecp, err error) {
+func (*User) NewPublicNymFromBytes(raw []byte) (r handlers.Ecp, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			res = nil
+			r = nil
 			err = errors.Errorf("failure [%s]", r)
 		}
 	}()
@@ -80,7 +80,7 @@ func (*User) NewPublicNymFromBytes(raw []byte) (res handlers.Ecp, err error) {
 	// raw is the concatenation of two big integers
 	lHalve := len(raw) / 2
 
-	res = &Ecp{E: FP256BN.NewECPbigs(FP256BN.FromBytes(raw[:lHalve]), FP256BN.FromBytes(raw[lHalve:]))}
+	r = &Ecp{E: FP256BN.NewECPbigs(FP256BN.FromBytes(raw[:lHalve]), FP256BN.FromBytes(raw[lHalve:]))}
 
 	return
 }

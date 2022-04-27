@@ -10,20 +10,18 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/hyperledger/fabric/core/ledger"
 	"github.com/hyperledger/fabric/core/ledger/pvtdatapolicy"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func pvtDataConf() *PrivateDataConfig {
 	return &PrivateDataConfig{
 		PrivateDataConfig: &ledger.PrivateDataConfig{
-			BatchesInterval:                     1000,
-			MaxBatchSize:                        5000,
-			PurgeInterval:                       2,
-			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
+			BatchesInterval: 1000,
+			MaxBatchSize:    5000,
+			PurgeInterval:   2,
 		},
 		StorePath: "",
 	}
@@ -45,16 +43,18 @@ func NewTestStoreEnv(
 	ledgerid string,
 	btlPolicy pvtdatapolicy.BTLPolicy,
 	conf *PrivateDataConfig) *StoreEnv {
+
 	storeDir, err := ioutil.TempDir("", "pdstore")
 	if err != nil {
 		t.Fatalf("Failed to create private data storage directory: %s", err)
 	}
+	assert := assert.New(t)
 	conf.StorePath = storeDir
 	testStoreProvider, err := NewProvider(conf)
-	require.NoError(t, err)
+	assert.NoError(err)
 	testStore, err := testStoreProvider.OpenStore(ledgerid)
 	testStore.Init(btlPolicy)
-	require.NoError(t, err)
+	assert.NoError(err)
 	return &StoreEnv{t, testStoreProvider, testStore, ledgerid, btlPolicy, conf}
 }
 
@@ -63,17 +63,13 @@ func (env *StoreEnv) CloseAndReopen() {
 	var err error
 	env.TestStoreProvider.Close()
 	env.TestStoreProvider, err = NewProvider(env.conf)
-	require.NoError(env.t, err)
+	assert.NoError(env.t, err)
 	env.TestStore, err = env.TestStoreProvider.OpenStore(env.ledgerid)
 	env.TestStore.Init(env.btlPolicy)
-	require.NoError(env.t, err)
+	assert.NoError(env.t, err)
 }
 
 // Cleanup cleansup the  store env after testing
 func (env *StoreEnv) Cleanup() {
-	env.TestStoreProvider.Close()
-	env.TestStore.db.Close()
-	if err := os.RemoveAll(env.conf.StorePath); err != nil {
-		env.t.Errorf("error while removing path %s, %v", env.conf.StorePath, err)
-	}
+	os.RemoveAll(env.conf.StorePath)
 }

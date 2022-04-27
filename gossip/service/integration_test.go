@@ -20,6 +20,7 @@ import (
 	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"github.com/hyperledger/fabric/internal/pkg/peer/blocksprovider"
 	"github.com/hyperledger/fabric/internal/pkg/peer/orderers"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,6 +107,9 @@ func TestLeaderYield(t *testing.T) {
 	// Prime the membership view of the peers
 	waitForFullMembershipOrFailNow(t, channelName, gossips, n, time.Second*30, time.Millisecond*100)
 
+	grpcClient, err := comm.NewGRPCClient(comm.ClientConfig{})
+	require.NoError(t, err)
+
 	store := newTransientStore(t)
 	defer store.tearDown()
 
@@ -120,6 +124,7 @@ func TestLeaderYield(t *testing.T) {
 				ReconnectTotalTimeThreshold: time.Second,
 				ConnectionTimeout:           time.Millisecond * 100,
 			},
+			deliverGRPCClient: grpcClient,
 		}}
 		gs.InitializeChannel(channelName, orderers.NewConnectionSource(flogging.MustGetLogger("peer.orderers"), nil), store.Store, Support{
 			Committer: &mockLedgerInfo{1},
@@ -164,12 +169,12 @@ func TestLeaderYield(t *testing.T) {
 	ds0.waitForDeliveryServiceActivation()
 	t.Log("p0 started its delivery service")
 	// Ensure it's a leader
-	require.Equal(t, 0, getLeader())
+	assert.Equal(t, 0, getLeader())
 	// Wait for p0 to lose its leadership
 	ds0.waitForDeliveryServiceTermination()
 	t.Log("p0 stopped its delivery service")
 	// Ensure p0 is not a leader
-	require.NotEqual(t, 0, getLeader())
+	assert.NotEqual(t, 0, getLeader())
 	// Wait for p1 to take over. It should take over before time reaches timeLimit
 	timeLimit := time.Now().Add(takeOverMaxTimeout)
 	for getLeader() != 1 && time.Now().Before(timeLimit) {

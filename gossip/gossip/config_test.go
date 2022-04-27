@@ -18,9 +18,10 @@ import (
 	"github.com/hyperledger/fabric/gossip/comm"
 	"github.com/hyperledger/fabric/gossip/gossip/algo"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/hyperledger/fabric/gossip/gossip"
 	"github.com/spf13/viper"
-	"github.com/stretchr/testify/require"
 )
 
 func TestGlobalConfig(t *testing.T) {
@@ -54,16 +55,14 @@ func TestGlobalConfig(t *testing.T) {
 	viper.Set("peer.gossip.aliveTimeInterval", "20s")
 	viper.Set("peer.gossip.aliveExpirationTimeout", "21s")
 	viper.Set("peer.gossip.reconnectInterval", "22s")
-	viper.Set("peer.gossip.maxConnectionAttempts", "100")
-	viper.Set("peer.gossip.msgExpirationFactor", "10")
 
 	coreConfig, err := gossip.GlobalConfig(endpoint, nil, bootstrap...)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	_, p, err := net.SplitHostPort(endpoint)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	port, err := strconv.ParseInt(p, 10, 64)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	expectedConfig := &gossip.Config{
 		BindPort:                     int(port),
@@ -96,11 +95,10 @@ func TestGlobalConfig(t *testing.T) {
 		AliveExpirationTimeout:       21 * time.Second,
 		AliveExpirationCheckInterval: 21 * time.Second / 10, // AliveExpirationTimeout / 10
 		ReconnectInterval:            22 * time.Second,
-		MaxConnectionAttempts:        100,
-		MsgExpirationFactor:          10,
 	}
 
-	require.Equal(t, expectedConfig, coreConfig)
+	assert.Equal(t, expectedConfig, coreConfig)
+
 }
 
 func TestGlobalConfigDefaults(t *testing.T) {
@@ -112,18 +110,18 @@ func TestGlobalConfigDefaults(t *testing.T) {
 	viper.Set("peer.gossip.externalEndpoint", externalEndpoint)
 
 	coreConfig, err := gossip.GlobalConfig(endpoint, nil, bootstrap...)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	_, p, err := net.SplitHostPort(endpoint)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	port, err := strconv.ParseInt(p, 10, 64)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	expectedConfig := &gossip.Config{
 		BindPort:                     int(port),
 		BootstrapPeers:               []string{"bootstrap1", "bootstrap2", "bootstrap3"},
 		ID:                           endpoint,
-		MaxBlockCountToStore:         10,
+		MaxBlockCountToStore:         100,
 		MaxPropagationBurstLatency:   10 * time.Millisecond,
 		MaxPropagationBurstSize:      10,
 		PropagateIterations:          1,
@@ -150,9 +148,7 @@ func TestGlobalConfigDefaults(t *testing.T) {
 		AliveExpirationTimeout:       5 * discovery.DefAliveTimeInterval,
 		AliveExpirationCheckInterval: 5 * discovery.DefAliveTimeInterval / 10,
 		ReconnectInterval:            5 * discovery.DefAliveTimeInterval,
-		MaxConnectionAttempts:        120,
-		MsgExpirationFactor:          20,
 	}
 
-	require.Equal(t, expectedConfig, coreConfig)
+	assert.Equal(t, expectedConfig, coreConfig)
 }

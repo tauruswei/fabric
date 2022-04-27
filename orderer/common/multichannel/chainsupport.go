@@ -9,14 +9,13 @@ package multichannel
 import (
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric/bccsp"
+	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/ledger/blockledger"
+	"github.com/hyperledger/fabric/common/policies"
 	"github.com/hyperledger/fabric/internal/pkg/identity"
 	"github.com/hyperledger/fabric/orderer/common/blockcutter"
-	"github.com/hyperledger/fabric/orderer/common/localconfig"
 	"github.com/hyperledger/fabric/orderer/common/msgprocessor"
-	"github.com/hyperledger/fabric/orderer/common/types"
 	"github.com/hyperledger/fabric/orderer/consensus"
-	"github.com/hyperledger/fabric/orderer/consensus/inactive"
 	"github.com/hyperledger/fabric/protoutil"
 	"github.com/pkg/errors"
 )
@@ -35,11 +34,6 @@ type ChainSupport struct {
 	// that there is a single consensus type at this orderer node and therefore the resolution of
 	// the consensus type too happens only at the ChainSupport level.
 	consensus.MetadataValidator
-
-	// The registrar is not aware of the exact type that the Chain is, e.g. etcdraft, inactive, or follower.
-	// Therefore, we let each chain report its cluster relation and status through this interface. Non cluster
-	// type chains (solo, kafka) are assigned a static reporter.
-	consensus.StatusReporter
 }
 
 func newChainSupport(
@@ -49,14 +43,14 @@ func newChainSupport(
 	signer identity.SignerSerializer,
 	blockcutterMetrics *blockcutter.Metrics,
 	bccsp bccsp.BCCSP,
-) (*ChainSupport, error) {
+) *ChainSupport {
 	// Read in the last block and metadata for the channel
 	lastBlock := blockledger.GetBlock(ledgerResources, ledgerResources.Height()-1)
 	metadata, err := protoutil.GetConsenterMetadataFromBlock(lastBlock)
 	// Assuming a block created with cb.NewBlock(), this should not
 	// error even if the orderer metadata is an empty byte slice
 	if err != nil {
-		return nil, errors.WithMessagef(err, "error extracting orderer metadata for channel: %s", ledgerResources.ConfigtxValidator().ChannelID())
+		logger.Fatalf("[channel: %s] Error extracting orderer metadata: %s", ledgerResources.ConfigtxValidator().ChannelID(), err)
 	}
 
 	// Construct limited support needed as a parameter for additional support
@@ -81,12 +75,12 @@ func newChainSupport(
 	consenterType := ledgerResources.SharedConfig().ConsensusType()
 	consenter, ok := consenters[consenterType]
 	if !ok {
-		return nil, errors.Errorf("error retrieving consenter of type: %s", consenterType)
+		logger.Panicf("Error retrieving consenter of type: %s", consenterType)
 	}
 
 	cs.Chain, err = consenter.HandleChain(cs, metadata)
 	if err != nil {
-		return nil, errors.WithMessagef(err, "error creating consenter for channel: %s", cs.ChannelID())
+		logger.Panicf("[channel: %s] Error creating consenter: %s", cs.ChannelID(), err)
 	}
 
 	cs.MetadataValidator, ok = cs.Chain.(consensus.MetadataValidator)
@@ -94,17 +88,18 @@ func newChainSupport(
 		cs.MetadataValidator = consensus.NoOpMetadataValidator{}
 	}
 
-	cs.StatusReporter, ok = cs.Chain.(consensus.StatusReporter)
-	if !ok { // Non-cluster types: solo, kafka
-		cs.StatusReporter = consensus.StaticStatusReporter{ConsensusRelation: types.ConsensusRelationOther, Status: types.StatusActive}
-	}
-
-	clusterRelation, status := cs.StatusReporter.StatusReport()
-	registrar.ReportConsensusRelationAndStatusMetrics(cs.ChannelID(), clusterRelation, status)
-
 	logger.Debugf("[channel: %s] Done creating channel support resources", cs.ChannelID())
 
-	return cs, nil
+	return cs
+}
+
+// Block returns a block with the following number,
+// or nil if such a block doesn't exist.
+func (cs *ChainSupport) Block(number uint64) *cb.Block {
+	if cs.Height() <= number {
+		return nil
+	}
+	return blockledger.GetBlock(cs.Reader(), number)
 }
 
 func (cs *ChainSupport) Reader() blockledger.Reader {
@@ -144,7 +139,7 @@ func (cs *ChainSupport) ProposeConfigUpdate(configtx *cb.Envelope) (*cb.ConfigEn
 	}
 
 	if err = checkResources(bundle); err != nil {
-		return nil, errors.WithMessage(err, "config update is not compatible")
+		return nil, errors.Wrap(err, "config update is not compatible")
 	}
 
 	if err = cs.ValidateNew(bundle); err != nil {
@@ -155,17 +150,24 @@ func (cs *ChainSupport) ProposeConfigUpdate(configtx *cb.Envelope) (*cb.ConfigEn
 	if !ok {
 		logger.Panic("old config is missing orderer group")
 	}
+	oldMetadata := oldOrdererConfig.ConsensusMetadata()
 
 	// we can remove this check since this is being validated in checkResources earlier
 	newOrdererConfig, ok := bundle.OrdererConfig()
 	if !ok {
 		return nil, errors.New("new config is missing orderer group")
 	}
+	newMetadata := newOrdererConfig.ConsensusMetadata()
 
-	if err = cs.ValidateConsensusMetadata(oldOrdererConfig, newOrdererConfig, false); err != nil {
-		return nil, errors.WithMessage(err, "consensus metadata update for channel config update is invalid")
+	if err = cs.ValidateConsensusMetadata(oldMetadata, newMetadata, false); err != nil {
+		return nil, errors.Wrap(err, "consensus metadata update for channel config update is invalid")
 	}
 	return env, nil
+}
+
+// ChannelID passes through to the underlying configtx.Validator
+func (cs *ChainSupport) ChannelID() string {
+	return cs.ConfigtxValidator().ChannelID()
 }
 
 // ConfigProto passes through to the underlying configtx.Validator
@@ -184,17 +186,29 @@ func (cs *ChainSupport) Append(block *cb.Block) error {
 	return cs.ledgerResources.ReadWriter.Append(block)
 }
 
-func newOnBoardingChainSupport(
-	ledgerResources *ledgerResources,
-	config localconfig.TopLevel,
-	bccsp bccsp.BCCSP,
-) (*ChainSupport, error) {
-	cs := &ChainSupport{ledgerResources: ledgerResources}
-	cs.Processor = msgprocessor.NewStandardChannel(cs, msgprocessor.CreateStandardChannelFilters(cs, config), bccsp)
-	cs.Chain = &inactive.Chain{Err: errors.New("system channel creation pending: server requires restart")}
-	cs.StatusReporter = consensus.StaticStatusReporter{ConsensusRelation: types.ConsensusRelationConsenter, Status: types.StatusInactive}
-
-	logger.Debugf("[channel: %s] Done creating onboarding channel support resources", cs.ChannelID())
-
-	return cs, nil
+// VerifyBlockSignature verifies a signature of a block.
+// It has an optional argument of a configuration envelope
+// which would make the block verification to use validation rules
+// based on the given configuration in the ConfigEnvelope.
+// If the config envelope passed is nil, then the validation rules used
+// are the ones that were applied at commit of previous blocks.
+func (cs *ChainSupport) VerifyBlockSignature(sd []*protoutil.SignedData, envelope *cb.ConfigEnvelope) error {
+	policyMgr := cs.PolicyManager()
+	// If the envelope passed isn't nil, we should use a different policy manager.
+	if envelope != nil {
+		bundle, err := channelconfig.NewBundle(cs.ChannelID(), envelope.Config, cs.BCCSP)
+		if err != nil {
+			return err
+		}
+		policyMgr = bundle.PolicyManager()
+	}
+	policy, exists := policyMgr.GetPolicy(policies.BlockValidation)
+	if !exists {
+		return errors.Errorf("policy %s wasn't found", policies.BlockValidation)
+	}
+	err := policy.EvaluateSignedData(sd)
+	if err != nil {
+		return errors.Wrap(err, "block verification failed")
+	}
+	return nil
 }

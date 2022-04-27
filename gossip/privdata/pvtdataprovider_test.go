@@ -33,6 +33,7 @@ import (
 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
 	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
 	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -144,7 +145,7 @@ func TestRetrievePvtdata(t *testing.T) {
 						},
 					},
 				},
-				MissingPvtData: ledger.TxMissingPvtData{},
+				MissingPvtData: ledger.TxMissingPvtDataMap{},
 			},
 		},
 		{
@@ -211,7 +212,7 @@ func TestRetrievePvtdata(t *testing.T) {
 			},
 			expectedBlockPvtdata: &ledger.BlockPvtdata{
 				PvtData: ledger.TxPvtDataMap{},
-				MissingPvtData: ledger.TxMissingPvtData{
+				MissingPvtData: ledger.TxMissingPvtDataMap{
 					1: []*ledger.MissingPvtData{
 						{
 							Namespace:  "ns1",
@@ -313,7 +314,7 @@ func TestRetrievePvtdata(t *testing.T) {
 						},
 					},
 				},
-				MissingPvtData: ledger.TxMissingPvtData{},
+				MissingPvtData: ledger.TxMissingPvtDataMap{},
 			},
 		},
 		{
@@ -441,7 +442,7 @@ func TestRetrievePvtdata(t *testing.T) {
 						},
 					},
 				},
-				MissingPvtData: ledger.TxMissingPvtData{},
+				MissingPvtData: ledger.TxMissingPvtDataMap{},
 			},
 		},
 		{
@@ -505,7 +506,7 @@ func TestRetrievePvtdata(t *testing.T) {
 						},
 					},
 				},
-				MissingPvtData: ledger.TxMissingPvtData{},
+				MissingPvtData: ledger.TxMissingPvtDataMap{},
 			},
 		},
 		{
@@ -583,7 +584,7 @@ func TestRetrievePvtdata(t *testing.T) {
 						},
 					},
 				},
-				MissingPvtData: ledger.TxMissingPvtData{},
+				MissingPvtData: ledger.TxMissingPvtDataMap{},
 			},
 		},
 		{
@@ -622,7 +623,7 @@ func TestRetrievePvtdata(t *testing.T) {
 			},
 			expectedBlockPvtdata: &ledger.BlockPvtdata{
 				PvtData: ledger.TxPvtDataMap{},
-				MissingPvtData: ledger.TxMissingPvtData{
+				MissingPvtData: ledger.TxMissingPvtDataMap{
 					1: []*ledger.MissingPvtData{
 						{
 							Namespace:  "ns1",
@@ -710,7 +711,7 @@ func TestRetrievePvtdata(t *testing.T) {
 						},
 					},
 				},
-				MissingPvtData: ledger.TxMissingPvtData{},
+				MissingPvtData: ledger.TxMissingPvtDataMap{},
 			},
 		},
 		{
@@ -808,7 +809,7 @@ func TestRetrievePvtdata(t *testing.T) {
 					},
 				},
 				// Only tx3 is missing since we skip pulling invalid tx from peers
-				MissingPvtData: ledger.TxMissingPvtData{
+				MissingPvtData: ledger.TxMissingPvtDataMap{
 					3: []*ledger.MissingPvtData{
 						{
 							Namespace:  "ns1",
@@ -975,11 +976,12 @@ func TestRetryFetchFromPeer(t *testing.T) {
 	}
 
 	_, err = pdp.RetrievePvtdata(pvtdataToRetrieve)
-	require.NoError(t, err)
+	assert.NoError(t, err)
+	var maxRetries int
 
-	maxRetries := int(testConfig.PullRetryThreshold / pullRetrySleepInterval)
-	require.Equal(t, fakeSleeper.SleepCallCount() <= maxRetries, true)
-	require.Equal(t, fakeSleeper.SleepArgsForCall(0), pullRetrySleepInterval)
+	maxRetries = int(testConfig.PullRetryThreshold / pullRetrySleepInterval)
+	assert.Equal(t, fakeSleeper.SleepCallCount() <= maxRetries, true)
+	assert.Equal(t, fakeSleeper.SleepArgsForCall(0), pullRetrySleepInterval)
 }
 
 func TestSkipPullingAllInvalidTransactions(t *testing.T) {
@@ -1032,7 +1034,7 @@ func TestSkipPullingAllInvalidTransactions(t *testing.T) {
 	expectedDigKeys := []privdatacommon.DigKey{}
 	expectedBlockPvtdata := &ledger.BlockPvtdata{
 		PvtData: ledger.TxPvtDataMap{},
-		MissingPvtData: ledger.TxMissingPvtData{
+		MissingPvtData: ledger.TxMissingPvtDataMap{
 			1: []*ledger.MissingPvtData{
 				{
 					Namespace:  "ns1",
@@ -1070,14 +1072,14 @@ func TestSkipPullingAllInvalidTransactions(t *testing.T) {
 	pdp.fetcher = newFetcher
 
 	retrievedPvtdata, err := pdp.RetrievePvtdata(pvtdataToRetrieve)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	blockPvtdata := sortBlockPvtdata(retrievedPvtdata.GetBlockPvtdata())
-	require.Equal(t, expectedBlockPvtdata, blockPvtdata)
+	assert.Equal(t, expectedBlockPvtdata, blockPvtdata)
 
 	// Check sleep and fetch were never called
-	require.Equal(t, fakeSleeper.SleepCallCount(), 0)
-	require.Len(t, newFetcher.Calls, 0)
+	assert.Equal(t, fakeSleeper.SleepCallCount(), 0)
+	assert.Len(t, newFetcher.Calls, 0)
 }
 
 func TestRetrievedPvtdataPurgeBelowHeight(t *testing.T) {
@@ -1150,11 +1152,11 @@ func TestRetrievedPvtdataPurgeBelowHeight(t *testing.T) {
 		func() {
 			txID := fmt.Sprintf("tx%d", i)
 			iterator, err := store.GetTxPvtRWSetByTxid(txID, nil)
-			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 			defer iterator.Close()
+			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 			res, err := iterator.Next()
 			require.NoError(t, err, fmt.Sprintf("Failed iterating, got err %s", err))
-			require.NotNil(t, res)
+			assert.NotNil(t, res)
 		}()
 	}
 
@@ -1198,15 +1200,15 @@ func TestRetrievedPvtdataPurgeBelowHeight(t *testing.T) {
 		func() {
 			txID := fmt.Sprintf("tx%d", i)
 			iterator, err := store.GetTxPvtRWSetByTxid(txID, nil)
-			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 			defer iterator.Close()
+			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 			res, err := iterator.Next()
 			require.NoError(t, err, fmt.Sprintf("Failed iterating, got err %s", err))
 			// Check that only the fetched private write set was purged because we haven't reached a blockNum that's a multiple of 5 yet
 			if i == 9 {
-				require.Nil(t, res)
+				assert.Nil(t, res)
 			} else {
-				require.NotNil(t, res)
+				assert.NotNil(t, res)
 			}
 		}()
 	}
@@ -1222,27 +1224,18 @@ func TestRetrievedPvtdataPurgeBelowHeight(t *testing.T) {
 		func() {
 			txID := fmt.Sprintf("tx%d", i)
 			iterator, err := store.GetTxPvtRWSetByTxid(txID, nil)
-			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 			defer iterator.Close()
+			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 			res, err := iterator.Next()
 			require.NoError(t, err, fmt.Sprintf("Failed iterating, got err %s", err))
 			// Check that the first 5 sets have been purged alongside the 9th set purged earlier
 			if i < 6 || i == 9 {
-				require.Nil(t, res)
+				assert.Nil(t, res)
 			} else {
-				require.NotNil(t, res)
+				assert.NotNil(t, res)
 			}
 		}()
 	}
-}
-
-func TestFetchStats(t *testing.T) {
-	fetchStats := fetchStats{
-		fromLocalCache:     1,
-		fromTransientStore: 2,
-		fromRemotePeer:     3,
-	}
-	require.Equal(t, "(1 from local cache, 2 from transient store, 3 from other peers)", fetchStats.String())
 }
 
 func testRetrievePvtdataSuccess(t *testing.T,
@@ -1253,6 +1246,7 @@ func testRetrievePvtdataSuccess(t *testing.T,
 	expectedDigKeys []privdatacommon.DigKey,
 	pvtdataToRetrieve []*ledger.TxPvtdataInfo,
 	expectedBlockPvtdata *ledger.BlockPvtdata) {
+
 	fmt.Println("\n" + scenario)
 
 	tempdir, err := ioutil.TempDir("", "ts")
@@ -1271,12 +1265,12 @@ func testRetrievePvtdataSuccess(t *testing.T,
 	require.NotNil(t, pdp, scenario)
 
 	retrievedPvtdata, err := pdp.RetrievePvtdata(pvtdataToRetrieve)
-	require.NoError(t, err, scenario)
+	assert.NoError(t, err, scenario)
 
 	// sometimes the collection private write sets are added out of order
 	// so we need to sort it to check equality with expected
 	blockPvtdata := sortBlockPvtdata(retrievedPvtdata.GetBlockPvtdata())
-	require.Equal(t, expectedBlockPvtdata, blockPvtdata, scenario)
+	assert.Equal(t, expectedBlockPvtdata, blockPvtdata, scenario)
 
 	// Test pvtdata is purged from store on Done() call
 	testPurged(t, scenario, retrievedPvtdata, store, pvtdataToRetrieve)
@@ -1291,6 +1285,7 @@ func testRetrievePvtdataFailure(t *testing.T,
 	expectedDigKeys []privdatacommon.DigKey,
 	pvtdataToRetrieve []*ledger.TxPvtdataInfo,
 	expectedErr string) {
+
 	fmt.Println("\n" + scenario)
 
 	tempdir, err := ioutil.TempDir("", "ts")
@@ -1309,7 +1304,7 @@ func testRetrievePvtdataFailure(t *testing.T,
 	require.NotNil(t, pdp, scenario)
 
 	_, err = pdp.RetrievePvtdata(pvtdataToRetrieve)
-	require.EqualError(t, err, expectedErr, scenario)
+	assert.EqualError(t, err, expectedErr, scenario)
 }
 
 func setupPrivateDataProvider(t *testing.T,
@@ -1318,6 +1313,7 @@ func setupPrivateDataProvider(t *testing.T,
 	storePvtdataOfInvalidTx, skipPullingInvalidTransactions bool, store *transientstore.Store,
 	rwSetsInCache, rwSetsInTransientStore, rwSetsInPeer []rwSet,
 	expectedDigKeys []privdatacommon.DigKey) *PvtdataProvider {
+
 	metrics := metrics.NewGossipMetrics(&disabled.Provider{}).PrivdataMetrics
 
 	idDeserializerFactory := IdentityDeserializerFactoryFunc(func(chainID string) msp.IdentityDeserializer {
@@ -1361,6 +1357,7 @@ func testPurged(t *testing.T,
 	retrievedPvtdata ledger.RetrievedPvtdata,
 	store *transientstore.Store,
 	txPvtdataInfo []*ledger.TxPvtdataInfo) {
+
 	retrievedPvtdata.Purge()
 	for _, pvtdata := range retrievedPvtdata.GetBlockPvtdata().PvtData {
 		func() {
@@ -1368,13 +1365,13 @@ func testPurged(t *testing.T,
 			require.NotEqual(t, txID, "", fmt.Sprintf("Could not find txID for SeqInBlock %d", pvtdata.SeqInBlock), scenario)
 
 			iterator, err := store.GetTxPvtRWSetByTxid(txID, nil)
-			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 			defer iterator.Close()
+			require.NoError(t, err, fmt.Sprintf("Failed obtaining iterator from transient store, got err %s", err))
 
 			res, err := iterator.Next()
 			require.NoError(t, err, fmt.Sprintf("Failed iterating, got err %s", err))
 
-			require.Nil(t, res, scenario)
+			assert.Nil(t, res, scenario)
 		}()
 	}
 }

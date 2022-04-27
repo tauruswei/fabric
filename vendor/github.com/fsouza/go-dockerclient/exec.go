@@ -30,7 +30,6 @@ type CreateExecOptions struct {
 	Container    string          `json:"Container,omitempty" yaml:"Container,omitempty" toml:"Container,omitempty"`
 	User         string          `json:"User,omitempty" yaml:"User,omitempty" toml:"User,omitempty"`
 	WorkingDir   string          `json:"WorkingDir,omitempty" yaml:"WorkingDir,omitempty" toml:"WorkingDir,omitempty"`
-	DetachKeys   string          `json:"DetachKeys,omitempty" yaml:"DetachKeys,omitempty" toml:"DetachKeys,omitempty"`
 	Context      context.Context `json:"-"`
 	AttachStdin  bool            `json:"AttachStdin,omitempty" yaml:"AttachStdin,omitempty" toml:"AttachStdin,omitempty"`
 	AttachStdout bool            `json:"AttachStdout,omitempty" yaml:"AttachStdout,omitempty" toml:"AttachStdout,omitempty"`
@@ -51,10 +50,9 @@ func (c *Client) CreateExec(opts CreateExecOptions) (*Exec, error) {
 		return nil, errors.New("exec configuration WorkingDir is only supported in API#1.35 and above")
 	}
 	path := fmt.Sprintf("/containers/%s/exec", opts.Container)
-	resp, err := c.do(http.MethodPost, path, doOptions{data: opts, context: opts.Context})
+	resp, err := c.do("POST", path, doOptions{data: opts, context: opts.Context})
 	if err != nil {
-		var e *Error
-		if errors.As(err, &e) && e.Status == http.StatusNotFound {
+		if e, ok := err.(*Error); ok && e.Status == http.StatusNotFound {
 			return nil, &NoSuchContainer{ID: opts.Container}
 		}
 		return nil, err
@@ -121,10 +119,9 @@ func (c *Client) StartExecNonBlocking(id string, opts StartExecOptions) (CloseWa
 	path := fmt.Sprintf("/exec/%s/start", id)
 
 	if opts.Detach {
-		resp, err := c.do(http.MethodPost, path, doOptions{data: opts, context: opts.Context})
+		resp, err := c.do("POST", path, doOptions{data: opts, context: opts.Context})
 		if err != nil {
-			var e *Error
-			if errors.As(err, &e) && e.Status == http.StatusNotFound {
+			if e, ok := err.(*Error); ok && e.Status == http.StatusNotFound {
 				return nil, &NoSuchExec{ID: id}
 			}
 			return nil, err
@@ -133,7 +130,7 @@ func (c *Client) StartExecNonBlocking(id string, opts StartExecOptions) (CloseWa
 		return nil, nil
 	}
 
-	return c.hijack(http.MethodPost, path, hijackOptions{
+	return c.hijack("POST", path, hijackOptions{
 		success:        opts.Success,
 		setRawTerminal: opts.RawTerminal,
 		in:             opts.InputStream,
@@ -154,7 +151,7 @@ func (c *Client) ResizeExecTTY(id string, height, width int) error {
 	params.Set("w", strconv.Itoa(width))
 
 	path := fmt.Sprintf("/exec/%s/resize?%s", id, params.Encode())
-	resp, err := c.do(http.MethodPost, path, doOptions{})
+	resp, err := c.do("POST", path, doOptions{})
 	if err != nil {
 		return err
 	}
@@ -195,10 +192,9 @@ type ExecInspect struct {
 // See https://goo.gl/ctMUiW for more details
 func (c *Client) InspectExec(id string) (*ExecInspect, error) {
 	path := fmt.Sprintf("/exec/%s/json", id)
-	resp, err := c.do(http.MethodGet, path, doOptions{})
+	resp, err := c.do("GET", path, doOptions{})
 	if err != nil {
-		var e *Error
-		if errors.As(err, &e) && e.Status == http.StatusNotFound {
+		if e, ok := err.(*Error); ok && e.Status == http.StatusNotFound {
 			return nil, &NoSuchExec{ID: id}
 		}
 		return nil, err

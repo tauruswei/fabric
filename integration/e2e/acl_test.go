@@ -234,7 +234,6 @@ var _ = Describe("EndToEndACL", func() {
 		// cscc
 		//
 		ItEnforcesPolicy("cscc", "GetConfigBlock", "testchannel")
-		ItEnforcesPolicy("cscc", "GetChannelConfig", "testchannel")
 
 		//
 		// _lifecycle ACL policies
@@ -265,7 +264,7 @@ var _ = Describe("EndToEndACL", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
-		Expect(sess.Err).To(gbytes.Say(`access denied: channel \[\] creator org unknown, creator is malformed`))
+		Expect(sess.Err).To(gbytes.Say(`access denied: channel \[\] creator org \[Org2MSP\]`))
 
 		By("installing the chaincode to an org1 peer as a non-admin org1 identity")
 		sess, err = network.PeerUserSession(org1Peer0, "User1", commands.ChaincodeInstall{
@@ -352,26 +351,6 @@ var _ = Describe("EndToEndACL", func() {
 		nwo.ApproveChaincodeForMyOrg(network, "testchannel", orderer, chaincode, org1Peer0, org2Peer0)
 
 		//
-		// when the ACL policy for _lifecycle/QueryApprovedChaincodeDefinition is not satisfied
-		//
-		By("querying the approved chaincode definition for org1 as an org2 admin")
-		sess, err = network.PeerAdminSession(org2Peer0, commands.ChaincodeQueryApproved{
-			ChannelID:     "testchannel",
-			Name:          chaincode.Name,
-			Sequence:      chaincode.Sequence,
-			PeerAddresses: []string{network.PeerAddress(org1Peer0, nwo.ListenPort)},
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
-		Expect(sess.Err).To(gbytes.Say(`\QError: query failed with status: 500 - Failed to authorize invocation due to failed ACL check: Failed deserializing proposal creator during channelless check policy with policy [Admins]: [expected MSP ID Org1MSP, received Org2MSP]\E`))
-
-		//
-		// when the ACL policy for _lifecycle/QueryApprovedChaincodeDefinition is satisfied
-		//
-		By("querying the approved chaincode definition for org1 as an org1 admin")
-		nwo.EnsureChaincodeApproved(network, org1Peer0, "testchannel", chaincode.Name, chaincode.Sequence)
-
-		//
 		// when the ACL policy for CheckCommitReadiness is not satisified
 		//
 		By("setting the simulate commit chaincode definition ACL policy to Org1/Admins")
@@ -456,54 +435,6 @@ var _ = Describe("EndToEndACL", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
 		Expect(sess.Err).To(gbytes.Say(`\QError: query failed with status: 500 - Failed to authorize invocation due to failed ACL check: failed evaluating policy on signed data during check policy [/Channel/Application/Org1/Admins]: [signature set did not satisfy policy]\E`))
-
-		//
-		// when the ACL policy for snapshot related commands is not satisfied (e.g., non-admin user or admin in another org)
-		//
-		By("calling snapshot submitrequest as a non-permitted identity")
-		expectedMsgNonAdmin := `\Qfailed verifying that the signed data identity satisfies local MSP principal during channelless check policy with policy [Admins]: [The identity is not an admin under this MSP [Org1MSP]: The identity does not contain OU [ADMIN], MSP: [Org1MSP]]\E`
-		expectedMsgAdminWrongOrg := `\Qfailed deserializing signed data identity during channelless check policy with policy [Admins]: [expected MSP ID Org1MSP, received Org2MSP]\E`
-		submitrequestCmd := &commands.SnapshotSubmitRequest{
-			ChannelID:   "testchannel",
-			BlockNumber: "100",
-			ClientAuth:  network.ClientAuthRequired,
-			PeerAddress: network.PeerAddress(org1Peer0, nwo.ListenPort),
-		}
-		verifyCommandErr(network, org1Peer0, "User1", submitrequestCmd, expectedMsgNonAdmin)
-		verifyCommandErr(network, org2Peer0, "Admin", submitrequestCmd, expectedMsgAdminWrongOrg)
-
-		By("calling snapshot cancelrequest as a non-permitted identity")
-		cancelrequestCmd := &commands.SnapshotCancelRequest{
-			ChannelID:   "testchannel",
-			BlockNumber: "100",
-			ClientAuth:  network.ClientAuthRequired,
-			PeerAddress: network.PeerAddress(org1Peer0, nwo.ListenPort),
-		}
-		verifyCommandErr(network, org1Peer0, "User1", cancelrequestCmd, expectedMsgNonAdmin)
-		verifyCommandErr(network, org2Peer0, "Admin", cancelrequestCmd, expectedMsgAdminWrongOrg)
-
-		By("calling snapshot listpending as a non-permitted identity")
-		listpendingCmd := &commands.SnapshotListPending{
-			ChannelID:   "testchannel",
-			ClientAuth:  network.ClientAuthRequired,
-			PeerAddress: network.PeerAddress(org1Peer0, nwo.ListenPort),
-		}
-		verifyCommandErr(network, org1Peer0, "User1", listpendingCmd, expectedMsgNonAdmin)
-		verifyCommandErr(network, org2Peer0, "Admin", listpendingCmd, expectedMsgAdminWrongOrg)
-
-		By("calling joinbysnapshot as a non-permitted identity")
-		expectedMsgNonAdmin = `\QFailed verifying that proposal's creator satisfies local MSP principal during channelless check policy with policy [Admins]: [The identity is not an admin under this MSP [Org1MSP]: The identity does not contain OU [ADMIN], MSP: [Org1MSP]]\E`
-		joinbysnapshotCmd := commands.ChannelJoinBySnapshot{
-			SnapshotPath: "/tmp/dummy_dir",
-			ClientAuth:   network.ClientAuthRequired,
-		}
-		verifyCommandErr(network, org1Peer0, "User1", joinbysnapshotCmd, expectedMsgNonAdmin)
-
-		By("calling joinbysnapshotstatus as a non-permitted identity")
-		joinbysnapshotstatusCmd := commands.ChannelJoinBySnapshotStatus{
-			ClientAuth: network.ClientAuthRequired,
-		}
-		verifyCommandErr(network, org1Peer0, "User1", joinbysnapshotstatusCmd, expectedMsgNonAdmin)
 	})
 })
 
@@ -553,11 +484,4 @@ func ToCLIChaincodeArgs(args ...string) string {
 	cArgsJSON, err := json.Marshal(cArgs)
 	Expect(err).NotTo(HaveOccurred())
 	return string(cArgsJSON)
-}
-
-func verifyCommandErr(network *nwo.Network, peer *nwo.Peer, user string, cmd nwo.Command, expectedMsg string) {
-	sess, err := network.PeerUserSession(peer, user, cmd)
-	Expect(err).NotTo(HaveOccurred())
-	Eventually(sess, network.EventuallyTimeout).Should(gexec.Exit())
-	Expect(sess.Err).To(gbytes.Say(expectedMsg))
 }

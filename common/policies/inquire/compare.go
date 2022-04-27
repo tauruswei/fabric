@@ -181,7 +181,9 @@ func NewComparablePrincipalSet(set policies.PrincipalSet) ComparablePrincipalSet
 // Clone returns a copy of this ComparablePrincipalSet
 func (cps ComparablePrincipalSet) Clone() ComparablePrincipalSet {
 	res := make(ComparablePrincipalSet, len(cps))
-	copy(res, cps)
+	for i, cp := range cps {
+		res[i] = cp
+	}
 	return res
 }
 

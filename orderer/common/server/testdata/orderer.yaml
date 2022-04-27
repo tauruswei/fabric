@@ -103,14 +103,14 @@ General:
         # Valid providers are:
         #  - SW: a software based crypto provider
         #  - PKCS11: a CA hardware security module crypto provider.
-        Default: SW
+        Default: GM
 
         # SW configures the software based blockchain crypto provider.
         SW:
             # TODO: The default Hash and Security level needs refactoring to be
             # fully configurable. Changing these defaults requires coordination
             # SHA2 is hardcoded in several places, not only BCCSP
-            Hash: SHA2
+            Hash: GMSM3
             Security: 256
             # Location of key store. If this is unset, a location will be
             # chosen using: 'LocalMSPDir'/keystore
@@ -128,13 +128,19 @@ General:
 #
 #   SECTION: File Ledger
 #
-#   - This section applies to the configuration of the file ledger.
+#   - This section applies to the configuration of the file or json ledgers.
 #
 ################################################################################
 FileLedger:
 
     # Location: The directory to store the blocks in.
+    # NOTE: If this is unset, a new temporary location will be chosen every time
+    # the orderer is restarted, using the prefix specified by Prefix.
     Location: /var/hyperledger/production/orderer
+
+    # The prefix to use when generating a ledger directory in temporary space.
+    # Otherwise, this value is ignored.
+    Prefix: hyperledger-fabric-ordererledger
 
 ################################################################################
 #
@@ -313,22 +319,6 @@ Metrics:
 
       # The prefix is prepended to all emitted statsd metrics
       Prefix:
-
-################################################################################
-#
-#   Channel participation API Configuration
-#
-#   - This provides the channel participation API configuration for the orderer.
-#   - Channel participation uses the same ListenAddress and TLS settings of the
-#     Operations service.
-#
-################################################################################
-ChannelParticipation:
-    # Channel participation API is enabled.
-    Enabled: false
-
-    # The maximum size of the request body when joining a channel.
-    MaxRequestBodySize: 1 MB
 
 ################################################################################
 #

@@ -17,6 +17,7 @@ var noopLock = func() {}
 
 // Noop is a function that doesn't do anything
 func Noop(_ interface{}) {
+
 }
 
 // invalidationTrigger is invoked on each message that was invalidated because of a message addition
@@ -218,6 +219,7 @@ func (s *messageStoreImpl) expireMessages() {
 				i--
 				s.expiredCount--
 			}
+
 		}
 	}
 }

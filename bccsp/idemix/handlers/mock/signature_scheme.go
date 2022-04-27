@@ -2,7 +2,7 @@
 package mock
 
 import (
-	"crypto/ecdsa"
+	"github.com/tjfoc/gmsm/sm2"
 	"sync"
 
 	"github.com/hyperledger/fabric/bccsp"
@@ -31,7 +31,7 @@ type SignatureScheme struct {
 		result1 []byte
 		result2 error
 	}
-	VerifyStub        func(handlers.IssuerPublicKey, []byte, []byte, []bccsp.IdemixAttribute, int, *ecdsa.PublicKey, int) error
+	VerifyStub        func(handlers.IssuerPublicKey, []byte, []byte, []bccsp.IdemixAttribute, int, *sm2.PublicKey, int) error
 	verifyMutex       sync.RWMutex
 	verifyArgsForCall []struct {
 		arg1 handlers.IssuerPublicKey
@@ -39,7 +39,7 @@ type SignatureScheme struct {
 		arg3 []byte
 		arg4 []bccsp.IdemixAttribute
 		arg5 int
-		arg6 *ecdsa.PublicKey
+		arg6 *sm2.PublicKey
 		arg7 int
 	}
 	verifyReturns struct {
@@ -143,7 +143,7 @@ func (fake *SignatureScheme) SignReturnsOnCall(i int, result1 []byte, result2 er
 	}{result1, result2}
 }
 
-func (fake *SignatureScheme) Verify(arg1 handlers.IssuerPublicKey, arg2 []byte, arg3 []byte, arg4 []bccsp.IdemixAttribute, arg5 int, arg6 *ecdsa.PublicKey, arg7 int) error {
+func (fake *SignatureScheme) Verify(arg1 handlers.IssuerPublicKey, arg2 []byte, arg3 []byte, arg4 []bccsp.IdemixAttribute, arg5 int, arg6 *sm2.PublicKey, arg7 int) error {
 	var arg2Copy []byte
 	if arg2 != nil {
 		arg2Copy = make([]byte, len(arg2))
@@ -167,7 +167,7 @@ func (fake *SignatureScheme) Verify(arg1 handlers.IssuerPublicKey, arg2 []byte, 
 		arg3 []byte
 		arg4 []bccsp.IdemixAttribute
 		arg5 int
-		arg6 *ecdsa.PublicKey
+		arg6 *sm2.PublicKey
 		arg7 int
 	}{arg1, arg2Copy, arg3Copy, arg4Copy, arg5, arg6, arg7})
 	fake.recordInvocation("Verify", []interface{}{arg1, arg2Copy, arg3Copy, arg4Copy, arg5, arg6, arg7})
@@ -188,13 +188,13 @@ func (fake *SignatureScheme) VerifyCallCount() int {
 	return len(fake.verifyArgsForCall)
 }
 
-func (fake *SignatureScheme) VerifyCalls(stub func(handlers.IssuerPublicKey, []byte, []byte, []bccsp.IdemixAttribute, int, *ecdsa.PublicKey, int) error) {
+func (fake *SignatureScheme) VerifyCalls(stub func(handlers.IssuerPublicKey, []byte, []byte, []bccsp.IdemixAttribute, int, *sm2.PublicKey, int) error) {
 	fake.verifyMutex.Lock()
 	defer fake.verifyMutex.Unlock()
 	fake.VerifyStub = stub
 }
 
-func (fake *SignatureScheme) VerifyArgsForCall(i int) (handlers.IssuerPublicKey, []byte, []byte, []bccsp.IdemixAttribute, int, *ecdsa.PublicKey, int) {
+func (fake *SignatureScheme) VerifyArgsForCall(i int) (handlers.IssuerPublicKey, []byte, []byte, []bccsp.IdemixAttribute, int, *sm2.PublicKey, int) {
 	fake.verifyMutex.RLock()
 	defer fake.verifyMutex.RUnlock()
 	argsForCall := fake.verifyArgsForCall[i]

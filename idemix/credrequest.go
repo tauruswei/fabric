@@ -69,8 +69,7 @@ func NewCredRequest(sk *FP256BN.BIG, IssuerNonce []byte, ipk *IssuerPublicKey, r
 		Nym:         EcpToProto(Nym),
 		IssuerNonce: IssuerNonce,
 		ProofC:      BigToBytes(proofC),
-		ProofS:      BigToBytes(proofS),
-	}
+		ProofS:      BigToBytes(proofS)}
 }
 
 // Check cryptographically verifies the credential request

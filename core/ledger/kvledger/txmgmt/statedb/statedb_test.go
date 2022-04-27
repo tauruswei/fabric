@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/fabric/core/ledger/internal/version"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPanic(t *testing.T) {
@@ -26,62 +26,63 @@ func TestPanic(t *testing.T) {
 	batch.Put("ns1", "key1", nil, nil)
 }
 
-// Test Put(), Get(), and Delete()
+//Test Put(), Get(), and Delete()
 func TestPutGetDeleteExistsGetUpdates(t *testing.T) {
 	batch := NewUpdateBatch()
 	batch.Put("ns1", "key1", []byte("value1"), version.NewHeight(1, 1))
 
-	// Get() should return above inserted <k,v> pair
+	//Get() should return above inserted <k,v> pair
 	actualVersionedValue := batch.Get("ns1", "key1")
-	require.Equal(t, &VersionedValue{Value: []byte("value1"), Version: version.NewHeight(1, 1)}, actualVersionedValue)
-	// Exists() should return false as key2 does not exist
+	assert.Equal(t, &VersionedValue{Value: []byte("value1"), Version: version.NewHeight(1, 1)}, actualVersionedValue)
+	//Exists() should return false as key2 does not exist
 	actualResult := batch.Exists("ns1", "key2")
 	expectedResult := false
-	require.Equal(t, expectedResult, actualResult)
+	assert.Equal(t, expectedResult, actualResult)
 
-	// Exists() should return false as ns3 does not exist
+	//Exists() should return false as ns3 does not exist
 	actualResult = batch.Exists("ns3", "key2")
 	expectedResult = false
-	require.Equal(t, expectedResult, actualResult)
+	assert.Equal(t, expectedResult, actualResult)
 
-	// Get() should return nil as key2 does not exist
+	//Get() should return nil as key2 does not exist
 	actualVersionedValue = batch.Get("ns1", "key2")
-	require.Nil(t, actualVersionedValue)
-	// Get() should return nil as ns3 does not exist
+	assert.Nil(t, actualVersionedValue)
+	//Get() should return nil as ns3 does not exist
 	actualVersionedValue = batch.Get("ns3", "key2")
-	require.Nil(t, actualVersionedValue)
+	assert.Nil(t, actualVersionedValue)
 
 	batch.Put("ns1", "key2", []byte("value2"), version.NewHeight(1, 2))
-	// Exists() should return true as key2 exists
+	//Exists() should return true as key2 exists
 	actualResult = batch.Exists("ns1", "key2")
 	expectedResult = true
-	require.Equal(t, expectedResult, actualResult)
+	assert.Equal(t, expectedResult, actualResult)
 
-	// GetUpdatedNamespaces should return 3 namespaces
+	//GetUpdatedNamespaces should return 3 namespaces
 	batch.Put("ns2", "key2", []byte("value2"), version.NewHeight(1, 2))
 	batch.Put("ns3", "key2", []byte("value2"), version.NewHeight(1, 2))
 	actualNamespaces := batch.GetUpdatedNamespaces()
 	sort.Strings(actualNamespaces)
 	expectedNamespaces := []string{"ns1", "ns2", "ns3"}
-	require.Equal(t, expectedNamespaces, actualNamespaces)
+	assert.Equal(t, expectedNamespaces, actualNamespaces)
 
-	// GetUpdates should return two VersionedValues for the namespace ns1
+	//GetUpdates should return two VersionedValues for the namespace ns1
 	expectedUpdates := make(map[string]*VersionedValue)
 	expectedUpdates["key1"] = &VersionedValue{Value: []byte("value1"), Version: version.NewHeight(1, 1)}
 	expectedUpdates["key2"] = &VersionedValue{Value: []byte("value2"), Version: version.NewHeight(1, 2)}
 	actualUpdates := batch.GetUpdates("ns1")
-	require.Equal(t, expectedUpdates, actualUpdates)
+	assert.Equal(t, expectedUpdates, actualUpdates)
 
 	actualUpdates = batch.GetUpdates("ns4")
-	require.Nil(t, actualUpdates)
+	assert.Nil(t, actualUpdates)
 
-	// Delete the above inserted <k,v> pair
+	//Delete the above inserted <k,v> pair
 	batch.Delete("ns1", "key2", version.NewHeight(1, 2))
-	// Exists() should return true after deleting key2
-	// Exists() should return true iff the key has action(Put/Delete) in this batch
+	//Exists() should return true after deleting key2
+	//Exists() should return true iff the key has action(Put/Delete) in this batch
 	actualResult = batch.Exists("ns1", "key2")
 	expectedResult = true
-	require.Equal(t, expectedResult, actualResult)
+	assert.Equal(t, expectedResult, actualResult)
+
 }
 
 func TestUpdateBatchIterator(t *testing.T) {
@@ -95,40 +96,19 @@ func TestUpdateBatchIterator(t *testing.T) {
 	batch.Put("ns2", "key4", []byte("value4"), version.NewHeight(2, 1))
 
 	checkItrResults(t, batch.GetRangeScanIterator("ns1", "key2", "key3"), []*VersionedKV{
-		{
-			&CompositeKey{"ns1", "key2"},
-			&VersionedValue{[]byte("value2"), nil, version.NewHeight(1, 2)},
-		},
+		{CompositeKey{"ns1", "key2"}, VersionedValue{[]byte("value2"), nil, version.NewHeight(1, 2)}},
 	})
 
 	checkItrResults(t, batch.GetRangeScanIterator("ns2", "key0", "key8"), []*VersionedKV{
-		{
-			&CompositeKey{"ns2", "key4"},
-			&VersionedValue{[]byte("value4"), nil, version.NewHeight(2, 1)},
-		},
-		{
-			&CompositeKey{"ns2", "key5"},
-			&VersionedValue{[]byte("value5"), nil, version.NewHeight(2, 2)},
-		},
-		{
-			&CompositeKey{"ns2", "key6"},
-			&VersionedValue{[]byte("value6"), nil, version.NewHeight(2, 3)},
-		},
+		{CompositeKey{"ns2", "key4"}, VersionedValue{[]byte("value4"), nil, version.NewHeight(2, 1)}},
+		{CompositeKey{"ns2", "key5"}, VersionedValue{[]byte("value5"), nil, version.NewHeight(2, 2)}},
+		{CompositeKey{"ns2", "key6"}, VersionedValue{[]byte("value6"), nil, version.NewHeight(2, 3)}},
 	})
 
 	checkItrResults(t, batch.GetRangeScanIterator("ns2", "", ""), []*VersionedKV{
-		{
-			&CompositeKey{"ns2", "key4"},
-			&VersionedValue{[]byte("value4"), nil, version.NewHeight(2, 1)},
-		},
-		{
-			&CompositeKey{"ns2", "key5"},
-			&VersionedValue{[]byte("value5"), nil, version.NewHeight(2, 2)},
-		},
-		{
-			&CompositeKey{"ns2", "key6"},
-			&VersionedValue{[]byte("value6"), nil, version.NewHeight(2, 3)},
-		},
+		{CompositeKey{"ns2", "key4"}, VersionedValue{[]byte("value4"), nil, version.NewHeight(2, 1)}},
+		{CompositeKey{"ns2", "key5"}, VersionedValue{[]byte("value5"), nil, version.NewHeight(2, 2)}},
+		{CompositeKey{"ns2", "key6"}, VersionedValue{[]byte("value6"), nil, version.NewHeight(2, 3)}},
 	})
 
 	checkItrResults(t, batch.GetRangeScanIterator("non-existing-ns", "", ""), nil)
@@ -137,11 +117,11 @@ func TestUpdateBatchIterator(t *testing.T) {
 func checkItrResults(t *testing.T, itr QueryResultsIterator, expectedResults []*VersionedKV) {
 	for i := 0; i < len(expectedResults); i++ {
 		res, _ := itr.Next()
-		require.Equal(t, expectedResults[i], res)
+		assert.Equal(t, expectedResults[i], res)
 	}
 	lastRes, err := itr.Next()
-	require.NoError(t, err)
-	require.Nil(t, lastRes)
+	assert.NoError(t, err)
+	assert.Nil(t, lastRes)
 	itr.Close()
 }
 
@@ -172,5 +152,5 @@ func TestMergeUpdateBatch(t *testing.T) {
 	expectedBatch.Put("ns1", "key4", []byte("batch2_value4"), version.NewHeight(6, 6))
 	expectedBatch.Delete("ns1", "key5", version.NewHeight(7, 7))
 	expectedBatch.Put("ns2", "key6", []byte("batch2_value6"), version.NewHeight(8, 8))
-	require.Equal(t, expectedBatch, batch1)
+	assert.Equal(t, expectedBatch, batch1)
 }

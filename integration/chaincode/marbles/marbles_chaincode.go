@@ -93,21 +93,25 @@ import (
 )
 
 // SimpleChaincode example simple Chaincode implementation
-type SimpleChaincode struct{}
+type SimpleChaincode struct {
+}
 
 type marble struct {
-	ObjectType string `json:"docType"` // docType is used to distinguish the various types of objects in state database
-	Name       string `json:"name"`    // the fieldtags are needed to keep case from bouncing around
+	ObjectType string `json:"docType"` //docType is used to distinguish the various types of objects in state database
+	Name       string `json:"name"`    //the fieldtags are needed to keep case from bouncing around
 	Color      string `json:"color"`
 	Size       int    `json:"size"`
 	Owner      string `json:"owner"`
 }
 
-type marbleHistory struct {
-	TxId      string  `json:"TxId"`
-	Value     *marble `json:"Value"`
-	Timestamp string  `json:"Timestamp"`
-	IsDelete  string  `json:"IsDelete"`
+// ===================================================================================
+// Main
+// ===================================================================================
+func main() {
+	err := shim.Start(new(SimpleChaincode))
+	if err != nil {
+		fmt.Printf("Error starting Simple chaincode: %s", err)
+	}
 }
 
 // Init initializes chaincode
@@ -123,23 +127,23 @@ func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 	fmt.Println("invoke is running " + function)
 
 	// Handle different functions
-	if function == "initMarble" { // create a new marble
+	if function == "initMarble" { //create a new marble
 		return t.initMarble(stub, args)
-	} else if function == "transferMarble" { // change owner of a specific marble
+	} else if function == "transferMarble" { //change owner of a specific marble
 		return t.transferMarble(stub, args)
-	} else if function == "transferMarblesBasedOnColor" { // transfer all marbles of a certain color
+	} else if function == "transferMarblesBasedOnColor" { //transfer all marbles of a certain color
 		return t.transferMarblesBasedOnColor(stub, args)
-	} else if function == "delete" { // delete a marble
+	} else if function == "delete" { //delete a marble
 		return t.delete(stub, args)
-	} else if function == "readMarble" { // read a marble
+	} else if function == "readMarble" { //read a marble
 		return t.readMarble(stub, args)
-	} else if function == "queryMarblesByOwner" { // find marbles for owner X using rich query
+	} else if function == "queryMarblesByOwner" { //find marbles for owner X using rich query
 		return t.queryMarblesByOwner(stub, args)
-	} else if function == "queryMarbles" { // find marbles based on an ad hoc rich query
+	} else if function == "queryMarbles" { //find marbles based on an ad hoc rich query
 		return t.queryMarbles(stub, args)
-	} else if function == "getHistoryForMarble" { // get history of values for a marble
+	} else if function == "getHistoryForMarble" { //get history of values for a marble
 		return t.getHistoryForMarble(stub, args)
-	} else if function == "getMarblesByRange" { // get marbles based on range query
+	} else if function == "getMarblesByRange" { //get marbles based on range query
 		return t.getMarblesByRange(stub, args)
 	} else if function == "getMarblesByRangeWithPagination" {
 		return t.getMarblesByRangeWithPagination(stub, args)
@@ -147,7 +151,7 @@ func (t *SimpleChaincode) Invoke(stub shim.ChaincodeStubInterface) pb.Response {
 		return t.queryMarblesWithPagination(stub, args)
 	}
 
-	fmt.Println("invoke did not find func: " + function) // error
+	fmt.Println("invoke did not find func: " + function) //error
 	return shim.Error("Received unknown function invocation")
 }
 
@@ -201,9 +205,9 @@ func (t *SimpleChaincode) initMarble(stub shim.ChaincodeStubInterface, args []st
 	if err != nil {
 		return shim.Error(err.Error())
 	}
-	// Alternatively, build the marble json string manually if you don't want to use struct marshalling
-	// marbleJSONasString := `{"docType":"Marble",  "name": "` + marbleName + `", "color": "` + color + `", "size": ` + strconv.Itoa(size) + `, "owner": "` + owner + `"}`
-	// marbleJSONasBytes := []byte(str)
+	//Alternatively, build the marble json string manually if you don't want to use struct marshalling
+	//marbleJSONasString := `{"docType":"Marble",  "name": "` + marbleName + `", "color": "` + color + `", "size": ` + strconv.Itoa(size) + `, "owner": "` + owner + `"}`
+	//marbleJSONasBytes := []byte(str)
 
 	// === Save marble to state ===
 	err = stub.PutState(marbleName, marbleJSONasBytes)
@@ -224,10 +228,7 @@ func (t *SimpleChaincode) initMarble(stub shim.ChaincodeStubInterface, args []st
 	//  Save index entry to state. Only the key name is needed, no need to store a duplicate copy of the marble.
 	//  Note - passing a 'nil' value will effectively delete the key from state, therefore we pass null character as value
 	value := []byte{0x00}
-	err = stub.PutState(colorNameIndexKey, value)
-	if err != nil {
-		return shim.Error(err.Error())
-	}
+	stub.PutState(colorNameIndexKey, value)
 
 	// ==== Marble saved and indexed. Return success ====
 	fmt.Println("- end init marble")
@@ -246,7 +247,7 @@ func (t *SimpleChaincode) readMarble(stub shim.ChaincodeStubInterface, args []st
 	}
 
 	name = args[0]
-	valAsbytes, err := stub.GetState(name) // get the marble from chaincode state
+	valAsbytes, err := stub.GetState(name) //get the marble from chaincode state
 	if err != nil {
 		jsonResp = "{\"Error\":\"Failed to get state for " + name + "\"}"
 		return shim.Error(jsonResp)
@@ -270,7 +271,7 @@ func (t *SimpleChaincode) delete(stub shim.ChaincodeStubInterface, args []string
 	marbleName := args[0]
 
 	// to maintain the color~name index, we need to read the marble first and get its color
-	valAsbytes, err := stub.GetState(marbleName) // get the marble from chaincode state
+	valAsbytes, err := stub.GetState(marbleName) //get the marble from chaincode state
 	if err != nil {
 		jsonResp = "{\"Error\":\"Failed to get state for " + marbleName + "\"}"
 		return shim.Error(jsonResp)
@@ -285,7 +286,7 @@ func (t *SimpleChaincode) delete(stub shim.ChaincodeStubInterface, args []string
 		return shim.Error(jsonResp)
 	}
 
-	err = stub.DelState(marbleName) // remove the marble from chaincode state
+	err = stub.DelState(marbleName) //remove the marble from chaincode state
 	if err != nil {
 		return shim.Error("Failed to delete state:" + err.Error())
 	}
@@ -309,6 +310,7 @@ func (t *SimpleChaincode) delete(stub shim.ChaincodeStubInterface, args []string
 // transfer a marble by setting a new owner name on the marble
 // ===========================================================
 func (t *SimpleChaincode) transferMarble(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	//   0       1
 	// "name", "bob"
 	if len(args) < 2 {
@@ -327,14 +329,14 @@ func (t *SimpleChaincode) transferMarble(stub shim.ChaincodeStubInterface, args 
 	}
 
 	marbleToTransfer := marble{}
-	err = json.Unmarshal(marbleAsBytes, &marbleToTransfer) // unmarshal it aka JSON.parse()
+	err = json.Unmarshal(marbleAsBytes, &marbleToTransfer) //unmarshal it aka JSON.parse()
 	if err != nil {
 		return shim.Error(err.Error())
 	}
-	marbleToTransfer.Owner = newOwner // change the owner
+	marbleToTransfer.Owner = newOwner //change the owner
 
 	marbleJSONasBytes, _ := json.Marshal(marbleToTransfer)
-	err = stub.PutState(marbleName, marbleJSONasBytes) // rewrite the marble
+	err = stub.PutState(marbleName, marbleJSONasBytes) //rewrite the marble
 	if err != nil {
 		return shim.Error(err.Error())
 	}
@@ -359,7 +361,7 @@ func constructQueryResponseFromIterator(resultsIterator shim.StateQueryIteratorI
 			return nil, err
 		}
 		// Add a comma before array members, suppress it for the first array member
-		if bArrayMemberAlreadyWritten {
+		if bArrayMemberAlreadyWritten == true {
 			buffer.WriteString(",")
 		}
 		buffer.WriteString("{\"Key\":")
@@ -383,6 +385,7 @@ func constructQueryResponseFromIterator(resultsIterator shim.StateQueryIteratorI
 // info, to the constructed query results
 // ===========================================================================================
 func addPaginationMetadataToQueryResults(buffer *bytes.Buffer, responseMetadata *pb.QueryResponseMetadata) *bytes.Buffer {
+
 	buffer.WriteString("[{\"ResponseMetadata\":{\"RecordsCount\":")
 	buffer.WriteString("\"")
 	buffer.WriteString(fmt.Sprintf("%v", responseMetadata.FetchedRecordsCount))
@@ -407,6 +410,7 @@ func addPaginationMetadataToQueryResults(buffer *bytes.Buffer, responseMetadata 
 // Therefore, range queries are a safe option for performing update transactions based on query results.
 // ===========================================================================================
 func (t *SimpleChaincode) getMarblesByRange(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	if len(args) < 2 {
 		return shim.Error("Incorrect number of arguments. Expecting 2")
 	}
@@ -439,6 +443,7 @@ func (t *SimpleChaincode) getMarblesByRange(stub shim.ChaincodeStubInterface, ar
 // Therefore, range queries are a safe option for performing update transactions based on query results.
 // ===========================================================================================
 func (t *SimpleChaincode) transferMarblesBasedOnColor(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	//   0       1
 	// "color", "bob"
 	if len(args) < 2 {
@@ -509,6 +514,7 @@ func (t *SimpleChaincode) transferMarblesBasedOnColor(stub shim.ChaincodeStubInt
 // Only available on state databases that support rich query (e.g. CouchDB)
 // =========================================================================================
 func (t *SimpleChaincode) queryMarblesByOwner(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	//   0
 	// "bob"
 	if len(args) < 1 {
@@ -534,6 +540,7 @@ func (t *SimpleChaincode) queryMarblesByOwner(stub shim.ChaincodeStubInterface, 
 // Only available on state databases that support rich query (e.g. CouchDB)
 // =========================================================================================
 func (t *SimpleChaincode) queryMarbles(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	//   0
 	// "queryString"
 	if len(args) < 1 {
@@ -554,6 +561,7 @@ func (t *SimpleChaincode) queryMarbles(stub shim.ChaincodeStubInterface, args []
 // Result set is built and returned as a byte array containing the JSON results.
 // =========================================================================================
 func getQueryResultForQueryString(stub shim.ChaincodeStubInterface, queryString string) ([]byte, error) {
+
 	fmt.Printf("- getQueryResultForQueryString queryString:\n%s\n", queryString)
 
 	resultsIterator, err := stub.GetQueryResult(queryString)
@@ -592,13 +600,14 @@ func getQueryResultForQueryString(stub shim.ChaincodeStubInterface, queryString 
 // Paginated range queries are only valid for read only transactions.
 // ===========================================================================================
 func (t *SimpleChaincode) getMarblesByRangeWithPagination(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	if len(args) < 4 {
 		return shim.Error("Incorrect number of arguments. Expecting 4")
 	}
 
 	startKey := args[0]
 	endKey := args[1]
-	// return type of ParseInt is int64
+	//return type of ParseInt is int64
 	pageSize, err := strconv.ParseInt(args[2], 10, 32)
 	if err != nil {
 		return shim.Error(err.Error())
@@ -633,6 +642,7 @@ func (t *SimpleChaincode) getMarblesByRangeWithPagination(stub shim.ChaincodeStu
 // Paginated queries are only valid for read only transactions.
 // =========================================================================================
 func (t *SimpleChaincode) queryMarblesWithPagination(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	//   0
 	// "queryString"
 	if len(args) < 3 {
@@ -640,7 +650,7 @@ func (t *SimpleChaincode) queryMarblesWithPagination(stub shim.ChaincodeStubInte
 	}
 
 	queryString := args[0]
-	// return type of ParseInt is int64
+	//return type of ParseInt is int64
 	pageSize, err := strconv.ParseInt(args[1], 10, 32)
 	if err != nil {
 		return shim.Error(err.Error())
@@ -659,6 +669,7 @@ func (t *SimpleChaincode) queryMarblesWithPagination(stub shim.ChaincodeStubInte
 // pagination info. Result set is built and returned as a byte array containing the JSON results.
 // =========================================================================================
 func getQueryResultForQueryStringWithPagination(stub shim.ChaincodeStubInterface, queryString string, pageSize int32, bookmark string) ([]byte, error) {
+
 	fmt.Printf("- getQueryResultForQueryString queryString:\n%s\n", queryString)
 
 	resultsIterator, responseMetadata, err := stub.GetQueryResultWithPagination(queryString, pageSize, bookmark)
@@ -680,6 +691,7 @@ func getQueryResultForQueryStringWithPagination(stub shim.ChaincodeStubInterface
 }
 
 func (t *SimpleChaincode) getHistoryForMarble(stub shim.ChaincodeStubInterface, args []string) pb.Response {
+
 	if len(args) < 1 {
 		return shim.Error("Incorrect number of arguments. Expecting 1")
 	}
@@ -694,37 +706,51 @@ func (t *SimpleChaincode) getHistoryForMarble(stub shim.ChaincodeStubInterface, 
 	}
 	defer resultsIterator.Close()
 
-	result := []*marbleHistory{}
+	// buffer is a JSON array containing historic values for the marble
+	var buffer bytes.Buffer
+	buffer.WriteString("[")
 
+	bArrayMemberAlreadyWritten := false
 	for resultsIterator.HasNext() {
 		response, err := resultsIterator.Next()
 		if err != nil {
 			return shim.Error(err.Error())
 		}
+		// Add a comma before array members, suppress it for the first array member
+		if bArrayMemberAlreadyWritten == true {
+			buffer.WriteString(",")
+		}
+		buffer.WriteString("{\"TxId\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(response.TxId)
+		buffer.WriteString("\"")
 
-		var value *marble = nil
-		if !response.IsDelete {
-			value = &marble{}
-			err = json.Unmarshal(response.Value, value)
-			if err != nil {
-				return shim.Error(err.Error())
-			}
+		buffer.WriteString(", \"Value\":")
+		// if it was a delete operation on given key, then we need to set the
+		//corresponding value null. Else, we will write the response.Value
+		//as-is (as the Value itself a JSON marble)
+		if response.IsDelete {
+			buffer.WriteString("null")
+		} else {
+			buffer.WriteString(string(response.Value))
 		}
 
-		history := &marbleHistory{
-			TxId:      response.TxId,
-			Value:     value,
-			Timestamp: time.Unix(response.Timestamp.Seconds, int64(response.Timestamp.Nanos)).String(),
-			IsDelete:  strconv.FormatBool(response.IsDelete),
-		}
-		result = append(result, history)
-	}
+		buffer.WriteString(", \"Timestamp\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(time.Unix(response.Timestamp.Seconds, int64(response.Timestamp.Nanos)).String())
+		buffer.WriteString("\"")
 
-	bytes, err := json.Marshal(result)
-	if err != nil {
-		return shim.Error(err.Error())
-	}
+		buffer.WriteString(", \"IsDelete\":")
+		buffer.WriteString("\"")
+		buffer.WriteString(strconv.FormatBool(response.IsDelete))
+		buffer.WriteString("\"")
 
-	fmt.Printf("- getHistoryForMarble returning:\n%s\n", string(bytes))
-	return shim.Success(bytes)
+		buffer.WriteString("}")
+		bArrayMemberAlreadyWritten = true
+	}
+	buffer.WriteString("]")
+
+	fmt.Printf("- getHistoryForMarble returning:\n%s\n", buffer.String())
+
+	return shim.Success(buffer.Bytes())
 }

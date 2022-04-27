@@ -169,7 +169,7 @@ var _ = Describe("SCC", func() {
 
 				fakeSCCFuncs.InstallChaincodeReturns(&chaincode.InstalledChaincode{
 					Label:     "label",
-					PackageID: "package-id",
+					PackageID: "packageid",
 				}, nil)
 			})
 
@@ -179,7 +179,7 @@ var _ = Describe("SCC", func() {
 				payload := &lb.InstallChaincodeResult{}
 				err := proto.Unmarshal(res.Payload, payload)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(payload.PackageId).To(Equal("package-id"))
+				Expect(payload.PackageId).To(Equal("packageid"))
 
 				Expect(fakeSCCFuncs.InstallChaincodeCallCount()).To(Equal(1))
 				ccInstallPackage := fakeSCCFuncs.InstallChaincodeArgsForCall(0)
@@ -817,7 +817,9 @@ var _ = Describe("SCC", func() {
 			})
 
 			Context("when committed definition contains a collection that has different BTL than defined in the proposed definition", func() {
-				var committedCollConfigs collectionConfigs
+				var (
+					committedCollConfigs collectionConfigs
+				)
 				BeforeEach(func() {
 					committedCollConfigs = collConfigs.deepCopy()
 					committedCollConfigs[0].BlockToLive = committedCollConfigs[0].BlockToLive + 1

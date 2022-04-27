@@ -73,6 +73,7 @@ type CollectionResources interface {
 
 type policyCheckerV20 struct {
 	someEPChecked bool
+	vpmgr         KeyLevelValidationParameterManager
 	policySupport validation.PolicyEvaluator
 	ccEP          []byte
 	nsEPChecked   map[string]bool

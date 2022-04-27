@@ -30,6 +30,6 @@ type recoverable interface {
 }
 
 type recoverer struct {
-	nextRequiredBlock uint64
-	recoverable       recoverable
+	firstBlockNum uint64
+	recoverable   recoverable
 }

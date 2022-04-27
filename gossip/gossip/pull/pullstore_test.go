@@ -16,18 +16,17 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric-protos-go/gossip"
+	proto "github.com/hyperledger/fabric-protos-go/gossip"
 	"github.com/hyperledger/fabric/gossip/comm"
 	"github.com/hyperledger/fabric/gossip/discovery"
 	"github.com/hyperledger/fabric/gossip/gossip/algo"
 	"github.com/hyperledger/fabric/gossip/protoext"
 	"github.com/hyperledger/fabric/gossip/util"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
-var (
-	pullInterval    time.Duration
-	timeoutInterval = 20 * time.Second
-)
+var pullInterval time.Duration
+var timeoutInterval = 20 * time.Second
 
 func init() {
 	util.SetupTestLogging()
@@ -41,11 +40,11 @@ type pullMsg struct {
 
 // GetSourceMessage Returns the SignedGossipMessage the ReceivedMessage was
 // constructed with
-func (pm *pullMsg) GetSourceEnvelope() *gossip.Envelope {
+func (pm *pullMsg) GetSourceEnvelope() *proto.Envelope {
 	return pm.msg.Envelope
 }
 
-func (pm *pullMsg) Respond(msg *gossip.GossipMessage) {
+func (pm *pullMsg) Respond(msg *proto.GossipMessage) {
 	sMsg, _ := protoext.NoopSign(msg)
 	pm.respondChan <- &pullMsg{
 		msg:         sMsg,
@@ -63,6 +62,7 @@ func (pm *pullMsg) GetConnectionInfo() *protoext.ConnectionInfo {
 
 // Ack returns to the sender an acknowledgement for the message
 func (pm *pullMsg) Ack(err error) {
+
 }
 
 type pullInstance struct {
@@ -140,12 +140,12 @@ func createPullInstanceWithFilters(endpoint string, peer2PullInst map[string]*pu
 	peer2PullInst[endpoint] = inst
 
 	conf := Config{
-		MsgType:           gossip.PullMsgType_BLOCK_MSG,
+		MsgType:           proto.PullMsgType_BLOCK_MSG,
 		Channel:           []byte(""),
 		ID:                endpoint,
 		PeerCountToSelect: 3,
 		PullInterval:      pullInterval,
-		Tag:               gossip.GossipMessage_EMPTY,
+		Tag:               proto.GossipMessage_EMPTY,
 		PullEngineConfig: algo.PullEngineConfig{
 			DigestWaitTime:   time.Duration(100) * time.Millisecond,
 			RequestWaitTime:  time.Duration(200) * time.Millisecond,
@@ -207,6 +207,7 @@ func TestRegisterMsgHook(t *testing.T) {
 
 	// Ensure all message types are received
 	waitUntilOrFail(t, func() bool { return len(receivedMsgTypes.ToArray()) == 4 })
+
 }
 
 func TestFilter(t *testing.T) {
@@ -241,8 +242,8 @@ func TestFilter(t *testing.T) {
 
 	waitUntilOrFail(t, func() bool { return inst2.items.Exists(uint64(0)) })
 	waitUntilOrFail(t, func() bool { return inst2.items.Exists(uint64(2)) })
-	require.False(t, inst2.items.Exists(uint64(1)))
-	require.False(t, inst2.items.Exists(uint64(3)))
+	assert.False(t, inst2.items.Exists(uint64(1)))
+	assert.False(t, inst2.items.Exists(uint64(3)))
 }
 
 func TestAddAndRemove(t *testing.T) {
@@ -308,10 +309,10 @@ func TestAddAndRemove(t *testing.T) {
 	wg.Wait()
 
 	// Ensure instance 2 got new message
-	require.True(t, inst2.items.Exists(uint64(10)), "Instance 2 should have receive message 10 but didn't")
+	assert.True(t, inst2.items.Exists(uint64(10)), "Instance 2 should have receive message 10 but didn't")
 
 	// Ensure instance 2 doesn't have message 0
-	require.False(t, inst2.items.Exists(uint64(0)), "Instance 2 has message 0 but shouldn't have")
+	assert.False(t, inst2.items.Exists(uint64(0)), "Instance 2 has message 0 but shouldn't have")
 }
 
 func TestDigestsFilters(t *testing.T) {
@@ -331,10 +332,10 @@ func TestDigestsFilters(t *testing.T) {
 		}
 		for i := range itemIds {
 			seqNum, err := strconv.ParseUint(itemIds[i], 10, 64)
-			require.NoError(t, err, "Can't parse seq number")
-			require.True(t, seqNum >= 2, "Digest with wrong ( ", seqNum, " ) seqNum passed")
+			assert.NoError(t, err, "Can't parse seq number")
+			assert.True(t, seqNum >= 2, "Digest with wrong ( ", seqNum, " ) seqNum passed")
 		}
-		require.Len(t, itemIds, 2, "Not correct number of seqNum passed")
+		assert.Len(t, itemIds, 2, "Not correct number of seqNum passed")
 		atomic.StoreInt32(&inst1ReceivedDigest, int32(1))
 	})
 
@@ -349,6 +350,7 @@ func TestDigestsFilters(t *testing.T) {
 
 	// inst2 is expected to send digest to inst1
 	waitUntilOrFail(t, func() bool { return atomic.LoadInt32(&inst1ReceivedDigest) == int32(1) })
+
 }
 
 func TestHandleMessage(t *testing.T) {
@@ -371,7 +373,7 @@ func TestHandleMessage(t *testing.T) {
 			return
 		}
 		atomic.StoreInt32(&inst1ReceivedDigest, int32(1))
-		require.True(t, len(itemIds) == 3)
+		assert.True(t, len(itemIds) == 3)
 	})
 
 	inst1.mediator.RegisterMsgHook(ResponseMsgType, func(_ []string, items []*protoext.SignedGossipMessage, msg protoext.ReceivedMessage) {
@@ -379,7 +381,7 @@ func TestHandleMessage(t *testing.T) {
 			return
 		}
 		atomic.StoreInt32(&inst1ReceivedResponse, int32(1))
-		require.True(t, len(items) == 3)
+		assert.True(t, len(items) == 3)
 	})
 
 	// inst1 sends hello to inst2
@@ -395,9 +397,9 @@ func TestHandleMessage(t *testing.T) {
 
 	// inst2 is expected to send response to inst1
 	waitUntilOrFail(t, func() bool { return atomic.LoadInt32(&inst1ReceivedResponse) == int32(1) })
-	require.True(t, inst1.items.Exists(uint64(0)))
-	require.True(t, inst1.items.Exists(uint64(1)))
-	require.True(t, inst1.items.Exists(uint64(2)))
+	assert.True(t, inst1.items.Exists(uint64(0)))
+	assert.True(t, inst1.items.Exists(uint64(1)))
+	assert.True(t, inst1.items.Exists(uint64(2)))
 }
 
 func waitUntilOrFail(t *testing.T, pred func() bool) {
@@ -410,16 +412,16 @@ func waitUntilOrFail(t *testing.T, pred func() bool) {
 		time.Sleep(timeoutInterval / 1000)
 	}
 	util.PrintStackTrace()
-	require.Fail(t, "Timeout expired!")
+	assert.Fail(t, "Timeout expired!")
 }
 
 func dataMsg(seqNum int) *protoext.SignedGossipMessage {
-	sMsg, _ := protoext.NoopSign(&gossip.GossipMessage{
+	sMsg, _ := protoext.NoopSign(&proto.GossipMessage{
 		Nonce: 0,
-		Tag:   gossip.GossipMessage_EMPTY,
-		Content: &gossip.GossipMessage_DataMsg{
-			DataMsg: &gossip.DataMessage{
-				Payload: &gossip.Payload{
+		Tag:   proto.GossipMessage_EMPTY,
+		Content: &proto.GossipMessage_DataMsg{
+			DataMsg: &proto.DataMessage{
+				Payload: &proto.Payload{
 					Data:   []byte{},
 					SeqNum: uint64(seqNum),
 				},
@@ -429,28 +431,28 @@ func dataMsg(seqNum int) *protoext.SignedGossipMessage {
 	return sMsg
 }
 
-func helloMsg() *gossip.GossipMessage {
-	return &gossip.GossipMessage{
+func helloMsg() *proto.GossipMessage {
+	return &proto.GossipMessage{
 		Channel: []byte(""),
-		Tag:     gossip.GossipMessage_EMPTY,
-		Content: &gossip.GossipMessage_Hello{
-			Hello: &gossip.GossipHello{
+		Tag:     proto.GossipMessage_EMPTY,
+		Content: &proto.GossipMessage_Hello{
+			Hello: &proto.GossipHello{
 				Nonce:    0,
 				Metadata: nil,
-				MsgType:  gossip.PullMsgType_BLOCK_MSG,
+				MsgType:  proto.PullMsgType_BLOCK_MSG,
 			},
 		},
 	}
 }
 
-func reqMsg(digest ...string) *gossip.GossipMessage {
-	return &gossip.GossipMessage{
+func reqMsg(digest ...string) *proto.GossipMessage {
+	return &proto.GossipMessage{
 		Channel: []byte(""),
-		Tag:     gossip.GossipMessage_EMPTY,
+		Tag:     proto.GossipMessage_EMPTY,
 		Nonce:   0,
-		Content: &gossip.GossipMessage_DataReq{
-			DataReq: &gossip.DataRequest{
-				MsgType: gossip.PullMsgType_BLOCK_MSG,
+		Content: &proto.GossipMessage_DataReq{
+			DataReq: &proto.DataRequest{
+				MsgType: proto.PullMsgType_BLOCK_MSG,
 				Nonce:   0,
 				Digests: util.StringsToBytes(digest),
 			},
@@ -459,8 +461,8 @@ func reqMsg(digest ...string) *gossip.GossipMessage {
 }
 
 func createDigestsFilter(level uint64) IngressDigestFilter {
-	return func(digestMsg *gossip.DataDigest) *gossip.DataDigest {
-		res := &gossip.DataDigest{
+	return func(digestMsg *proto.DataDigest) *proto.DataDigest {
+		res := &proto.DataDigest{
 			MsgType: digestMsg.MsgType,
 			Nonce:   digestMsg.Nonce,
 		}
@@ -503,7 +505,7 @@ func TestFormattedDigests(t *testing.T) {
 
 	for i, tt := range tests {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			require.Equal(t, tt.expected, formattedDigests(tt.dataRequest))
+			assert.Equal(t, tt.expected, formattedDigests(tt.dataRequest))
 		})
 	}
 }

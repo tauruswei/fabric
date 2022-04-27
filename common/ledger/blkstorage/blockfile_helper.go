@@ -9,22 +9,19 @@ package blkstorage
 import (
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/common"
-	"github.com/hyperledger/fabric/internal/fileutil"
 	"github.com/pkg/errors"
 )
 
-// constructBlockfilesInfo scans the last blockfile (if any) and construct the blockfilesInfo
+// constructCheckpointInfoFromBlockFiles scans the last blockfile (if any) and construct the checkpoint info
 // if the last file contains no block or only a partially written block (potentially because of a crash while writing block to the file),
 // this scans the second last file (if any)
-func constructBlockfilesInfo(rootDir string) (*blockfilesInfo, error) {
-	logger.Debugf("constructing BlockfilesInfo")
+func constructCheckpointInfoFromBlockFiles(rootDir string) (*checkpointInfo, error) {
+	logger.Debugf("Retrieving checkpoint info from block files")
 	var lastFileNum int
 	var numBlocksInFile int
 	var endOffsetLastBlock int64
@@ -40,14 +37,9 @@ func constructBlockfilesInfo(rootDir string) (*blockfilesInfo, error) {
 	logger.Debugf("Last file number found = %d", lastFileNum)
 
 	if lastFileNum == -1 {
-		blkfilesInfo := &blockfilesInfo{
-			latestFileNumber:   0,
-			latestFileSize:     0,
-			noBlockFiles:       true,
-			lastPersistedBlock: 0,
-		}
+		cpInfo := &checkpointInfo{0, 0, true, 0}
 		logger.Debugf("No block file found")
-		return blkfilesInfo, nil
+		return cpInfo, nil
 	}
 
 	fileInfo := getFileInfoOrPanic(rootDir, lastFileNum)
@@ -75,27 +67,27 @@ func constructBlockfilesInfo(rootDir string) (*blockfilesInfo, error) {
 		lastBlockNumber = lastBlock.Header.Number
 	}
 
-	blkfilesInfo := &blockfilesInfo{
-		lastPersistedBlock: lastBlockNumber,
-		latestFileSize:     int(endOffsetLastBlock),
-		latestFileNumber:   lastFileNum,
-		noBlockFiles:       lastFileNum == 0 && numBlocksInFile == 0,
+	cpInfo := &checkpointInfo{
+		lastBlockNumber:          lastBlockNumber,
+		latestFileChunksize:      int(endOffsetLastBlock),
+		latestFileChunkSuffixNum: lastFileNum,
+		isChainEmpty:             lastFileNum == 0 && numBlocksInFile == 0,
 	}
-	logger.Debugf("blockfilesInfo constructed from file system = %s", spew.Sdump(blkfilesInfo))
-	return blkfilesInfo, nil
+	logger.Debugf("Checkpoint info constructed from file system = %s", spew.Sdump(cpInfo))
+	return cpInfo, nil
 }
 
 // binarySearchFileNumForBlock locates the file number that contains the given block number.
-// This function assumes that the caller invokes this function with a block number that has been committed
+// This function assumes that the caller invokes this function with a block number that has been commited
 // For any uncommitted block, this function returns the last file present
 func binarySearchFileNumForBlock(rootDir string, blockNum uint64) (int, error) {
-	blkfilesInfo, err := constructBlockfilesInfo(rootDir)
+	cpInfo, err := constructCheckpointInfoFromBlockFiles(rootDir)
 	if err != nil {
 		return -1, err
 	}
 
 	beginFile := 0
-	endFile := blkfilesInfo.latestFileNumber
+	endFile := cpInfo.latestFileChunkSuffixNum
 
 	for endFile != beginFile {
 		searchFile := beginFile + (endFile-beginFile)/2 + 1
@@ -169,52 +161,4 @@ func getFileInfoOrPanic(rootDir string, fileNum int) os.FileInfo {
 		panic(errors.Wrapf(err, "error retrieving file info for file number %d", fileNum))
 	}
 	return fileInfo
-}
-
-func loadBootstrappingSnapshotInfo(rootDir string) (*BootstrappingSnapshotInfo, error) {
-	bsiBytes, err := ioutil.ReadFile(filepath.Join(rootDir, bootstrappingSnapshotInfoFile))
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, errors.Wrapf(err, "error while reading bootstrappingSnapshotInfo file")
-	}
-	bsi := &BootstrappingSnapshotInfo{}
-	if err := proto.Unmarshal(bsiBytes, bsi); err != nil {
-		return nil, errors.Wrapf(err, "error while unmarshalling bootstrappingSnapshotInfo")
-	}
-	return bsi, nil
-}
-
-func IsBootstrappedFromSnapshot(blockStorageDir, ledgerID string) (bool, error) {
-	ledgerDir := filepath.Join(blockStorageDir, ChainsDir, ledgerID)
-	_, err := os.Stat(filepath.Join(ledgerDir, bootstrappingSnapshotInfoFile))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, errors.Wrapf(err, "failed to read bootstrappingSnapshotInfo file under blockstore directory %s", ledgerDir)
-	}
-	return true, nil
-}
-
-func GetLedgersBootstrappedFromSnapshot(blockStorageDir string) ([]string, error) {
-	chainsDir := filepath.Join(blockStorageDir, ChainsDir)
-	ledgerIDs, err := fileutil.ListSubdirs(chainsDir)
-	if err != nil {
-		return nil, err
-	}
-
-	isFromSnapshot := false
-	ledgersFromSnapshot := []string{}
-	for _, ledgerID := range ledgerIDs {
-		if isFromSnapshot, err = IsBootstrappedFromSnapshot(blockStorageDir, ledgerID); err != nil {
-			return nil, err
-		}
-		if isFromSnapshot {
-			ledgersFromSnapshot = append(ledgersFromSnapshot, ledgerID)
-		}
-	}
-
-	return ledgersFromSnapshot, nil
 }

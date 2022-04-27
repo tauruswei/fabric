@@ -20,16 +20,14 @@ import (
 	mspmgmt "github.com/hyperledger/fabric/msp/mgmt"
 	msptesttools "github.com/hyperledger/fabric/msp/mgmt/testtools"
 	"github.com/hyperledger/fabric/protoutil"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func getProposal(channelID string) (*peer.Proposal, error) {
 	cis := &peer.ChaincodeInvocationSpec{
 		ChaincodeSpec: &peer.ChaincodeSpec{
 			ChaincodeId: getChaincodeID(),
-			Type:        peer.ChaincodeSpec_GOLANG,
-		},
-	}
+			Type:        peer.ChaincodeSpec_GOLANG}}
 
 	proposal, _, err := protoutil.CreateProposalFromCIS(common.HeaderType_ENDORSER_TRANSACTION, channelID, cis, signerSerialized)
 	return proposal, err
@@ -135,7 +133,7 @@ func TestGoodPath(t *testing.T) {
 
 	// validate the transaction
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	payl, txResult := ValidateTransaction(tx, cryptoProvider)
 	if txResult != peer.TxValidationCode_VALID {
 		t.Fatalf("ValidateTransaction failed, err %s", err)
@@ -197,7 +195,7 @@ func TestTXWithTwoActionsRejected(t *testing.T) {
 
 	// validate the transaction
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	_, txResult := ValidateTransaction(tx, cryptoProvider)
 	if txResult == peer.TxValidationCode_VALID {
 		t.Fatalf("ValidateTransaction should have failed")
@@ -238,7 +236,7 @@ func TestBadTx(t *testing.T) {
 	// mess with the transaction payload
 	paylOrig := tx.Payload
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	for i := 0; i < len(paylOrig); i++ {
 		paylCopy := make([]byte, len(paylOrig))
 		copy(paylCopy, paylOrig)
@@ -306,7 +304,7 @@ func Test2EndorsersAgree(t *testing.T) {
 
 	// validate the transaction
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 	_, txResult := ValidateTransaction(tx, cryptoProvider)
 	if txResult != peer.TxValidationCode_VALID {
 		t.Fatalf("ValidateTransaction failed, err %s", err)
@@ -352,35 +350,33 @@ func Test2EndorsersDisagree(t *testing.T) {
 
 func TestInvocationsBadArgs(t *testing.T) {
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	_, code := ValidateTransaction(nil, cryptoProvider)
-	require.Equal(t, code, peer.TxValidationCode_NIL_ENVELOPE)
+	assert.Equal(t, code, peer.TxValidationCode_NIL_ENVELOPE)
 	err = validateEndorserTransaction(nil, nil)
-	require.Error(t, err)
+	assert.Error(t, err)
 	err = validateConfigTransaction(nil, nil)
-	require.Error(t, err)
+	assert.Error(t, err)
 	_, _, err = validateCommonHeader(nil)
-	require.Error(t, err)
+	assert.Error(t, err)
 	err = validateChannelHeader(nil)
-	require.Error(t, err)
+	assert.Error(t, err)
 	err = validateChannelHeader(&common.ChannelHeader{})
-	require.Error(t, err)
+	assert.Error(t, err)
 	err = validateSignatureHeader(nil)
-	require.Error(t, err)
+	assert.Error(t, err)
 	err = validateSignatureHeader(&common.SignatureHeader{})
-	require.Error(t, err)
+	assert.Error(t, err)
 	err = validateSignatureHeader(&common.SignatureHeader{Nonce: []byte("a")})
-	require.Error(t, err)
+	assert.Error(t, err)
 	err = checkSignatureFromCreator(nil, nil, nil, "", cryptoProvider)
-	require.Error(t, err)
+	assert.Error(t, err)
 }
 
-var (
-	signer           msp.SigningIdentity
-	signerSerialized []byte
-	signerMSPId      string
-)
+var signer msp.SigningIdentity
+var signerSerialized []byte
+var signerMSPId string
 
 func TestMain(m *testing.M) {
 	// setup crypto algorithms

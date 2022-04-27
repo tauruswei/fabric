@@ -6,14 +6,16 @@
 #
 
 # if version not passed in, default to latest released version
-VERSION=2.3.1
+VERSION=2.1.0
 # if ca version not passed in, default to latest released version
-CA_VERSION=1.4.9
+CA_VERSION=1.4.6
+# current version of thirdparty images (couchdb, kafka and zookeeper) released
+THIRDPARTY_IMAGE_VERSION=0.4.18
 ARCH=$(echo "$(uname -s|tr '[:upper:]' '[:lower:]'|sed 's/mingw64_nt.*/windows/')-$(uname -m | sed 's/x86_64/amd64/g')")
 MARCH=$(uname -m)
 
 printHelp() {
-    echo "Usage: bootstrap.sh [version [ca_version]] [options]"
+    echo "Usage: bootstrap.sh [version [ca_version [thirdparty_version]]] [options]"
     echo
     echo "options:"
     echo "-h : this help"
@@ -21,8 +23,8 @@ printHelp() {
     echo "-s : bypass fabric-samples repo clone"
     echo "-b : bypass download of platform-specific binaries"
     echo
-    echo "e.g. bootstrap.sh 2.3.1 1.4.9 -s"
-    echo "will download docker images and binaries for Fabric v2.3.1 and Fabric CA v1.4.9"
+    echo "e.g. bootstrap.sh 2.1.0 1.4.6 0.4.18 -s"
+    echo "would download docker images and binaries for Fabric v2.1.0 and Fabric CA v1.4.6"
 }
 
 # dockerPull() pulls docker images from fabric and chaincode repositories
@@ -30,11 +32,11 @@ printHelp() {
 # be skipped, since this script doesn't terminate upon errors.
 
 dockerPull() {
-    #three_digit_image_tag is passed in, e.g. "1.4.7"
+    #three_digit_image_tag is passed in, e.g. "1.4.6"
     three_digit_image_tag=$1
     shift
     #two_digit_image_tag is derived, e.g. "1.4", especially useful as a local tag for two digit references to most recent baseos, ccenv, javaenv, nodeenv patch releases
-    two_digit_image_tag=$(echo "$three_digit_image_tag" | cut -d'.' -f1,2)
+    two_digit_image_tag=$(echo $three_digit_image_tag | cut -d'.' -f1,2)
     while [[ $# -gt 0 ]]
     do
         image_name="$1"
@@ -51,23 +53,16 @@ cloneSamplesRepo() {
     # version to the binaries and docker images to be downloaded
     if [ -d first-network ]; then
         # if we are in the fabric-samples repo, checkout corresponding version
-        echo "==> Already in fabric-samples repo"
+        echo "===> Checking out v${VERSION} of hyperledger/fabric-samples"
+        git checkout v${VERSION}
     elif [ -d fabric-samples ]; then
         # if fabric-samples repo already cloned and in current directory,
-        # cd fabric-samples
-        echo "===> Changing directory to fabric-samples"
-        cd fabric-samples
-    else
-        echo "===> Cloning hyperledger/fabric-samples repo"
-        git clone -b master https://github.com/hyperledger/fabric-samples.git && cd fabric-samples
-    fi
-
-    if GIT_DIR=.git git rev-parse v${VERSION} >/dev/null 2>&1; then
+        # cd fabric-samples and checkout corresponding version
         echo "===> Checking out v${VERSION} of hyperledger/fabric-samples"
-        git checkout -q v${VERSION}
+        cd fabric-samples && git checkout v${VERSION}
     else
-        echo "fabric-samples v${VERSION} does not exist, defaulting master"
-        git checkout -q master
+        echo "===> Cloning hyperledger/fabric-samples repo and checkout v${VERSION}"
+        git clone -b master https://github.com/hyperledger/fabric-samples.git && cd fabric-samples && git checkout v${VERSION}
     fi
 }
 
@@ -111,8 +106,12 @@ pullDockerImages() {
     if [ "${NODOCKER}" == 0 ]; then
         FABRIC_IMAGES=(peer orderer ccenv tools)
         case "$VERSION" in
+        1.*)
+            FABRIC_IMAGES+=(javaenv)
+            shift
+            ;;
         2.*)
-            FABRIC_IMAGES+=(baseos)
+            FABRIC_IMAGES+=(nodeenv baseos javaenv)
             shift
             ;;
         esac
@@ -122,6 +121,10 @@ pullDockerImages() {
         echo "===> Pulling fabric ca Image"
         CA_IMAGE=(ca)
         dockerPull "${CA_TAG}" "${CA_IMAGE[@]}"
+        echo "===> Pulling thirdparty docker images"
+        THIRDPARTY_IMAGES=(zookeeper kafka couchdb)
+        dockerPull "${THIRDPARTY_TAG}" "${THIRDPARTY_IMAGES[@]}"
+        echo
         echo "===> List out hyperledger docker images"
         docker images | grep hyperledger
     else

@@ -7,13 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package channelconfig
 
 import (
-	"bytes"
 	"fmt"
 	"io/ioutil"
 	"testing"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric-config/protolator"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	mspprotos "github.com/hyperledger/fabric-protos-go/msp"
 	ab "github.com/hyperledger/fabric-protos-go/orderer"
@@ -22,6 +20,7 @@ import (
 	"github.com/hyperledger/fabric/bccsp/sw"
 	"github.com/hyperledger/fabric/common/capabilities"
 	"github.com/hyperledger/fabric/protoutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,9 +31,9 @@ import (
 // low code coverage count, so here they are.
 
 func basicTest(t *testing.T, sv *StandardConfigValue) {
-	require.NotNil(t, sv)
-	require.NotEmpty(t, sv.Key())
-	require.NotNil(t, sv.Value())
+	assert.NotNil(t, sv)
+	assert.NotEmpty(t, sv.Key())
+	assert.NotNil(t, sv.Value())
 }
 
 func TestUtilsBasic(t *testing.T) {
@@ -284,32 +283,17 @@ func createCfgBlockWithUnsupportedCapabilities(t *testing.T) *cb.Block {
 
 func TestValidateCapabilities(t *testing.T) {
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	// Test config block with valid capabilities requirement
 	cfgBlock := createCfgBlockWithSupportedCapabilities(t)
 	err = ValidateCapabilities(cfgBlock, cryptoProvider)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	// Test config block with invalid capabilities requirement
 	cfgBlock = createCfgBlockWithUnsupportedCapabilities(t)
 	err = ValidateCapabilities(cfgBlock, cryptoProvider)
-	require.EqualError(t, err, "Channel capability INCOMPATIBLE_CAPABILITIES is required but not supported")
-}
-
-func TestExtractMSPIDsForApplicationOrgs(t *testing.T) {
-	// load test_configblock.json that contains the application group
-	// and other properties needed to build channel config and extract MSPIDs
-	blockData, err := ioutil.ReadFile("testdata/test_configblock.json")
-	require.NoError(t, err)
-	block := &cb.Block{}
-	protolator.DeepUnmarshalJSON(bytes.NewBuffer(blockData), block)
-
-	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
-	require.NoError(t, err)
-	mspids, err := ExtractMSPIDsForApplicationOrgs(block, cryptoProvider)
-	require.NoError(t, err)
-	require.ElementsMatch(t, mspids, []string{"Org1MSP", "Org2MSP"})
+	assert.EqualError(t, err, "Channel capability INCOMPATIBLE_CAPABILITIES is required but not supported")
 }
 
 func TestMarshalEtcdRaftMetadata(t *testing.T) {
@@ -337,11 +321,11 @@ func TestMarshalEtcdRaftMetadata(t *testing.T) {
 	}
 	packed, err := MarshalEtcdRaftMetadata(md)
 	require.Nil(t, err, "marshalling should succeed")
-	require.NotNil(t, packed)
+	assert.NotNil(t, packed)
 
 	packed, err = MarshalEtcdRaftMetadata(md)
 	require.Nil(t, err, "marshalling should succeed a second time because we did not mutate ourselves")
-	require.NotNil(t, packed)
+	assert.NotNil(t, packed)
 
 	unpacked := &etcdraft.ConfigMetadata{}
 	require.Nil(t, proto.Unmarshal(packed, unpacked), "unmarshalling should succeed")
