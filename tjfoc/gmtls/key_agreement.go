@@ -23,7 +23,9 @@ import (
 	"crypto/rsa"
 	"crypto/sha1"
 	"encoding/asn1"
+	//"encoding/base64"
 	"errors"
+	//"github.com/prometheus/common/log"
 	"io"
 	"math/big"
 
@@ -289,6 +291,9 @@ NextCandidate:
 		return nil, errors.New("tls: unknown ECDHE signature algorithm")
 	}
 	sig, err = priv.Sign(config.rand(), digest, hashFunc)
+
+	//log.Infof("========== sig = %s",base64.StdEncoding.EncodeToString(sig))
+
 	if err != nil {
 		return nil, errors.New("tls: failed to sign ECDHE parameters: " + err.Error())
 	}
@@ -407,6 +412,8 @@ func (ka *ecdheKeyAgreement) processServerKeyExchange(config *Config, clientHell
 		return errServerKeyExchange
 	}
 	sig = sig[2:]
+
+	//log.Infof("========== sig = %s",base64.StdEncoding.EncodeToString(sig))
 
 	digest, hashFunc, err := hashForServerKeyExchange(sigAndHash, ka.version, clientHello.random, serverHello.random, serverECDHParams)
 	if err != nil {

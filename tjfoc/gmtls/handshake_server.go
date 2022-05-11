@@ -21,8 +21,10 @@ import (
 	"crypto/rsa"
 	"crypto/subtle"
 	"encoding/asn1"
+	//"encoding/base64"
 	"errors"
 	"fmt"
+	//"github.com/prometheus/common/log"
 	"io"
 
 	"github.com/tjfoc/gmsm/sm2"
@@ -124,7 +126,7 @@ func (c *Conn) serverHandshake() error {
 // whether we will perform session resumption.
 func (hs *serverHandshakeState) readClientHello() (isResume bool, err error) {
 	c := hs.c
-
+	//log.Info(" readClientHello ")
 	msg, err := c.readHandshake()
 	if err != nil {
 		return false, err
@@ -465,6 +467,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 
 	var pub crypto.PublicKey // public key for client auth, if any
 
+	//log.Info("=================== doFullHandshake")
 	msg, err := c.readHandshake()
 	if err != nil {
 		return err
@@ -493,6 +496,8 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 		if err != nil {
 			return err
 		}
+
+		//log.Info("=================== RequestClientCert")
 
 		msg, err = c.readHandshake()
 		if err != nil {
@@ -526,6 +531,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	// to the client's certificate. This allows us to verify that the client is in
 	// possession of the private key of the certificate.
 	if len(c.peerCertificates) > 0 {
+		//log.Info("=================== peerCertificates")
 		msg, err = c.readHandshake()
 		if err != nil {
 			return err
@@ -565,6 +571,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 			if _, err = asn1.Unmarshal(certVerify.signature, ecdsaSig); err != nil {
 				break
 			}
+			//log.Infof(" ========== signature = %s",base64.StdEncoding.EncodeToString(certVerify.signature))
 			if ecdsaSig.R.Sign() <= 0 || ecdsaSig.S.Sign() <= 0 {
 				err = errors.New("tls: ECDSA signature contained zero or negative values")
 				break
@@ -646,6 +653,8 @@ func (hs *serverHandshakeState) readFinished(out []byte) error {
 	}
 
 	if hs.hello.nextProtoNeg {
+		//log.Info("=================== readFinished")
+
 		msg, err := c.readHandshake()
 		if err != nil {
 			return err
@@ -659,6 +668,7 @@ func (hs *serverHandshakeState) readFinished(out []byte) error {
 		c.clientProtocol = nextProto.proto
 	}
 
+	//log.Info("=================== readFinished")
 	msg, err := c.readHandshake()
 	if err != nil {
 		return err

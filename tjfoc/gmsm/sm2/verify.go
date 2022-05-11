@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	//"github.com/prometheus/common/log"
 	"net"
 	"runtime"
 	"strings"
@@ -213,6 +214,12 @@ func (c *Certificate) isValid(certType int, currentChain []*Certificate, opts *V
 		now = time.Now()
 	}
 	if now.Before(c.NotBefore) || now.After(c.NotAfter) {
+		//log.Info("=========================================")
+		//log.Infof("now = %d",now.Unix())
+		//log.Infof("NotBefore = %d",c.NotBefore.Unix())
+		//log.Infof("NotAfter = %d",c.NotAfter.Unix())
+		//log.Infof("common name = %s",c.Subject.CommonName)
+		//log.Infof("=========================================")
 		return CertificateInvalidError{c, Expired}
 	}
 	if len(c.PermittedDNSDomains) > 0 {
@@ -272,6 +279,7 @@ func (c *Certificate) isValid(certType int, currentChain []*Certificate, opts *V
 func (c *Certificate) Verify(opts VerifyOptions) (chains [][]*Certificate, err error) {
 	// Platform-specific verification needs the ASN.1 contents so
 	// this makes the behavior consistent across platforms.
+	//log.Info("========== verify ============")
 	if len(c.Raw) == 0 {
 		return nil, errNotParsed
 	}
@@ -316,6 +324,7 @@ func (c *Certificate) Verify(opts VerifyOptions) (chains [][]*Certificate, err e
 		candidateChains = append(candidateChains, []*Certificate{c})
 	} else {
 		if candidateChains, err = c.buildChains(make(map[int][][]*Certificate), []*Certificate{c}, &opts); err != nil {
+			//log.Infof("============ err:=%s",err.Error())
 			return nil, err
 		}
 	}

@@ -11,6 +11,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
+	//"github.com/hyperledger/fabric/common/util"
+	//"github.com/prometheus/common/log"
 	"github.com/tjfoc/gmsm/sm2"
 
 	"github.com/golang/protobuf/proto"
@@ -113,8 +115,11 @@ func newBccspMsp(version MSPVersion, defaultBCCSP bccsp.BCCSP) (MSP, error) {
 	theMsp := &bccspmsp{}
 	theMsp.version = version
 	theMsp.bccsp = defaultBCCSP
+	//log.Infof("======== crtpto config = %v",theMsp.cryptoConfig)
+	//mspLogger.Info(util.GetErrorStackf(nil, "======== version = %d",version))
+
 	/*mspLogger.Infof("theMsp.bccsp---+++---+++%v", theMsp.bccsp)
-*/
+	 */
 	switch version {
 	case MSPv1_0:
 		theMsp.internalSetupFunc = theMsp.setupV1
@@ -265,6 +270,8 @@ func (msp *bccspmsp) Setup(conf1 *m.MSPConfig) error {
 	// set the name for this msp
 	msp.name = conf.Name
 	mspLogger.Debugf("Setting up MSP instance %s", msp.name)
+
+	//log.Warnf("======== Setup conf = %v",conf)
 
 	// setup
 	return msp.internalSetupFunc(conf)

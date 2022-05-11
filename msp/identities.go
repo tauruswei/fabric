@@ -9,9 +9,11 @@ package msp
 import (
 	"crypto"
 	"crypto/rand"
+	//"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	//"github.com/prometheus/common/log"
 	"github.com/tjfoc/gmsm/sm2"
 	"sync"
 	"time"
@@ -171,11 +173,17 @@ func (id *identity) Verify(msg []byte, sig []byte) error {
 	// mspIdentityLogger.Infof("Verifying signature")
 
 	// Compute Hash
+	//log.Infof("======== hash cryptoConfig = %v", id.msp.cryptoConfig)
+
+	//log.Infof("======== hash family = %s", id.msp.cryptoConfig.SignatureHashFamily)
+
 	hashOpt, err := id.getHashOpt(id.msp.cryptoConfig.SignatureHashFamily)
+	//log.Infof("======== hashopt,%v", hashOpt)
+
 	if err != nil {
 		return errors.WithMessage(err, "failed getting hash function options")
 	}
-
+	//log.Infof("======= msg = %s",base64.StdEncoding.EncodeToString(msg))
 	digest, err := id.msp.bccsp.Hash(msg, hashOpt)
 	if err != nil {
 		return errors.WithMessage(err, "failed computing digest")
@@ -185,7 +193,12 @@ func (id *identity) Verify(msg []byte, sig []byte) error {
 		mspIdentityLogger.Debugf("Verify: digest = %s", hex.Dump(digest))
 		mspIdentityLogger.Debugf("Verify: sig = %s", hex.Dump(sig))
 	}
-	valid, err := id.msp.bccsp.Verify(id.pk, sig, msg, nil)
+
+	//log.Infof("========== common name = %s ",id.cert.Subject.String())
+	//log.Infof("========== sig = %s",base64.StdEncoding.EncodeToString(sig))
+	//log.Infof("========== digest = %s",base64.StdEncoding.EncodeToString(digest))
+
+	valid, err := id.msp.bccsp.Verify(id.pk, sig, digest, nil)
 	if err != nil {
 		return errors.WithMessage(err, "could not determine the validity of the signature")
 	} else if !valid {
@@ -273,7 +286,8 @@ func (id *signingidentity) Sign(msg []byte) ([]byte, error) {
 	mspIdentityLogger.Debugf("Sign: digest: %X \n", digest)
 
 	// Sign
-	return id.signer.Sign(rand.Reader, msg, nil)
+	//log.Infof("========== sign common name = %s",id.cert.Subject.CommonName)
+	return id.signer.Sign(rand.Reader, digest, nil)
 }
 
 // GetPublicVersion returns the public version of this identity,

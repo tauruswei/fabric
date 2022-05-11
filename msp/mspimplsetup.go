@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"crypto/x509/pkix"
 	"fmt"
+	//"github.com/prometheus/common/log"
 	"github.com/tjfoc/gmsm/sm2"
 	"time"
 
@@ -80,15 +81,15 @@ func (msp *bccspmsp) getCertifiersIdentifier(certRaw []byte) ([]byte, error) {
 
 func (msp *bccspmsp) setupCrypto(conf *m.FabricMSPConfig) error {
 	msp.cryptoConfig = conf.CryptoConfig
-	if msp.cryptoConfig == nil {
-		// Move to defaults
-		/*mspLogger.Debugf("msp.cryptoConfig----,%v", msp.cryptoConfig)*/
-		msp.cryptoConfig = &m.FabricCryptoConfig{
-			SignatureHashFamily:            bccsp.GMSM3,
-			IdentityIdentifierHashFunction: bccsp.SHA256,
-		}
-		mspLogger.Debugf("CryptoConfig was nil. Move to defaults.")
+	//log.Infof("msp.cryptoConfig----,%v", msp.cryptoConfig)
+	//if msp.cryptoConfig == nil {
+	// Move to defaults
+	msp.cryptoConfig = &m.FabricCryptoConfig{
+		SignatureHashFamily:            bccsp.GMSM3,
+		IdentityIdentifierHashFunction: bccsp.SHA256,
 	}
+	mspLogger.Debugf("CryptoConfig was nil. Move to defaults.")
+	//}
 	/*mspLogger.Debugf("msp.cryptoConfig.SignatureHashFamily----,%v", msp.cryptoConfig.SignatureHashFamily)*/
 	if msp.cryptoConfig.SignatureHashFamily == "" {
 		msp.cryptoConfig.SignatureHashFamily = bccsp.GMSM3
@@ -537,9 +538,9 @@ func (msp *bccspmsp) preSetupV142(conf *m.FabricMSPConfig) error {
 		return err
 	}
 
-/*	mspLogger.Infof("FabricMAPConfig---,%v", conf.Name)
-	mspLogger.Infof("FabricMAPConfig---,%v", conf.RootCerts)
-	mspLogger.Infof("FabricMAPConfig---,%v", conf.IntermediateCerts)*/
+	/*	mspLogger.Infof("FabricMAPConfig---,%v", conf.Name)
+		mspLogger.Infof("FabricMAPConfig---,%v", conf.RootCerts)
+		mspLogger.Infof("FabricMAPConfig---,%v", conf.IntermediateCerts)*/
 	// Setup CAs
 	if err := msp.setupCAs(conf); err != nil {
 		return err

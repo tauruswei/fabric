@@ -21,6 +21,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	//"github.com/prometheus/common/log"
 	"io"
 	"net"
 	"sync"
@@ -945,6 +946,7 @@ func (c *Conn) writeRecord(typ recordType, data []byte) (int, error) {
 // the record layer.
 // c.in.Mutex < L; c.out.Mutex < L.
 func (c *Conn) readHandshake() (interface{}, error) {
+	//log.Infof("============== read handshake")
 	for c.hand.Len() < 4 {
 		if err := c.in.err; err != nil {
 			return nil, err
@@ -970,6 +972,7 @@ func (c *Conn) readHandshake() (interface{}, error) {
 	}
 	data = c.hand.Next(4 + n)
 	var m handshakeMessage
+	//log.Infof("========== data[0] = %d",data[0])
 	switch data[0] {
 	case typeHelloRequest:
 		m = new(helloRequestMsg)
@@ -1081,6 +1084,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 // handleRenegotiation processes a HelloRequest handshake message.
 // c.in.Mutex <= L
 func (c *Conn) handleRenegotiation() error {
+	//log.Info("============== handleRenegotiation")
 	msg, err := c.readHandshake()
 	if err != nil {
 		return err

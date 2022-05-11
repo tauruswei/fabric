@@ -18,6 +18,8 @@ package gm
 import (
 	"crypto/sha256"
 	"crypto/sha512"
+	//"encoding/base64"
+	//"github.com/prometheus/common/log"
 	"hash"
 	"reflect"
 
@@ -252,15 +254,15 @@ func (csp *impl) Hash(msg []byte, opts bccsp.HashOpts) (digest []byte, err error
 
 	hasher, found := csp.hashers[reflect.TypeOf(opts)]
 	//TODO
-	/*fmt.Printf("hasher----,%v", hasher)*/
-	/*fmt.Printf("reflect.TypeOf(opts)----,%v", reflect.TypeOf(opts))*/
+	//log.Infof("hasher----,%v", hasher)
+	//log.Infof("reflect.TypeOf(opts)----,%v", reflect.TypeOf(opts))
 	if !found {
 		return nil, errors.Errorf("Unsupported 'HashOpt' provided [%v]", opts)
 	}
 
 	digest, err = hasher.Hash(msg, opts)
-	/*fmt.Printf("msg====,%v", msg)
-	fmt.Printf("digest====,%v", digest)*/
+	//log.Infof("msg====,%v", base64.StdEncoding.EncodeToString(msg))
+	//log.Infof("digest====,%v", base64.StdEncoding.EncodeToString(digest))
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed hashing with opts [%v]", opts)
 	}
@@ -298,7 +300,7 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
 	if len(digest) == 0 {
 		return nil, errors.New("Invalid digest. Cannot be empty.")
 	}
-
+	//log.Infof("========= digest = %s",base64.StdEncoding.EncodeToString(digest))
 	signer, found := csp.signers[reflect.TypeOf(k)]
 	if !found {
 		return nil, errors.Errorf("Unsupported 'SignKey' provided [%s]", k)
@@ -308,7 +310,7 @@ func (csp *impl) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signat
 	if err != nil {
 		return nil, errors.Wrapf(err, "Failed signing with opts [%v]", opts)
 	}
-
+	//log.Infof("=========signature = %s",base64.StdEncoding.EncodeToString(signature))
 	return
 }
 

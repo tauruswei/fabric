@@ -8,6 +8,7 @@ package channelconfig
 
 import (
 	"fmt"
+	//"github.com/prometheus/common/log"
 	"math"
 
 	cb "github.com/hyperledger/fabric-protos-go/common"
@@ -87,6 +88,8 @@ func NewChannelConfig(channelGroup *cb.ConfigGroup, bccsp bccsp.BCCSP) (*Channel
 	}
 
 	capabilities := cc.Capabilities()
+
+	//log.Infof("========== version = %d",capabilities.MSPVersion())
 
 	if err := cc.Validate(capabilities); err != nil {
 		return nil, err

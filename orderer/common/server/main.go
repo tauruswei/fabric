@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	//"github.com/hyperledger/fabric/common/util"
 	"github.com/hyperledger/fabric/orderer/common/channelparticipation"
 	"io/ioutil"
 	"net"
@@ -702,7 +703,9 @@ func loadLocalMSP(conf *localconfig.TopLevel) msp.MSP {
 	}
 
 	//TODO
-	logger.Infof("----Version:%v",opts.GetVersion())
+	logger.Infof("----Version:%v", opts.GetVersion())
+	//logger.Info(util.GetErrorStackf(nil, "======== version = %d",opts.GetVersion()))
+
 	localmsp, err := msp.New(opts, factory.GetDefault())
 	if err != nil {
 		logger.Panicf("Failed to load local MSP: %v", err)

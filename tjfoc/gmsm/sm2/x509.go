@@ -30,6 +30,7 @@ import (
 	"crypto/sha512"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	//"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -42,6 +43,7 @@ import (
 	"strconv"
 	"time"
 
+	//log1 "github.com/prometheus/common/log"
 	"github.com/tjfoc/gmsm/sm3"
 	"golang.org/x/crypto/ripemd160"
 	"golang.org/x/crypto/sha3"
@@ -957,12 +959,22 @@ func (c *Certificate) CheckSignatureFrom(parent *Certificate) error {
 
 	// TODO(agl): don't ignore the path length constraint.
 
+	//log1.Infof("parent cert subject = %s",parent.Subject.String())
+	//log1.Infof("parent cert Serial Number = %s",base64.StdEncoding.EncodeToString(parent.SerialNumber.Bytes()))
+	//
+	//log1.Infof("child cert subject = %s",c.Subject.String())
+	//log1.Infof("child cert Serial Number = %s",base64.StdEncoding.EncodeToString(c.SerialNumber.Bytes()))
+
 	return parent.CheckSignature(c.SignatureAlgorithm, c.RawTBSCertificate, c.Signature)
 }
 
 // CheckSignature verifies that signature is a valid signature over signed from
 // c's public key.
 func (c *Certificate) CheckSignature(algo SignatureAlgorithm, signed, signature []byte) error {
+	//log1.Infof("algo = %s",algo.String())
+	//log1.Infof("origin = %s",base64.StdEncoding.EncodeToString(signed))
+	//log1.Infof("signature = %s",base64.StdEncoding.EncodeToString(signature))
+	//log1.Infof("publickey = %v",c.PublicKey)
 	return checkSignature(algo, signed, signature, c.PublicKey)
 }
 
@@ -982,6 +994,7 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 	case MD2WithRSA, MD5WithRSA:
 		return InsecureAlgorithmError(algo)
 	case SM2WithSM3: // SM3WithRSA reserve
+		//log1.Info("=== sm3 ====")
 		hashType = SM3
 	default:
 		return ErrUnsupportedAlgorithm
@@ -1019,6 +1032,7 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 	case *ecdsa.PublicKey:
 		ecdsaSig := new(ecdsaSignature)
 		if rest, err := asn1.Unmarshal(signature, ecdsaSig); err != nil {
+			//log1.Infof("==== err = %s",err.Error())
 			return err
 		} else if len(rest) != 0 {
 			return errors.New("x509: trailing data after ECDSA signature")
@@ -2394,7 +2408,7 @@ func ParseCertificateRequest(asn1Data []byte) (*CertificateRequest, error) {
 
 func parseCertificateRequest(in *certificateRequest) (*CertificateRequest, error) {
 	out := &CertificateRequest{
-		Raw: in.Raw,
+		Raw:                      in.Raw,
 		RawTBSCertificateRequest: in.TBSCSR.Raw,
 		RawSubjectPublicKeyInfo:  in.TBSCSR.PublicKey.Raw,
 		RawSubject:               in.TBSCSR.Subject.FullBytes,

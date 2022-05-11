@@ -21,8 +21,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/subtle"
+	//"encoding/base64"
 	"errors"
 	"fmt"
+	//"github.com/prometheus/common/log"
 	"io"
 	"net"
 	"strconv"
@@ -466,6 +468,7 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 			return err
 		}
 		certVerify.signature, err = key.Sign(c.config.rand(), digest, hashFunc)
+		//log.Infof("=========== signature = %s",base64.StdEncoding.EncodeToString(certVerify.signature))
 		if err != nil {
 			c.sendAlert(alertInternalError)
 			return err
