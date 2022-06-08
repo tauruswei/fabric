@@ -46,7 +46,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/miekg/pkcs11 v1.0.3
 	github.com/mitchellh/mapstructure v1.3.3
-	github.com/onsi/ginkgo v1.8.0
+	github.com/onsi/ginkgo v1.10.1
 	github.com/onsi/gomega v1.9.0
 	github.com/opencontainers/runc v1.0.0-rc8 // indirect
 	github.com/pierrec/lz4 v2.5.0+incompatible // indirect
@@ -77,7 +77,6 @@ require (
 	k8s.io/api v0.17.17
 	k8s.io/apimachinery v0.17.17
 	k8s.io/client-go v0.17.17
-	gopkg.in/yaml.v2 v2.3.0
 )
 
 replace (
