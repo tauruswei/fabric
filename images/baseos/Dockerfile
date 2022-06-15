@@ -2,10 +2,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-ARG GO_VER
-ARG ALPINE_VER
-
-FROM alpine:${ALPINE_VER} as base
-RUN apk add --no-cache tzdata
-RUN addgroup -g 500 chaincode && adduser -u 500 -D -h /home/chaincode -G chaincode chaincode
-USER chaincode
+#FROM debian:buster-20190910-slim
+FROM arm64v8/debian:buster
+#COPY ./scripts /tmp/scripts
+#RUN cd /tmp/scripts && \
+#    common/init.sh && \
+#    docker/init.sh && \
+#    common/cleanup.sh && \
+#    rm -rf /tmp/scripts
+COPY scripts /tmp/scripts
+RUN cd /tmp/scripts && \
+    common/init.sh && \
+    docker/init.sh && \
+    common/cleanup.sh && \
+    rm -rf /tmp/scripts
