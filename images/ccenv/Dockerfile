@@ -9,6 +9,7 @@ RUN apk add --no-cache \
 	g++ \
 	gcc \
 	git \
+    binutils-gold \
 	musl-dev
 
 RUN mkdir -p /chaincode/output /chaincode/input
