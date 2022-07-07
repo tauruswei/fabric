@@ -106,9 +106,7 @@ func NewLockBasedTxMgr(initializer *Initializer) (*LockBasedTxMgr, error) {
 		return nil, errors.New("create new lock based TxMgr failed: passed in nil ledger hasher")
 	}
 
-	if err := initializer.DB.Open(); err != nil {
-		return nil, err
-	}
+	initializer.DB.Open()
 	txmgr := &LockBasedTxMgr{
 		ledgerid:       initializer.LedgerID,
 		db:             initializer.DB,
@@ -347,7 +345,7 @@ func (uniquePvtData uniquePvtDataMap) updateUsingPvtWrite(pvtWrite *kvrwset.KVWr
 		uniquePvtData[hashedCompositeKey] =
 			&privacyenabledstate.PvtKVWrite{
 				Key:      pvtWrite.Key,
-				IsDelete: rwsetutil.IsKVWriteDelete(pvtWrite),
+				IsDelete: pvtWrite.IsDelete,
 				Value:    pvtWrite.Value,
 				Version:  ver,
 			}

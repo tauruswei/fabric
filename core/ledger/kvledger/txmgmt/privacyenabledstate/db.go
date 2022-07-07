@@ -408,30 +408,27 @@ type indexInfo struct {
 
 const (
 	// Example for chaincode indexes:
-	// "META-INF/statedb/couchdb/indexes"
+	// "META-INF/statedb/couchdb/indexes/indexColorSortName.json"
 	chaincodeIndexDirDepth = 3
-
 	// Example for collection scoped indexes:
-	// "META-INF/statedb/couchdb/collections/collectionMarbles/indexes"
+	// "META-INF/statedb/couchdb/collections/collectionMarbles/indexes/indexCollMarbles.json"
 	collectionDirDepth      = 3
 	collectionNameDepth     = 4
 	collectionIndexDirDepth = 5
 )
 
-// Note previous functions will have ensured that the path starts
-// with 'META-INF/statedb' and does not have leading or trailing
-// path deliminators.
 func getIndexInfo(indexPath string) *indexInfo {
 	indexInfo := &indexInfo{}
-	pathParts := strings.Split(indexPath, "/")
-	pathDepth := len(pathParts)
-
+	dirsDepth := strings.Split(indexPath, "/")
 	switch {
-	case pathDepth > chaincodeIndexDirDepth && pathParts[chaincodeIndexDirDepth] == "indexes":
+	case len(dirsDepth) > chaincodeIndexDirDepth &&
+		dirsDepth[chaincodeIndexDirDepth] == "indexes":
 		indexInfo.hasIndexForChaincode = true
-	case pathDepth > collectionIndexDirDepth && pathParts[collectionDirDepth] == "collections" && pathParts[collectionIndexDirDepth] == "indexes":
+	case len(dirsDepth) > collectionDirDepth &&
+		dirsDepth[collectionDirDepth] == "collections" &&
+		dirsDepth[collectionIndexDirDepth] == "indexes":
 		indexInfo.hasIndexForCollection = true
-		indexInfo.collectionName = pathParts[collectionNameDepth]
+		indexInfo.collectionName = dirsDepth[collectionNameDepth]
 	}
 	return indexInfo
 }

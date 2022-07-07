@@ -35,9 +35,7 @@ func NewOrdererClientFromEnv() (*OrdererClient, error) {
 		CommonClient: CommonClient{
 			GRPCClient: gClient,
 			Address:    address,
-			sn:         override,
-		},
-	}
+			sn:         override}}
 	return oClient, nil
 }
 

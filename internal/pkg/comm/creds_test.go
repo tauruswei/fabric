@@ -16,8 +16,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/hyperledger/fabric/common/flogging/floggingtest"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"github.com/stretchr/testify/assert"
@@ -96,8 +94,8 @@ func TestCreds(t *testing.T) {
 		MaxVersion: tls.VersionTLS10,
 	})
 	wg.Wait()
-	require.Contains(t, err.Error(), "protocol version not supported")
-	require.Contains(t, recorder.Messages()[1], "TLS handshake failed")
+	assert.Contains(t, err.Error(), "protocol version not supported")
+	assert.Contains(t, recorder.Messages()[0], "TLS handshake failed with error")
 }
 
 func TestNewTLSConfig(t *testing.T) {
@@ -127,25 +125,38 @@ func TestAddRootCA(t *testing.T) {
 	t.Parallel()
 
 	caPEM, err := ioutil.ReadFile(filepath.Join("testdata", "certs", "Org1-cert.pem"))
-	require.NoError(t, err, "failed to read root certificate")
+	if err != nil {
+		t.Fatalf("failed to read root certificate: %v", err)
+	}
+
+	cert := &x509.Certificate{
+		EmailAddresses: []string{"test@foobar.com"},
+	}
 
 	expectedCertPool := x509.NewCertPool()
 	ok := expectedCertPool.AppendCertsFromPEM(caPEM)
-	require.True(t, ok, "failed to create expected certPool")
+	if !ok {
+		t.Fatalf("failed to create expected certPool")
+	}
 
-	cert := &x509.Certificate{EmailAddresses: []string{"test@foobar.com"}}
 	expectedCertPool.AddCert(cert)
 
 	certPool := x509.NewCertPool()
 	ok = certPool.AppendCertsFromPEM(caPEM)
-	require.True(t, ok, "failed to create certPool")
+	if !ok {
+		t.Fatalf("failed to create certPool")
+	}
 
-	config := comm.NewTLSConfig(&tls.Config{ClientCAs: certPool})
-	require.Same(t, config.Config().ClientCAs, certPool)
+	tlsConfig := &tls.Config{
+		ClientCAs: certPool,
+	}
+	config := comm.NewTLSConfig(tlsConfig)
 
-	// https://go-review.googlesource.com/c/go/+/229917
+	assert.Equal(t, config.Config().ClientCAs, certPool)
+
 	config.AddClientRootCA(cert)
-	require.Equal(t, certPool.Subjects(), expectedCertPool.Subjects(), "subjects in the pool should be equal")
+
+	assert.Equal(t, config.Config().ClientCAs, expectedCertPool, "The CertPools should be equal")
 }
 
 func TestSetClientCAs(t *testing.T) {

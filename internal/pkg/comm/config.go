@@ -18,14 +18,10 @@ import (
 )
 
 // Configuration defaults
-
-// Max send and receive bytes for grpc clients and servers
-const (
-	DefaultMaxRecvMsgSize = 100 * 1024 * 1024
-	DefaultMaxSendMsgSize = 100 * 1024 * 1024
-)
-
 var (
+	// Max send and receive bytes for grpc clients and servers
+	MaxRecvMsgSize = 100 * 1024 * 1024
+	MaxSendMsgSize = 100 * 1024 * 1024
 	// Default peer keepalive options
 	DefaultKeepaliveOptions = KeepaliveOptions{
 		ClientInterval:    time.Duration(1) * time.Minute,  // 1 min
@@ -68,10 +64,6 @@ type ServerConfig struct {
 	HealthCheckEnabled bool
 	// ServerStatsHandler should be set if metrics on connections are to be reported.
 	ServerStatsHandler *ServerStatsHandler
-	// Maximum message size the server can receive
-	MaxRecvMsgSize int
-	// Maximum message size the server can send
-	MaxSendMsgSize int
 }
 
 // ClientConfig defines the parameters for configuring a GRPCClient instance
@@ -85,10 +77,6 @@ type ClientConfig struct {
 	Timeout time.Duration
 	// AsyncConnect makes connection creation non blocking
 	AsyncConnect bool
-	// Maximum message size the client can receive
-	MaxRecvMsgSize int
-	// Maximum message size the client can send
-	MaxSendMsgSize int
 }
 
 // Clone clones this ClientConfig

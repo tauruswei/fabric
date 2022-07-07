@@ -8,7 +8,6 @@ package node
 
 import (
 	"path/filepath"
-	"time"
 
 	coreconfig "github.com/hyperledger/fabric/core/config"
 	"github.com/hyperledger/fabric/core/ledger"
@@ -41,10 +40,6 @@ func ledgerConfig() *ledger.Config {
 	if viper.IsSet("ledger.pvtdataStore.purgeInterval") {
 		purgeInterval = viper.GetInt("ledger.pvtdataStore.purgeInterval")
 	}
-	deprioritizedDataReconcilerInterval := 60 * time.Minute
-	if viper.IsSet("ledger.pvtdataStore.deprioritizedDataReconcilerInterval") {
-		deprioritizedDataReconcilerInterval = viper.GetDuration("ledger.pvtdataStore.deprioritizedDataReconcilerInterval")
-	}
 
 	rootFSPath := filepath.Join(coreconfig.GetPath("peer.fileSystemPath"), "ledgersData")
 	snapshotsRootDir := viper.GetString("ledger.snapshots.rootDir")
@@ -58,10 +53,9 @@ func ledgerConfig() *ledger.Config {
 			CouchDB:       &ledger.CouchDBConfig{},
 		},
 		PrivateDataConfig: &ledger.PrivateDataConfig{
-			MaxBatchSize:                        collElgProcMaxDbBatchSize,
-			BatchesInterval:                     collElgProcDbBatchesInterval,
-			PurgeInterval:                       purgeInterval,
-			DeprioritizedDataReconcilerInterval: deprioritizedDataReconcilerInterval,
+			MaxBatchSize:    collElgProcMaxDbBatchSize,
+			BatchesInterval: collElgProcDbBatchesInterval,
+			PurgeInterval:   purgeInterval,
 		},
 		HistoryDBConfig: &ledger.HistoryDBConfig{
 			Enabled: viper.GetBool("ledger.history.enableHistoryDatabase"),

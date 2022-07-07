@@ -26,7 +26,6 @@ type PeriodicCheck struct {
 	CheckInterval       time.Duration
 	Condition           func() bool
 	Report              func(cumulativePeriod time.Duration)
-	ReportCleared       func()
 	conditionHoldsSince time.Time
 	once                sync.Once // Used to prevent double initialization
 	stopped             uint32
@@ -61,9 +60,6 @@ func (pc *PeriodicCheck) check() {
 }
 
 func (pc *PeriodicCheck) conditionNotFulfilled() {
-	if pc.ReportCleared != nil && !pc.conditionHoldsSince.IsZero() {
-		pc.ReportCleared()
-	}
 	pc.conditionHoldsSince = time.Time{}
 }
 
@@ -85,20 +81,12 @@ type evictionSuspector struct {
 	writeBlock                 func(block *common.Block) error
 	triggerCatchUp             func(sn *raftpb.Snapshot)
 	halted                     bool
-	timesTriggered             int
-}
-
-func (es *evictionSuspector) clearSuspicion() {
-	es.timesTriggered = 0
 }
 
 func (es *evictionSuspector) confirmSuspicion(cumulativeSuspicion time.Duration) {
-	// The goal here is to only execute the body of the function once every es.evictionSuspicionThreshold
-	if es.evictionSuspicionThreshold*time.Duration(es.timesTriggered+1) > cumulativeSuspicion || es.halted {
+	if es.evictionSuspicionThreshold > cumulativeSuspicion || es.halted {
 		return
 	}
-	es.timesTriggered++
-
 	es.logger.Infof("Suspecting our own eviction from the channel for %v", cumulativeSuspicion)
 	puller, err := es.createPuller()
 	if err != nil {

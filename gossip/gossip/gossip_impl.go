@@ -131,10 +131,8 @@ func New(conf *Config, s *grpc.Server, sa api.SecurityAdvisor,
 		MsgExpirationFactor:          conf.MsgExpirationFactor,
 		BootstrapPeers:               conf.BootstrapPeers,
 	}
-	self := g.selfNetworkMember()
-	logger := util.GetLogger(util.DiscoveryLogger, self.InternalEndpoint)
-	g.disc = discovery.NewDiscoveryService(self, g.discAdapter, g.disSecAdap, g.disclosurePolicy,
-		discoveryConfig, anchorPeerTracker, logger)
+	g.disc = discovery.NewDiscoveryService(g.selfNetworkMember(), g.discAdapter, g.disSecAdap, g.disclosurePolicy,
+		discoveryConfig, anchorPeerTracker)
 	g.logger.Infof("Creating gossip service with self membership of %s", g.selfNetworkMember())
 
 	g.certPuller = g.createCertStorePuller()
@@ -216,23 +214,23 @@ func (g *Node) SuspectPeers(isSuspected api.PeerSuspector) {
 
 func (g *Node) learnAnchorPeers(channel string, orgOfAnchorPeers api.OrgIdentityType, anchorPeers []api.AnchorPeer) {
 	if len(anchorPeers) == 0 {
-		g.logger.Infof("No configured anchor peers of %s for channel %s to learn about", string(orgOfAnchorPeers), channel)
+		g.logger.Info("No configured anchor peers of", string(orgOfAnchorPeers), "for channel", channel, "to learn about")
 		return
 	}
-	g.logger.Infof("Learning about the configured anchor peers of %s for channel %s: %v", string(orgOfAnchorPeers), channel, anchorPeers)
+	g.logger.Info("Learning about the configured anchor peers of", string(orgOfAnchorPeers), "for channel", channel, ":", anchorPeers)
 	for _, ap := range anchorPeers {
 		if ap.Host == "" {
-			g.logger.Warningf("Got empty hostname for channel %s, skipping connecting to anchor peer %v", channel, ap)
+			g.logger.Warning("Got empty hostname, skipping connecting to anchor peer", ap)
 			continue
 		}
 		if ap.Port == 0 {
-			g.logger.Warningf("Got invalid port (0) for channel %s, skipping connecting to anchor peer %v", channel, ap)
+			g.logger.Warning("Got invalid port (0), skipping connecting to anchor peer", ap)
 			continue
 		}
 		endpoint := net.JoinHostPort(ap.Host, fmt.Sprintf("%d", ap.Port))
 		// Skip connecting to self
 		if g.selfNetworkMember().Endpoint == endpoint || g.selfNetworkMember().InternalEndpoint == endpoint {
-			g.logger.Infof("Anchor peer for channel %s with same endpoint, skipping connecting to myself", channel)
+			g.logger.Info("Anchor peer with same endpoint, skipping connecting to myself")
 			continue
 		}
 
@@ -244,12 +242,12 @@ func (g *Node) learnAnchorPeers(channel string, orgOfAnchorPeers api.OrgIdentity
 		identifier := func() (*discovery.PeerIdentification, error) {
 			remotePeerIdentity, err := g.comm.Handshake(&comm.RemotePeer{Endpoint: endpoint})
 			if err != nil {
-				g.logger.Warningf("Deep probe of %s for channel %s failed: %s", endpoint, channel, err)
+				g.logger.Warningf("Deep probe of %s failed: %s", endpoint, err)
 				return nil, err
 			}
 			isAnchorPeerInMyOrg := bytes.Equal(g.selfOrg, g.secAdvisor.OrgByPeerIdentity(remotePeerIdentity))
 			if bytes.Equal(orgOfAnchorPeers, g.selfOrg) && !isAnchorPeerInMyOrg {
-				err := errors.Errorf("Anchor peer %s for channel %s isn't in our org, but is claimed to be", endpoint, channel)
+				err := errors.Errorf("Anchor peer %s isn't in our org, but is claimed to be", endpoint)
 				g.logger.Warningf("%s", err)
 				return nil, err
 			}

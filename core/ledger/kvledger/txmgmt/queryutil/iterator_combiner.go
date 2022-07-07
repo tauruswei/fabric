@@ -67,9 +67,7 @@ func (combiner *itrCombiner) Next() (commonledger.QueryResult, error) {
 		}
 	}
 	kv := combiner.kvAt(smallestHolderIndex)
-	if _, err := combiner.moveItrAndRemoveIfExhausted(smallestHolderIndex); err != nil {
-		return nil, err
-	}
+	combiner.moveItrAndRemoveIfExhausted(smallestHolderIndex)
 	if kv.IsDelete() {
 		return combiner.Next()
 	}

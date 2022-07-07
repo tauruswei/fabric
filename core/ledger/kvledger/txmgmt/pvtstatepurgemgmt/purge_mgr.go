@@ -78,9 +78,7 @@ func (p *PurgeMgr) UpdateExpiryInfoOfPvtDataOfOldBlocks(pvtUpdates *privacyenabl
 	builder := newExpiryScheduleBuilder(p.btlPolicy)
 	pvtUpdateCompositeKeyMap := pvtUpdates.ToCompositeKeyMap()
 	for k, vv := range pvtUpdateCompositeKeyMap {
-		if err := builder.add(k.Namespace, k.CollectionName, k.Key, util.ComputeStringHash(k.Key), vv); err != nil {
-			return err
-		}
+		builder.add(k.Namespace, k.CollectionName, k.Key, util.ComputeStringHash(k.Key), vv)
 	}
 
 	var expiryInfoUpdates []*expiryInfo
@@ -214,10 +212,7 @@ func (p *PurgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 	// Transform the keys into the form such that for each hashed key that is eligible for purge appears in 'toPurge'
 	toPurge := transformToExpiryInfoMap(expiryInfo)
 	// Load the latest versions of the hashed keys
-	if err = p.preloadCommittedVersionsInCache(toPurge); err != nil {
-		workingset.err = err
-		return workingset
-	}
+	p.preloadCommittedVersionsInCache(toPurge)
 	var expiryInfoKeysToClear []*expiryInfoKey
 
 	if len(toPurge) == 0 {
@@ -271,15 +266,15 @@ func (p *PurgeMgr) prepareWorkingsetFor(expiringAtBlk uint64) *workingset {
 	return workingset
 }
 
-func (p *PurgeMgr) preloadCommittedVersionsInCache(expInfoMap expiryInfoMap) error {
+func (p *PurgeMgr) preloadCommittedVersionsInCache(expInfoMap expiryInfoMap) {
 	if !p.db.IsBulkOptimizable() {
-		return nil
+		return
 	}
 	var hashedKeys []*privacyenabledstate.HashedCompositeKey
 	for k := range expInfoMap {
 		hashedKeys = append(hashedKeys, &k)
 	}
-	return p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys)
+	p.db.LoadCommittedVersionsOfPubAndHashedKeys(nil, hashedKeys)
 }
 
 func transformToExpiryInfoMap(expiryInfo []*expiryInfo) expiryInfoMap {

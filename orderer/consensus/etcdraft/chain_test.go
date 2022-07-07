@@ -60,11 +60,7 @@ func init() {
 	factory.InitFactories(nil)
 }
 
-func mockOrderer(metadata []byte) *mocks.OrdererConfig {
-	return mockOrdererWithBatchTimeout(time.Second, metadata)
-}
-
-func mockOrdererWithBatchTimeout(batchTimeout time.Duration, metadata []byte) *mocks.OrdererConfig {
+func mockOrderer(batchTimeout time.Duration, metadata []byte) *mocks.OrdererConfig {
 	mockOrderer := &mocks.OrdererConfig{}
 	mockOrderer.BatchTimeoutReturns(batchTimeout)
 	mockOrderer.ConsensusMetadataReturns(metadata)
@@ -72,7 +68,7 @@ func mockOrdererWithBatchTimeout(batchTimeout time.Duration, metadata []byte) *m
 }
 
 func mockOrdererWithTLSRootCert(batchTimeout time.Duration, metadata []byte, tlsCA tlsgen.CA) *mocks.OrdererConfig {
-	mockOrderer := mockOrdererWithBatchTimeout(batchTimeout, metadata)
+	mockOrderer := mockOrderer(batchTimeout, metadata)
 	mockOrg := &mocks.OrdererOrg{}
 	mockMSP := &mocks.MSP{}
 	mockMSP.GetTLSRootCertsReturns([][]byte{tlsCA.CertBytes()})
@@ -178,7 +174,6 @@ var _ = Describe("Chain", func() {
 			fakeFields = newFakeMetricsFields()
 
 			opts = etcdraft.Options{
-				RPCTimeout:        time.Second * 5,
 				RaftID:            1,
 				Clock:             clock,
 				TickInterval:      interval,
@@ -350,7 +345,7 @@ var _ = Describe("Chain", func() {
 				By("respecting batch timeout")
 				cutter.CutNext = false
 				timeout := time.Second
-				support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 				err = chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(fakeFields.fakeNormalProposalsReceived.AddCallCount()).To(Equal(2))
@@ -368,7 +363,7 @@ var _ = Describe("Chain", func() {
 				close(cutter.Block)
 
 				timeout := time.Second
-				support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -389,7 +384,7 @@ var _ = Describe("Chain", func() {
 			It("does not write a block if halted before timeout", func() {
 				close(cutter.Block)
 				timeout := time.Second
-				support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -406,7 +401,7 @@ var _ = Describe("Chain", func() {
 				close(cutter.Block)
 
 				timeout := time.Second
-				support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -444,7 +439,7 @@ var _ = Describe("Chain", func() {
 				close(cutter.Block)
 
 				timeout := time.Second
-				support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+				support.SharedConfigReturns(mockOrderer(timeout, nil))
 
 				err := chain.Order(env, 0)
 				Expect(err).NotTo(HaveOccurred())
@@ -462,7 +457,7 @@ var _ = Describe("Chain", func() {
 					close(cutter.Block)
 
 					timeout := time.Hour
-					support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+					support.SharedConfigReturns(mockOrderer(timeout, nil))
 					support.SequenceReturns(1)
 				})
 
@@ -934,9 +929,6 @@ var _ = Describe("Chain", func() {
 									return nil
 								}
 
-								// This is a false assumption - single node shouldn't be able to pull block from anywhere.
-								// However, this test is mainly to assert that chain should attempt catchup upon start,
-								// so we could live with it.
 								return ledger[i]
 							}
 
@@ -958,27 +950,6 @@ var _ = Describe("Chain", func() {
 							close(signal)                         // unblock block puller
 							Eventually(done).Should(Receive(nil)) // WaitReady should be unblocked
 							Eventually(c.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(2))
-						})
-
-						It("commits block from snapshot if it's missing from ledger", func() {
-							// Scenario:
-							// Single node exists right after a snapshot is taken, while the block
-							// in it hasn't been successfully persisted into ledger (there can be one
-							// async block write in-flight). Then the node is restarted, and catches
-							// up using the block in snapshot.
-
-							Expect(chain.Order(env, uint64(0))).To(Succeed())
-							Eventually(support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(1))
-							Eventually(countFiles, LongEventualTimeout).Should(Equal(1))
-
-							chain.Halt()
-
-							c := newChain(10*time.Second, channelID, dataDir, 1, raftMetadata, consenters, cryptoProvider, nil)
-							c.init()
-							c.Start()
-							defer c.Halt()
-
-							Eventually(c.support.WriteBlockCallCount, LongEventualTimeout).Should(Equal(1))
 						})
 
 						It("restores snapshot w/o extra entries", func() {
@@ -2574,28 +2545,7 @@ var _ = Describe("Chain", func() {
 				})
 			})
 
-			When("gRPC stream to leader is stuck", func() {
-				BeforeEach(func() {
-					c2.opts.RPCTimeout = time.Second
-					network.Lock()
-					network.delayWG.Add(1)
-					network.Unlock()
-				})
-				It("correctly times out", func() {
-					err := c2.Order(env, 0)
-					Expect(err).To(MatchError("timed out (1s) waiting on forwarding to 1"))
-					network.delayWG.Done()
-				})
-			})
-
 			When("leader is disconnected", func() {
-				It("correctly returns a failure to the client when forwarding from a follower", func() {
-					network.disconnect(1)
-
-					err := c2.Order(env, 0)
-					Expect(err).To(MatchError("connection lost"))
-				})
-
 				It("proactively steps down to follower", func() {
 					network.disconnect(1)
 
@@ -3330,7 +3280,6 @@ func newChain(
 	fakeFields := newFakeMetricsFields()
 
 	opts := etcdraft.Options{
-		RPCTimeout:          timeout,
 		RaftID:              uint64(id),
 		Clock:               clock,
 		TickInterval:        interval,
@@ -3351,7 +3300,7 @@ func newChain(
 	if support == nil {
 		support = &consensusmocks.FakeConsenterSupport{}
 		support.ChannelIDReturns(channel)
-		support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+		support.SharedConfigReturns(mockOrderer(timeout, nil))
 	}
 	cutter := mockblockcutter.NewReceiver()
 	close(cutter.Block)
@@ -3496,7 +3445,6 @@ func (c *chain) getStepFunc() stepFunc {
 }
 
 type network struct {
-	delayWG sync.WaitGroup
 	sync.RWMutex
 
 	leader uint64
@@ -3575,30 +3523,21 @@ func (n *network) addChain(c *chain) {
 		return c.step(dest, msg)
 	}
 
-	c.rpc.SendSubmitStub = func(dest uint64, msg *orderer.SubmitRequest, f func(error)) error {
+	c.rpc.SendSubmitStub = func(dest uint64, msg *orderer.SubmitRequest) error {
 		if !n.linked(c.id, dest) {
-			err := errors.Errorf("connection refused")
-			f(err)
-			return err
+			return errors.Errorf("connection refused")
 		}
 
 		if !n.connected(c.id) || !n.connected(dest) {
-			err := errors.Errorf("connection lost")
-			f(err)
-			return err
+			return errors.Errorf("connection lost")
 		}
 
 		n.RLock()
 		target := n.chains[dest]
 		n.RUnlock()
 		go func() {
-			n.Lock()
-			n.delayWG.Wait()
-			n.Unlock()
-
 			defer GinkgoRecover()
 			target.Submit(msg, c.id)
-			f(nil)
 		}()
 		return nil
 	}
@@ -3662,7 +3601,7 @@ func createNetwork(
 		m := proto.Clone(raftMetadata).(*raftprotos.BlockMetadata)
 		support := &consensusmocks.FakeConsenterSupport{}
 		support.ChannelIDReturns(channel)
-		support.SharedConfigReturns(mockOrdererWithBatchTimeout(timeout, nil))
+		support.SharedConfigReturns(mockOrderer(timeout, nil))
 		mockOrdererConfig := mockOrdererWithTLSRootCert(timeout, nil, tlsCA)
 		support.SharedConfigReturns(mockOrdererConfig)
 		n.addChain(newChain(timeout, channel, dir, nodeID, m, consenters, cryptoProvider, support))

@@ -4,7 +4,6 @@ package mock
 import (
 	"sync"
 
-	"github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric-protos-go/orderer"
 	"github.com/hyperledger/fabric/common/ledger/blockledger"
 )
@@ -33,19 +32,6 @@ type BlockReader struct {
 		result1 blockledger.Iterator
 		result2 uint64
 	}
-	RetrieveBlockByNumberStub        func(uint64) (*common.Block, error)
-	retrieveBlockByNumberMutex       sync.RWMutex
-	retrieveBlockByNumberArgsForCall []struct {
-		arg1 uint64
-	}
-	retrieveBlockByNumberReturns struct {
-		result1 *common.Block
-		result2 error
-	}
-	retrieveBlockByNumberReturnsOnCall map[int]struct {
-		result1 *common.Block
-		result2 error
-	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
 }
@@ -55,16 +41,15 @@ func (fake *BlockReader) Height() uint64 {
 	ret, specificReturn := fake.heightReturnsOnCall[len(fake.heightArgsForCall)]
 	fake.heightArgsForCall = append(fake.heightArgsForCall, struct {
 	}{})
-	stub := fake.HeightStub
-	fakeReturns := fake.heightReturns
 	fake.recordInvocation("Height", []interface{}{})
 	fake.heightMutex.Unlock()
-	if stub != nil {
-		return stub()
+	if fake.HeightStub != nil {
+		return fake.HeightStub()
 	}
 	if specificReturn {
 		return ret.result1
 	}
+	fakeReturns := fake.heightReturns
 	return fakeReturns.result1
 }
 
@@ -109,16 +94,15 @@ func (fake *BlockReader) Iterator(arg1 *orderer.SeekPosition) (blockledger.Itera
 	fake.iteratorArgsForCall = append(fake.iteratorArgsForCall, struct {
 		arg1 *orderer.SeekPosition
 	}{arg1})
-	stub := fake.IteratorStub
-	fakeReturns := fake.iteratorReturns
 	fake.recordInvocation("Iterator", []interface{}{arg1})
 	fake.iteratorMutex.Unlock()
-	if stub != nil {
-		return stub(arg1)
+	if fake.IteratorStub != nil {
+		return fake.IteratorStub(arg1)
 	}
 	if specificReturn {
 		return ret.result1, ret.result2
 	}
+	fakeReturns := fake.iteratorReturns
 	return fakeReturns.result1, fakeReturns.result2
 }
 
@@ -167,70 +151,6 @@ func (fake *BlockReader) IteratorReturnsOnCall(i int, result1 blockledger.Iterat
 	}{result1, result2}
 }
 
-func (fake *BlockReader) RetrieveBlockByNumber(arg1 uint64) (*common.Block, error) {
-	fake.retrieveBlockByNumberMutex.Lock()
-	ret, specificReturn := fake.retrieveBlockByNumberReturnsOnCall[len(fake.retrieveBlockByNumberArgsForCall)]
-	fake.retrieveBlockByNumberArgsForCall = append(fake.retrieveBlockByNumberArgsForCall, struct {
-		arg1 uint64
-	}{arg1})
-	stub := fake.RetrieveBlockByNumberStub
-	fakeReturns := fake.retrieveBlockByNumberReturns
-	fake.recordInvocation("RetrieveBlockByNumber", []interface{}{arg1})
-	fake.retrieveBlockByNumberMutex.Unlock()
-	if stub != nil {
-		return stub(arg1)
-	}
-	if specificReturn {
-		return ret.result1, ret.result2
-	}
-	return fakeReturns.result1, fakeReturns.result2
-}
-
-func (fake *BlockReader) RetrieveBlockByNumberCallCount() int {
-	fake.retrieveBlockByNumberMutex.RLock()
-	defer fake.retrieveBlockByNumberMutex.RUnlock()
-	return len(fake.retrieveBlockByNumberArgsForCall)
-}
-
-func (fake *BlockReader) RetrieveBlockByNumberCalls(stub func(uint64) (*common.Block, error)) {
-	fake.retrieveBlockByNumberMutex.Lock()
-	defer fake.retrieveBlockByNumberMutex.Unlock()
-	fake.RetrieveBlockByNumberStub = stub
-}
-
-func (fake *BlockReader) RetrieveBlockByNumberArgsForCall(i int) uint64 {
-	fake.retrieveBlockByNumberMutex.RLock()
-	defer fake.retrieveBlockByNumberMutex.RUnlock()
-	argsForCall := fake.retrieveBlockByNumberArgsForCall[i]
-	return argsForCall.arg1
-}
-
-func (fake *BlockReader) RetrieveBlockByNumberReturns(result1 *common.Block, result2 error) {
-	fake.retrieveBlockByNumberMutex.Lock()
-	defer fake.retrieveBlockByNumberMutex.Unlock()
-	fake.RetrieveBlockByNumberStub = nil
-	fake.retrieveBlockByNumberReturns = struct {
-		result1 *common.Block
-		result2 error
-	}{result1, result2}
-}
-
-func (fake *BlockReader) RetrieveBlockByNumberReturnsOnCall(i int, result1 *common.Block, result2 error) {
-	fake.retrieveBlockByNumberMutex.Lock()
-	defer fake.retrieveBlockByNumberMutex.Unlock()
-	fake.RetrieveBlockByNumberStub = nil
-	if fake.retrieveBlockByNumberReturnsOnCall == nil {
-		fake.retrieveBlockByNumberReturnsOnCall = make(map[int]struct {
-			result1 *common.Block
-			result2 error
-		})
-	}
-	fake.retrieveBlockByNumberReturnsOnCall[i] = struct {
-		result1 *common.Block
-		result2 error
-	}{result1, result2}
-}
-
 func (fake *BlockReader) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
@@ -238,8 +158,6 @@ func (fake *BlockReader) Invocations() map[string][][]interface{} {
 	defer fake.heightMutex.RUnlock()
 	fake.iteratorMutex.RLock()
 	defer fake.iteratorMutex.RUnlock()
-	fake.retrieveBlockByNumberMutex.RLock()
-	defer fake.retrieveBlockByNumberMutex.RUnlock()
 	copiedInvocations := map[string][][]interface{}{}
 	for key, value := range fake.invocations {
 		copiedInvocations[key] = value

@@ -11,7 +11,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
+	"net"
 	"os"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -153,7 +155,7 @@ var _ = Describe("ConfigTx", func() {
 		oConfig.BatchTimeout = 2 * time.Second
 		err = o.SetConfiguration(oConfig)
 		Expect(err).NotTo(HaveOccurred())
-		host, port := OrdererHostPort(network, orderer)
+		host, port := ordererHostPort(network, orderer)
 		err = o.Organization(orderer.Organization).SetEndpoint(configtx.Address{Host: host, Port: port + 1})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -255,7 +257,7 @@ var _ = Describe("ConfigTx", func() {
 			peerOrg := c.Application().Organization(peer.Organization)
 
 			By("adding the anchor peer for " + peer.Organization)
-			host, port := PeerHostPort(network, peer)
+			host, port := peerHostPort(network, peer)
 			err = peerOrg.AddAnchorPeer(configtx.Address{Host: host, Port: port})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -327,4 +329,20 @@ func parsePrivateKey(filename string) crypto.PrivateKey {
 	privateKey, err := x509.ParsePKCS8PrivateKey(pemBlock.Bytes)
 	Expect(err).NotTo(HaveOccurred())
 	return privateKey
+}
+
+func peerHostPort(n *nwo.Network, p *nwo.Peer) (string, int) {
+	return splitHostPort(n.PeerAddress(p, nwo.ListenPort))
+}
+
+func ordererHostPort(n *nwo.Network, o *nwo.Orderer) (string, int) {
+	return splitHostPort(n.OrdererAddress(o, nwo.ListenPort))
+}
+
+func splitHostPort(address string) (string, int) {
+	host, port, err := net.SplitHostPort(address)
+	Expect(err).NotTo(HaveOccurred())
+	portInt, err := strconv.Atoi(port)
+	Expect(err).NotTo(HaveOccurred())
+	return host, portInt
 }

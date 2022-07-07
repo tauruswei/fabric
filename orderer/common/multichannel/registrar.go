@@ -113,18 +113,16 @@ type Registrar struct {
 // ConfigBlock retrieves the last configuration block from the given ledger.
 // Panics on failure.
 func ConfigBlock(reader blockledger.Reader) *cb.Block {
-	lastBlock, err := blockledger.GetBlockByNumber(reader, reader.Height()-1)
-	if err != nil {
-		logger.Panicw("Failed to retrieve block", "blockNum", reader.Height()-1, "error", err)
-	}
+	lastBlock := blockledger.GetBlock(reader, reader.Height()-1)
 	index, err := protoutil.GetLastConfigIndexFromBlock(lastBlock)
 	if err != nil {
-		logger.Panicw("Chain did not have appropriately encoded last config in its latest block", "error", err)
+		logger.Panicf("Chain did not have appropriately encoded last config in its latest block: %s", err)
 	}
-	configBlock, err := blockledger.GetBlockByNumber(reader, index)
-	if err != nil {
-		logger.Panicw("Failed to retrieve config block", "blockNum", index, "error", err)
+	configBlock := blockledger.GetBlock(reader, index)
+	if configBlock == nil {
+		logger.Panicf("Config block does not exist")
 	}
+
 	return configBlock
 }
 

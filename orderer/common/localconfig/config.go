@@ -16,7 +16,6 @@ import (
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/viperutil"
 	coreconfig "github.com/hyperledger/fabric/core/config"
-	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"github.com/spf13/viper"
 )
 
@@ -58,8 +57,6 @@ type General struct {
 	LocalMSPID        string
 	BCCSP             *bccsp.FactoryOpts
 	Authentication    Authentication
-	MaxRecvMsgSize    int32
-	MaxSendMsgSize    int32
 }
 
 type Cluster struct {
@@ -91,13 +88,12 @@ type Keepalive struct {
 
 // TLS contains configuration for TLS connections.
 type TLS struct {
-	Enabled               bool
-	PrivateKey            string
-	Certificate           string
-	RootCAs               []string
-	ClientAuthRequired    bool
-	ClientRootCAs         []string
-	TLSHandshakeTimeShift time.Duration
+	Enabled            bool
+	PrivateKey         string
+	Certificate        string
+	RootCAs            []string
+	ClientAuthRequired bool
+	ClientRootCAs      []string
 }
 
 // SASLPlain contains configuration for SASL/PLAIN authentication
@@ -245,8 +241,6 @@ var Defaults = TopLevel{
 		Authentication: Authentication{
 			TimeWindow: time.Duration(15 * time.Minute),
 		},
-		MaxRecvMsgSize: comm.DefaultMaxRecvMsgSize,
-		MaxSendMsgSize: comm.DefaultMaxSendMsgSize,
 	},
 	FileLedger: FileLedger{
 		Location: "/var/hyperledger/production/orderer",
@@ -499,12 +493,6 @@ func (c *TopLevel) completeInitialization(configDir string) {
 			logger.Infof("Kafka.Version unset, setting to %v", Defaults.Kafka.Version)
 			c.Kafka.Version = Defaults.Kafka.Version
 
-		case c.General.MaxRecvMsgSize == 0:
-			logger.Infof("General.MaxRecvMsgSize is unset, setting to %v", Defaults.General.MaxRecvMsgSize)
-			c.General.MaxRecvMsgSize = Defaults.General.MaxRecvMsgSize
-		case c.General.MaxSendMsgSize == 0:
-			logger.Infof("General.MaxSendMsgSize is unset, setting to %v", Defaults.General.MaxSendMsgSize)
-			c.General.MaxSendMsgSize = Defaults.General.MaxSendMsgSize
 		default:
 			return
 		}

@@ -200,7 +200,6 @@ func Main() {
 		serverConfig.SecOpts.Certificate,
 		[][]byte{clusterClientConfig.SecOpts.Certificate},
 		identityBytes,
-		expirationLogger.Infof,
 		expirationLogger.Warnf, // This can be used to piggyback a metric event in the future
 		time.Now(),
 		time.AfterFunc)
@@ -300,6 +299,31 @@ func reuseListener(conf *localconfig.TopLevel) bool {
 	return false
 }
 
+// Extract system channel last config block
+func extractSysChanLastConfig(lf blockledger.Factory, bootstrapBlock *cb.Block) *cb.Block {
+	// Are we bootstrapping?
+	channelCount := len(lf.ChannelIDs())
+	if channelCount == 0 {
+		logger.Info("Bootstrapping because no existing channels")
+		return nil
+	}
+	logger.Infof("Not bootstrapping because of %d existing channels", channelCount)
+
+	systemChannelName, err := protoutil.GetChannelIDFromBlock(bootstrapBlock)
+	if err != nil {
+		logger.Panicf("Failed extracting system channel name from bootstrap block: %v", err)
+	}
+	systemChannelLedger, err := lf.GetOrCreate(systemChannelName)
+	if err != nil {
+		logger.Panicf("Failed getting system channel ledger: %v", err)
+	}
+	height := systemChannelLedger.Height()
+	lastConfigBlock := multichannel.ConfigBlock(systemChannelLedger)
+	logger.Infof("System channel: name=%s, height=%d, last config block number=%d",
+		systemChannelName, height, lastConfigBlock.Header.Number)
+	return lastConfigBlock
+}
+
 // extractSystemChannel loops through all channels, and return the last
 // config block for the system channel. Returns nil if no system channel
 // was found.
@@ -309,10 +333,6 @@ func extractSystemChannel(lf blockledger.Factory, bccsp bccsp.BCCSP) *cb.Block {
 		if err != nil {
 			logger.Panicf("Failed getting channel %v's ledger: %v", cID, err)
 		}
-		if channelLedger.Height() == 0 {
-			continue // Some channels may have an empty ledger and (possibly) a join-block, skip those
-		}
-
 		channelConfigBlock := multichannel.ConfigBlock(channelLedger)
 
 		err = onboarding.ValidateBootstrapBlock(channelConfigBlock, bccsp)
@@ -436,31 +456,23 @@ func configureClusterListener(conf *localconfig.TopLevel, generalConf comm.Serve
 
 func initializeClusterClientConfig(conf *localconfig.TopLevel) comm.ClientConfig {
 	cc := comm.ClientConfig{
-		AsyncConnect:   true,
-		KaOpts:         comm.DefaultKeepaliveOptions,
-		Timeout:        conf.General.Cluster.DialTimeout,
-		SecOpts:        comm.SecureOptions{},
-		MaxRecvMsgSize: int(conf.General.MaxRecvMsgSize),
-		MaxSendMsgSize: int(conf.General.MaxSendMsgSize),
+		AsyncConnect: true,
+		KaOpts:       comm.DefaultKeepaliveOptions,
+		Timeout:      conf.General.Cluster.DialTimeout,
+		SecOpts:      comm.SecureOptions{},
 	}
 
-	reuseGrpcListener := reuseListener(conf)
+	if conf.General.Cluster.ClientCertificate == "" {
+		return cc
+	}
 
 	certFile := conf.General.Cluster.ClientCertificate
-	keyFile := conf.General.Cluster.ClientPrivateKey
-	if certFile == "" && keyFile == "" {
-		if !reuseGrpcListener {
-			return cc
-		}
-		certFile = conf.General.TLS.Certificate
-		keyFile = conf.General.TLS.PrivateKey
-	}
-
 	certBytes, err := ioutil.ReadFile(certFile)
 	if err != nil {
 		logger.Fatalf("Failed to load client TLS certificate file '%s' (%s)", certFile, err)
 	}
 
+	keyFile := conf.General.Cluster.ClientPrivateKey
 	keyBytes, err := ioutil.ReadFile(keyFile)
 	if err != nil {
 		logger.Fatalf("Failed to load client TLS key file '%s' (%s)", keyFile, err)
@@ -475,13 +487,8 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel) comm.ClientConfig
 		serverRootCAs = append(serverRootCAs, rootCACert)
 	}
 
-	timeShift := conf.General.TLS.TLSHandshakeTimeShift
-	if !reuseGrpcListener {
-		timeShift = conf.General.Cluster.TLSHandshakeTimeShift
-	}
-
 	cc.SecOpts = comm.SecureOptions{
-		TimeShift:         timeShift,
+		TimeShift:         conf.General.Cluster.TLSHandshakeTimeShift,
 		RequireClientCert: true,
 		CipherSuites:      comm.DefaultTLSCipherSuites,
 		ServerRootCAs:     serverRootCAs,
@@ -498,7 +505,6 @@ func initializeServerConfig(conf *localconfig.TopLevel, metricsProvider metrics.
 	secureOpts := comm.SecureOptions{
 		UseTLS:            conf.General.TLS.Enabled,
 		RequireClientCert: conf.General.TLS.ClientAuthRequired,
-		TimeShift:         conf.General.TLS.TLSHandshakeTimeShift,
 	}
 	// check to see if TLS is enabled
 	if secureOpts.UseTLS {
@@ -572,8 +578,6 @@ func initializeServerConfig(conf *localconfig.TopLevel, metricsProvider metrics.
 				grpclogging.WithLeveler(grpclogging.LevelerFunc(grpcLeveler)),
 			),
 		},
-		MaxRecvMsgSize: int(conf.General.MaxRecvMsgSize),
-		MaxSendMsgSize: int(conf.General.MaxSendMsgSize),
 	}
 }
 
@@ -909,26 +913,15 @@ func (mgr *caManager) updateClusterDialer(
 
 	// Iterate over all orderer root CAs for all chains and add them
 	// to the root CAs
-	clusterRootCAs := make(cluster.StringSet)
-	for _, orgRootCAs := range mgr.ordererRootCAsByChain {
-		for _, rootCA := range orgRootCAs {
-			clusterRootCAs[string(rootCA)] = struct{}{}
-		}
+	var clusterRootCAs [][]byte
+	for _, roots := range mgr.ordererRootCAsByChain {
+		clusterRootCAs = append(clusterRootCAs, roots...)
 	}
 
 	// Add the local root CAs too
-	for _, localRootCA := range localClusterRootCAs {
-		clusterRootCAs[string(localRootCA)] = struct{}{}
-	}
-
-	// Convert StringSet to byte slice
-	var clusterRootCAsBytes [][]byte
-	for root := range clusterRootCAs {
-		clusterRootCAsBytes = append(clusterRootCAsBytes, []byte(root))
-	}
-
+	clusterRootCAs = append(clusterRootCAs, localClusterRootCAs...)
 	// Update the cluster config with the new root CAs
-	clusterDialer.UpdateRootCAs(clusterRootCAsBytes)
+	clusterDialer.UpdateRootCAs(clusterRootCAs)
 }
 
 func prettyPrintStruct(i interface{}) {

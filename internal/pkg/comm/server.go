@@ -124,18 +124,9 @@ func NewGRPCServerFromListener(listener net.Listener, serverConfig ServerConfig)
 			return nil, errors.New("serverConfig.SecOpts must contain both Key and Certificate when UseTLS is true")
 		}
 	}
-
 	// set max send and recv msg sizes
-	maxSendMsgSize := DefaultMaxSendMsgSize
-	if serverConfig.MaxSendMsgSize != 0 {
-		maxSendMsgSize = serverConfig.MaxSendMsgSize
-	}
-	maxRecvMsgSize := DefaultMaxRecvMsgSize
-	if serverConfig.MaxRecvMsgSize != 0 {
-		maxRecvMsgSize = serverConfig.MaxRecvMsgSize
-	}
-	serverOpts = append(serverOpts, grpc.MaxSendMsgSize(maxSendMsgSize))
-	serverOpts = append(serverOpts, grpc.MaxRecvMsgSize(maxRecvMsgSize))
+	serverOpts = append(serverOpts, grpc.MaxSendMsgSize(MaxSendMsgSize))
+	serverOpts = append(serverOpts, grpc.MaxRecvMsgSize(MaxRecvMsgSize))
 	// set the keepalive options
 	serverOpts = append(serverOpts, ServerKeepaliveOptions(serverConfig.KaOpts)...)
 	// set connection timeout

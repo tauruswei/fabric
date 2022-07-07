@@ -51,5 +51,5 @@ func (exp *expirationRejectRule) Apply(message *common.Envelope) error {
 	if expirationTime.IsZero() || time.Now().Before(expirationTime) {
 		return nil
 	}
-	return errors.New("broadcast client identity expired")
+	return errors.New("identity expired")
 }

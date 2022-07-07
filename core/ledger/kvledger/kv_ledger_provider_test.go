@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/common"
@@ -448,10 +447,9 @@ func TestLedgerBackup(t *testing.T) {
 		RootFSPath:    originalPath,
 		StateDBConfig: &lgr.StateDBConfig{},
 		PrivateDataConfig: &lgr.PrivateDataConfig{
-			MaxBatchSize:                        5000,
-			BatchesInterval:                     1000,
-			PurgeInterval:                       100,
-			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
+			MaxBatchSize:    5000,
+			BatchesInterval: 1000,
+			PurgeInterval:   100,
 		},
 		HistoryDBConfig: &lgr.HistoryDBConfig{
 			Enabled: true,
@@ -502,10 +500,9 @@ func TestLedgerBackup(t *testing.T) {
 		RootFSPath:    restorePath,
 		StateDBConfig: &lgr.StateDBConfig{},
 		PrivateDataConfig: &lgr.PrivateDataConfig{
-			MaxBatchSize:                        5000,
-			BatchesInterval:                     1000,
-			PurgeInterval:                       100,
-			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
+			MaxBatchSize:    5000,
+			BatchesInterval: 1000,
+			PurgeInterval:   100,
 		},
 		HistoryDBConfig: &lgr.HistoryDBConfig{
 			Enabled: true,
@@ -592,10 +589,9 @@ func testConfig(t *testing.T) (conf *lgr.Config, cleanup func()) {
 		RootFSPath:    path,
 		StateDBConfig: &lgr.StateDBConfig{},
 		PrivateDataConfig: &lgr.PrivateDataConfig{
-			MaxBatchSize:                        5000,
-			BatchesInterval:                     1000,
-			PurgeInterval:                       100,
-			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
+			MaxBatchSize:    5000,
+			BatchesInterval: 1000,
+			PurgeInterval:   100,
 		},
 		HistoryDBConfig: &lgr.HistoryDBConfig{
 			Enabled: true,
@@ -627,60 +623,43 @@ func testutilNewProvider(conf *lgr.Config, t *testing.T, ccInfoProvider *mock.De
 	return provider
 }
 
-type nsCollBtlConfig struct {
-	namespace string
-	btlConfig map[string]uint64
-}
-
 func testutilNewProviderWithCollectionConfig(
 	t *testing.T,
-	nsCollBtlConfigs []*nsCollBtlConfig,
+	namespace string,
+	btlConfigs map[string]uint64,
 	conf *lgr.Config,
 ) *Provider {
 	provider := testutilNewProvider(conf, t, &mock.DeployedChaincodeInfoProvider{})
 	mockCCInfoProvider := provider.initializer.DeployedChaincodeInfoProvider.(*mock.DeployedChaincodeInfoProvider)
-	collectionConfPkgs := []*peer.CollectionConfigPackage{}
-
-	nsCollMap := map[string]map[string]*peer.StaticCollectionConfig{}
-	for _, nsCollBtlConf := range nsCollBtlConfigs {
-		collMap := map[string]*peer.StaticCollectionConfig{}
-		var collConf []*peer.CollectionConfig
-		for collName, btl := range nsCollBtlConf.btlConfig {
-			staticConf := &peer.StaticCollectionConfig{Name: collName, BlockToLive: btl}
-			collMap[collName] = staticConf
-			collectionConf := &peer.CollectionConfig{}
-			collectionConf.Payload = &peer.CollectionConfig_StaticCollectionConfig{StaticCollectionConfig: staticConf}
-			collConf = append(collConf, collectionConf)
-		}
-		collectionConfPkgs = append(collectionConfPkgs, &peer.CollectionConfigPackage{Config: collConf})
-		nsCollMap[nsCollBtlConf.namespace] = collMap
+	collMap := map[string]*peer.StaticCollectionConfig{}
+	var collConf []*peer.CollectionConfig
+	for collName, btl := range btlConfigs {
+		staticConf := &peer.StaticCollectionConfig{Name: collName, BlockToLive: btl}
+		collMap[collName] = staticConf
+		collectionConf := &peer.CollectionConfig{}
+		collectionConf.Payload = &peer.CollectionConfig_StaticCollectionConfig{StaticCollectionConfig: staticConf}
+		collConf = append(collConf, collectionConf)
 	}
+	collectionConfPkg := &peer.CollectionConfigPackage{Config: collConf}
 
 	mockCCInfoProvider.ChaincodeInfoStub = func(channelName, ccName string, qe lgr.SimpleQueryExecutor) (*lgr.DeployedChaincodeInfo, error) {
-		for i, nsCollBtlConf := range nsCollBtlConfigs {
-			if ccName == nsCollBtlConf.namespace {
-				return &lgr.DeployedChaincodeInfo{
-					Name: nsCollBtlConf.namespace, ExplicitCollectionConfigPkg: collectionConfPkgs[i]}, nil
-			}
+		if ccName == namespace {
+			return &lgr.DeployedChaincodeInfo{
+				Name: namespace, ExplicitCollectionConfigPkg: collectionConfPkg}, nil
 		}
 		return nil, nil
 	}
 
 	mockCCInfoProvider.AllCollectionsConfigPkgStub = func(channelName, ccName string, qe lgr.SimpleQueryExecutor) (*peer.CollectionConfigPackage, error) {
-		for i, nsCollBtlConf := range nsCollBtlConfigs {
-			if ccName == nsCollBtlConf.namespace {
-				return collectionConfPkgs[i], nil
-			}
+		if ccName == namespace {
+			return collectionConfPkg, nil
 		}
 		return nil, nil
-
 	}
 
 	mockCCInfoProvider.CollectionInfoStub = func(channelName, ccName, collName string, qe lgr.SimpleQueryExecutor) (*peer.StaticCollectionConfig, error) {
-		for _, nsCollBtlConf := range nsCollBtlConfigs {
-			if ccName == nsCollBtlConf.namespace {
-				return nsCollMap[nsCollBtlConf.namespace][collName], nil
-			}
+		if ccName == namespace {
+			return collMap[collName], nil
 		}
 		return nil, nil
 	}

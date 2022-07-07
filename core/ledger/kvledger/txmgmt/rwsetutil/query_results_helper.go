@@ -106,9 +106,7 @@ func (helper *RangeQueryResultsHelper) Done() ([]*kvrwset.KVRead, *kvrwset.Query
 			return helper.pendingResults, nil, err
 		}
 	}
-	if err := helper.mt.done(); err != nil {
-		return nil, nil, err
-	}
+	helper.mt.done()
 	return helper.pendingResults, helper.mt.getSummery(), nil
 }
 
@@ -134,7 +132,8 @@ func (helper *RangeQueryResultsHelper) processPendingResults() error {
 	if err != nil {
 		return err
 	}
-	return helper.mt.update(hash)
+	helper.mt.update(hash)
+	return nil
 }
 
 func serializeKVReads(kvReads []*kvrwset.KVRead) ([]byte, error) {

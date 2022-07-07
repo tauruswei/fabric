@@ -1,6 +1,3 @@
-// Package fastcache implements fast in-memory cache.
-//
-// The package has been extracted from https://victoriametrics.com/
 package fastcache
 
 import (
@@ -8,7 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	xxhash "github.com/cespare/xxhash/v2"
+	"github.com/cespare/xxhash"
 )
 
 const bucketsCount = 512
@@ -16,10 +13,6 @@ const bucketsCount = 512
 const chunkSize = 64 * 1024
 
 const bucketSizeBits = 40
-
-const genSizeBits = 64 - bucketSizeBits
-
-const maxGen = 1<<genSizeBits - 1
 
 const maxBucketSize uint64 = 1 << bucketSizeBits
 
@@ -158,25 +151,7 @@ func (c *Cache) Set(k, v []byte) {
 func (c *Cache) Get(dst, k []byte) []byte {
 	h := xxhash.Sum64(k)
 	idx := h % bucketsCount
-	dst, _ = c.buckets[idx].Get(dst, k, h, true)
-	return dst
-}
-
-// HasGet works identically to Get, but also returns whether the given key
-// exists in the cache. This method makes it possible to differentiate between a
-// stored nil/empty value versus and non-existing value.
-func (c *Cache) HasGet(dst, k []byte) ([]byte, bool) {
-	h := xxhash.Sum64(k)
-	idx := h % bucketsCount
-	return c.buckets[idx].Get(dst, k, h, true)
-}
-
-// Has returns true if entry for the given key k exists in the cache.
-func (c *Cache) Has(k []byte) bool {
-	h := xxhash.Sum64(k)
-	idx := h % bucketsCount
-	_, ok := c.buckets[idx].Get(nil, k, h, false)
-	return ok
+	return c.buckets[idx].Get(dst, k, h)
 }
 
 // Del deletes value for the given k from the cache.
@@ -235,9 +210,6 @@ type bucket struct {
 }
 
 func (b *bucket) Init(maxBytes uint64) {
-	if maxBytes == 0 {
-		panic(fmt.Errorf("maxBytes cannot be zero"))
-	}
 	if maxBytes >= maxBucketSize {
 		panic(fmt.Errorf("too big maxBytes=%d; should be smaller than %d", maxBytes, maxBucketSize))
 	}
@@ -270,13 +242,13 @@ func (b *bucket) Reset() {
 
 func (b *bucket) Clean() {
 	b.mu.Lock()
-	bGen := b.gen & ((1 << genSizeBits) - 1)
+	bGen := b.gen
 	bIdx := b.idx
 	bm := b.m
 	for k, v := range bm {
 		gen := v >> bucketSizeBits
 		idx := v & ((1 << bucketSizeBits) - 1)
-		if gen == bGen && idx < bIdx || gen+1 == bGen && idx >= bIdx || gen == maxGen && bGen == 1 && idx >= bIdx {
+		if gen == bGen && idx < bIdx || gen+1 == bGen && idx >= bIdx {
 			continue
 		}
 		delete(bm, k)
@@ -333,8 +305,8 @@ func (b *bucket) Set(k, v []byte, h uint64) {
 			idxNew = kvLen
 			chunkIdx = 0
 			b.gen++
-			if b.gen&((1<<genSizeBits)-1) == 0 {
-				b.gen++
+			if b.gen == 0 {
+				b.gen = 1
 			}
 		} else {
 			idx = chunkIdxNew * chunkSize
@@ -357,16 +329,15 @@ func (b *bucket) Set(k, v []byte, h uint64) {
 	b.mu.Unlock()
 }
 
-func (b *bucket) Get(dst, k []byte, h uint64, returnDst bool) ([]byte, bool) {
+func (b *bucket) Get(dst, k []byte, h uint64) []byte {
 	atomic.AddUint64(&b.getCalls, 1)
 	found := false
 	b.mu.RLock()
 	v := b.m[h]
-	bGen := b.gen & ((1 << genSizeBits) - 1)
 	if v > 0 {
 		gen := v >> bucketSizeBits
 		idx := v & ((1 << bucketSizeBits) - 1)
-		if gen == bGen && idx < b.idx || gen+1 == bGen && idx >= b.idx || gen == maxGen && bGen == 1 && idx >= b.idx {
+		if gen == b.gen && idx < b.idx || gen+1 == b.gen && idx >= b.idx {
 			chunkIdx := idx / chunkSize
 			if chunkIdx >= uint64(len(b.chunks)) {
 				// Corrupted data during the load from file. Just skip it.
@@ -391,9 +362,7 @@ func (b *bucket) Get(dst, k []byte, h uint64, returnDst bool) ([]byte, bool) {
 			}
 			if string(k) == string(chunk[idx:idx+keyLen]) {
 				idx += keyLen
-				if returnDst {
-					dst = append(dst, chunk[idx:idx+valLen]...)
-				}
+				dst = append(dst, chunk[idx:idx+valLen]...)
 				found = true
 			} else {
 				atomic.AddUint64(&b.collisions, 1)
@@ -405,7 +374,7 @@ end:
 	if !found {
 		atomic.AddUint64(&b.misses, 1)
 	}
-	return dst, found
+	return dst
 }
 
 func (b *bucket) Del(h uint64) {

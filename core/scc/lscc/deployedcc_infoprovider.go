@@ -14,7 +14,6 @@ import (
 	"github.com/hyperledger/fabric/core/common/ccprovider"
 	"github.com/hyperledger/fabric/core/common/privdata"
 	"github.com/hyperledger/fabric/core/ledger"
-	"github.com/hyperledger/fabric/core/ledger/kvledger/txmgmt/rwsetutil"
 	"github.com/pkg/errors"
 )
 
@@ -38,7 +37,7 @@ func (p *DeployedCCInfoProvider) UpdatedChaincodes(stateUpdates map[string][]*kv
 	updatedCCNames := map[string]bool{}
 
 	for _, kvWrite := range lsccUpdates {
-		if rwsetutil.IsKVWriteDelete(kvWrite) {
+		if kvWrite.IsDelete {
 			// lscc namespace is not expected to have deletes
 			continue
 		}

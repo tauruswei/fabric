@@ -8,7 +8,6 @@ package sw
 
 import (
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -124,16 +123,12 @@ func (ki *x509PublicKeyImportOptsKeyImporter) KeyImport(raw interface{}, opts bc
 
 	pk := x509Cert.PublicKey
 
-	switch pk := pk.(type) {
+	switch pk.(type) {
 	case *ecdsa.PublicKey:
 		return ki.bccsp.KeyImporters[reflect.TypeOf(&bccsp.ECDSAGoPublicKeyImportOpts{})].KeyImport(
 			pk,
 			&bccsp.ECDSAGoPublicKeyImportOpts{Temporary: opts.Ephemeral()})
-	case *rsa.PublicKey:
-		// This path only exists to support environments that use RSA certificate
-		// authorities to issue ECDSA certificates.
-		return &rsaPublicKey{pubKey: pk}, nil
 	default:
-		return nil, errors.New("Certificate's public key type not recognized. Supported keys: [ECDSA, RSA]")
+		return nil, errors.New("Certificate's public key type not recognized. Supported keys: [ECDSA]")
 	}
 }

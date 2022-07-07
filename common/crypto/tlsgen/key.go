@@ -11,7 +11,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -48,7 +47,7 @@ func newCertTemplate() (x509.Certificate, error) {
 	}, nil
 }
 
-func newCertKeyPair(isCA bool, isServer bool, certSigner crypto.Signer, parent *x509.Certificate, hosts ...string) (*CertKeyPair, error) {
+func newCertKeyPair(isCA bool, isServer bool, host string, certSigner crypto.Signer, parent *x509.Certificate) (*CertKeyPair, error) {
 	privateKey, privBytes, err := newPrivKey()
 	if err != nil {
 		return nil, err
@@ -75,15 +74,12 @@ func newCertKeyPair(isCA bool, isServer bool, certSigner crypto.Signer, parent *
 	if isServer {
 		template.NotAfter = tenYearsFromNow
 		template.ExtKeyUsage = append(template.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
-		for _, host := range hosts {
-			if ip := net.ParseIP(host); ip != nil {
-				template.IPAddresses = append(template.IPAddresses, ip)
-			} else {
-				template.DNSNames = append(template.DNSNames, host)
-			}
+		if ip := net.ParseIP(host); ip != nil {
+			template.IPAddresses = append(template.IPAddresses, ip)
+		} else {
+			template.DNSNames = append(template.DNSNames, host)
 		}
 	}
-	template.SubjectKeyId = computeSKI(&privateKey.PublicKey)
 	// If no parent cert, it's a self signed cert
 	if parent == nil || certSigner == nil {
 		parent = &template
@@ -114,11 +110,4 @@ func newCertKeyPair(isCA bool, isServer bool, certSigner crypto.Signer, parent *
 
 func encodePEM(keyType string, data []byte) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: keyType, Bytes: data})
-}
-
-// RFC 7093, Section 2, Method 4
-func computeSKI(key *ecdsa.PublicKey) []byte {
-	raw := elliptic.Marshal(key.Curve, key.X, key.Y)
-	hash := sha256.Sum256(raw)
-	return hash[:]
 }

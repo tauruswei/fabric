@@ -108,14 +108,6 @@ type PrivateDataConfig struct {
 	// PurgeInterval is the number of blocks to wait until purging expired
 	// private data entries.
 	PurgeInterval int
-	// The missing data entries are classified into three categories:
-	// (1) eligible prioritized
-	// (2) eligible deprioritized
-	// (3) ineligible
-	// The reconciler would fetch the eligible prioritized missing data
-	// from other peers. A chance for eligible deprioritized missing data
-	// would be given after every DeprioritizedDataReconcilerInterval
-	DeprioritizedDataReconcilerInterval time.Duration
 }
 
 // HistoryDBConfig is a structure used to configure the transaction history database.
@@ -186,7 +178,7 @@ type PeerLedger interface {
 	// If hashes for some of the private data supplied in this function does not match
 	// the corresponding hash present in the block, the unmatched private data is not
 	// committed and instead the mismatch inforation is returned back
-	CommitPvtDataOfOldBlocks(reconciledPvtdata []*ReconciledPvtdata, unreconciled MissingPvtDataInfo) ([]*PvtdataHashMismatch, error)
+	CommitPvtDataOfOldBlocks(reconciledPvtdata []*ReconciledPvtdata) ([]*PvtdataHashMismatch, error)
 	// GetMissingPvtDataTracker return the MissingPvtDataTracker
 	GetMissingPvtDataTracker() (MissingPvtDataTracker, error)
 	// DoesPvtDataInfoExist returns true when
@@ -507,6 +499,7 @@ type KVStateUpdates struct {
 
 // ConfigHistoryRetriever allow retrieving history of collection configs
 type ConfigHistoryRetriever interface {
+	CollectionConfigAt(blockNum uint64, chaincodeName string) (*CollectionConfigInfo, error)
 	MostRecentCollectionConfigBelow(blockNum uint64, chaincodeName string) (*CollectionConfigInfo, error)
 }
 

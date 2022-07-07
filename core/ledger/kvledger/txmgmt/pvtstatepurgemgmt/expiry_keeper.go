@@ -56,7 +56,7 @@ func newExpiryKeeper(ledgerid string, provider bookkeeping.Provider) *expiryKeep
 // at the time of the commit of the block number 45 and the second entry was created at the time of the commit of the block number 40, however
 // both are expiring with the commit of block number 50.
 func (ek *expiryKeeper) update(toTrack []*expiryInfo, toClear []*expiryInfoKey) error {
-	updateBatch := ek.db.NewUpdateBatch()
+	updateBatch := leveldbhelper.NewUpdateBatch()
 	for _, expinfo := range toTrack {
 		k, v, err := encodeKV(expinfo)
 		if err != nil {

@@ -180,14 +180,14 @@ need to horizontally scroll to locate the information):
 * The Ordering Org CA, `ca_orderer`, is running in container `7b01f5454832`
 
 These containers all form a [Docker network](https://docs.docker.com/network/)
-called `fabric_test`. You can view the network with the `docker network` command:
+called `net_test`. You can view the network with the `docker network` command:
 
 ```
-$ docker network inspect fabric_test
+$ docker network inspect net_test
 
   [
       {
-          "Name": "fabric_test",
+          "Name": "net_test",
           "Id": "f4c9712139311004b8f7acc14e9f90170c5dcfd8cdd06303c7b074624b44dc9f",
           "Created": "2020-04-28T22:45:38.525016Z",
           "Containers": {
@@ -289,21 +289,21 @@ smart contracts, for example.
 
 In the MagnetoCorp directory, run the following command to run the
 `monitordocker.sh`  script and start the `logspout` tool for the containers
-associated with PaperNet running on `fabric_test`:
+associated with PaperNet running on `net_test`:
 ```
-(magnetocorp admin)$ ./configuration/cli/monitordocker.sh fabric_test
+(magnetocorp admin)$ ./configuration/cli/monitordocker.sh net_test
 ...
 latest: Pulling from gliderlabs/logspout
 4fe2ade4980c: Pull complete
 decca452f519: Pull complete
 (...)
-Starting monitoring on all containers on the network fabric_test
+Starting monitoring on all containers on the network net_test
 b7f3586e5d0233de5a454df369b8eadab0613886fc9877529587345fc01a3582
 ```
 
 Note that you can pass a port number to the above command if the default port in `monitordocker.sh` is already in use.
 ```
-(magnetocorp admin)$ ./monitordocker.sh fabric_test <port_number>
+(magnetocorp admin)$ ./monitordocker.sh net_test <port_number>
 ```
 
 This window will now show output from the Docker containers for the remainder of the
@@ -404,7 +404,7 @@ and approve the chaincode as administrators of both MagnetoCorp and DigiBank.
 administrator installs a copy of the `papercontract` onto a MagnetoCorp peer.*
 
 Smart contracts are the focus of application development, and are contained
-within a Hyperledger Fabric artifact called [chaincode](../chaincode4ade.html). One
+within a Hyperledger Fabric artifact called [chaincode](../chaincode.html). One
 or more smart contracts can be defined within a single chaincode, and installing
 a chaincode will allow them to be consumed by the different organizations in
 PaperNet. It means that only administrators need to worry about chaincode;
@@ -606,7 +606,7 @@ separate terminal window for her, and in `fabric-samples` locate the MagnetoCorp
 (isabella)$ cd commercial-paper/organization/magnetocorp/application/
 (isabella)$ ls
 
-addToWallet.js		enrollUser.js		issue.js		package.json
+enrollUser.js		issue.js		package.json
 ```
 
 `addToWallet.js` is the program that Isabella is going to use to load her
@@ -854,7 +854,7 @@ All the time, the underlying Fabric SDK handles the transaction endorsement,
 ordering and notification process, making the application's logic
 straightforward; the SDK uses a [gateway](../developapps/gateway.html) to
 abstract away network details and
-[connectionOptions](../developapps/connectionoptions.html) to declare more advanced
+[connectionOptions](../developapps/connectoptions.html) to declare more advanced
 processing strategies such as transaction retry.
 
 Let's now follow the lifecycle of MagnetoCorp 00001 by switching our emphasis

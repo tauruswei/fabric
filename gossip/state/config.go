@@ -30,8 +30,6 @@ type StateConfig struct {
 	StateBlockBufferSize int
 	StateChannelSize     int
 	StateEnabled         bool
-	UseLeaderElection    bool
-	OrgLeader            bool
 }
 
 func GlobalConfig() *StateConfig {
@@ -70,8 +68,4 @@ func (c *StateConfig) loadStateConfig() {
 	if viper.IsSet("peer.gossip.state.enabled") {
 		c.StateEnabled = viper.GetBool("peer.gossip.state.enabled")
 	}
-	// The below two configuration parameters are used for straggler() which warns
-	// if our peer is lagging behind the rest and has no way to catch up.
-	c.UseLeaderElection = viper.GetBool("peer.gossip.useLeaderElection")
-	c.OrgLeader = viper.GetBool("peer.gossip.orgLeader")
 }

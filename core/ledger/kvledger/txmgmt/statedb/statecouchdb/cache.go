@@ -64,12 +64,12 @@ func (c *cache) getState(chainID, namespace, key string) (*CacheValue, error) {
 	}
 
 	cacheKey := constructCacheKey(chainID, namespace, key)
-
-	if !cache.Has(cacheKey) {
+	valBytes := cache.Get(nil, cacheKey)
+	if valBytes == nil {
 		return nil, nil
 	}
+
 	cacheValue := &CacheValue{}
-	valBytes := cache.Get(nil, cacheKey)
 	if err := proto.Unmarshal(valBytes, cacheValue); err != nil {
 		return nil, err
 	}
@@ -85,15 +85,9 @@ func (c *cache) putState(chainID, namespace, key string, cacheValue *CacheValue)
 
 	cacheKey := constructCacheKey(chainID, namespace, key)
 	valBytes, err := proto.Marshal(cacheValue)
-
 	if err != nil {
 		return err
 	}
-
-	if cache.Has(cacheKey) {
-		cache.Del(cacheKey)
-	}
-
 	cache.Set(cacheKey, valBytes)
 	return nil
 }
@@ -132,12 +126,11 @@ func (c *cache) UpdateStates(chainID string, updates cacheUpdates) error {
 				cache.Del(cacheKey)
 				continue
 			}
-			if cache.Has(cacheKey) {
+			if oldVal := cache.Get(nil, cacheKey); oldVal != nil {
 				newValBytes, err := proto.Marshal(newVal)
 				if err != nil {
 					return err
 				}
-				cache.Del(cacheKey)
 				cache.Set(cacheKey, newValBytes)
 			}
 		}

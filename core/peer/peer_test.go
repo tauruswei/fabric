@@ -18,7 +18,6 @@ import (
 	"github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric/bccsp/sw"
 	configtxtest "github.com/hyperledger/fabric/common/configtx/test"
-	"github.com/hyperledger/fabric/common/crypto/tlsgen"
 	"github.com/hyperledger/fabric/common/metrics/disabled"
 	"github.com/hyperledger/fabric/core/committer/txvalidator/plugin"
 	"github.com/hyperledger/fabric/core/deliverservice"
@@ -67,8 +66,8 @@ func NewTestPeer(t *testing.T) (*Peer, func()) {
 		defaultDeliverClientDialOpts,
 		grpc.WithBlock(),
 		grpc.WithDefaultCallOptions(
-			grpc.MaxCallRecvMsgSize(comm.DefaultMaxRecvMsgSize),
-			grpc.MaxCallSendMsgSize(comm.DefaultMaxSendMsgSize),
+			grpc.MaxCallRecvMsgSize(comm.MaxRecvMsgSize),
+			grpc.MaxCallSendMsgSize(comm.MaxSendMsgSize),
 		),
 	)
 	defaultDeliverClientDialOpts = append(
@@ -124,23 +123,27 @@ func TestInitialize(t *testing.T) {
 	peerInstance, cleanup := NewTestPeer(t)
 	defer cleanup()
 
-	org1CA, err := tlsgen.NewCA()
+	org1CA, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-cert.pem"))
 	require.NoError(t, err)
-	org1Server1KeyPair, err := org1CA.NewServerCertKeyPair("localhost", "127.0.0.1", "::1")
+	org1Server1Key, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-server1-key.pem"))
 	require.NoError(t, err)
-
+	org1Server1Cert, err := ioutil.ReadFile(filepath.Join("testdata", "Org1-server1-cert.pem"))
+	require.NoError(t, err)
 	serverConfig := comm.ServerConfig{
 		SecOpts: comm.SecureOptions{
 			UseTLS:            true,
-			Certificate:       org1Server1KeyPair.Cert,
-			Key:               org1Server1KeyPair.Key,
-			ServerRootCAs:     [][]byte{org1CA.CertBytes()},
+			Certificate:       org1Server1Cert,
+			Key:               org1Server1Key,
+			ServerRootCAs:     [][]byte{org1CA},
 			RequireClientCert: true,
 		},
 	}
 
 	server, err := comm.NewGRPCServer("localhost:0", serverConfig)
-	require.NoError(t, err, "failed to create gRPC server")
+	if err != nil {
+		t.Fatalf("NewGRPCServer failed with error [%s]", err)
+		return
+	}
 
 	peerInstance.Initialize(
 		nil,

@@ -123,6 +123,5 @@ func Test_listModuleInfoFailure(t *testing.T) {
 	require.NoError(t, err, "failed to change to temporary directory")
 
 	_, err = listModuleInfo()
-	require.ErrorContains(t, err, "'go list' failed with: go: ")
-	require.ErrorContains(t, err, "see 'go help modules': exit status 1")
+	assert.EqualError(t, err, "'go list' failed with: go: cannot find main module; see 'go help modules': exit status 1")
 }

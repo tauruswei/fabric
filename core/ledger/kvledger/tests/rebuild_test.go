@@ -26,7 +26,7 @@ func TestRebuildComponents(t *testing.T) {
 
 	t.Run("rebuild only statedb",
 		func(t *testing.T) {
-			env.closeAllLedgersAndRemoveDirContents(rebuildableStatedb)
+			env.closeAllLedgersAndDrop(rebuildableStatedb)
 			h1, h2 := env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
 			dataHelper.verifyLedgerContent(h1)
 			dataHelper.verifyLedgerContent(h2)
@@ -35,7 +35,7 @@ func TestRebuildComponents(t *testing.T) {
 
 	t.Run("rebuild statedb and config history",
 		func(t *testing.T) {
-			env.closeAllLedgersAndRemoveDirContents(rebuildableStatedb | rebuildableConfigHistory)
+			env.closeAllLedgersAndDrop(rebuildableStatedb | rebuildableConfigHistory)
 			h1, h2 := env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
 			dataHelper.verifyLedgerContent(h1)
 			dataHelper.verifyLedgerContent(h2)
@@ -44,7 +44,7 @@ func TestRebuildComponents(t *testing.T) {
 
 	t.Run("rebuild statedb and block index",
 		func(t *testing.T) {
-			env.closeAllLedgersAndRemoveDirContents(rebuildableStatedb | rebuildableBlockIndex)
+			env.closeAllLedgersAndDrop(rebuildableStatedb | rebuildableBlockIndex)
 			h1, h2 := env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
 			dataHelper.verifyLedgerContent(h1)
 			dataHelper.verifyLedgerContent(h2)
@@ -53,7 +53,7 @@ func TestRebuildComponents(t *testing.T) {
 
 	t.Run("rebuild statedb and historydb",
 		func(t *testing.T) {
-			env.closeAllLedgersAndRemoveDirContents(rebuildableStatedb | rebuildableHistoryDB)
+			env.closeAllLedgersAndDrop(rebuildableStatedb | rebuildableHistoryDB)
 			h1, h2 := env.newTestHelperOpenLgr("ledger1", t), env.newTestHelperOpenLgr("ledger2", t)
 			dataHelper.verifyLedgerContent(h1)
 			dataHelper.verifyLedgerContent(h2)
@@ -103,7 +103,7 @@ func TestRebuildComponentsWithBTL(t *testing.T) {
 	})
 
 	// rebuild statedb and bookkeeper
-	env.closeAllLedgersAndRemoveDirContents(rebuildableStatedb | rebuildableBookkeeper)
+	env.closeAllLedgersAndDrop(rebuildableStatedb | rebuildableBookkeeper)
 
 	h = env.newTestHelperOpenLgr("ledger1", t)
 	h.verifyPvtState("cc1", "coll1", "key1", "value1")                  // key1 should still exist in the state

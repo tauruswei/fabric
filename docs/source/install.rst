@@ -47,12 +47,12 @@ the binaries and images.
 
 .. note:: If you want a specific release, pass a version identifier for Fabric and Fabric-CA docker images.
           The command below demonstrates how to download the latest production releases -
-          **Fabric v2.2.4** and **Fabric CA v1.5.2**
+          **Fabric v2.2.0** and **Fabric CA v1.4.7**
 
 .. code:: bash
 
   curl -sSL https://bit.ly/2ysbOFE | bash -s -- <fabric_version> <fabric-ca_version>
-  curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.2.4 1.5.2
+  curl -sSL https://bit.ly/2ysbOFE | bash -s -- 2.2.0 1.4.7
 
 .. note:: If you get an error running the above curl command, you may
           have too old a version of curl that does not handle
@@ -63,10 +63,6 @@ the binaries and images.
 	  get the right environment. Alternately, you can substitute
 	  the un-shortened URL:
 	  https://raw.githubusercontent.com/hyperledger/fabric/{BRANCH}/scripts/bootstrap.sh
-
-.. note:: For additional use pattern you can use the -h flag to view the help and available commands for the
-          Fabric-Samples bootstrap script. For example:
-          ``curl -sSL https://bit.ly/2ysbOFE | bash -s -- -h``
 
 The command above downloads and executes a bash script
 that will download and extract all of the platform-specific binaries you

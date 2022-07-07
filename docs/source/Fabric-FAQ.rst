@@ -56,12 +56,7 @@ Security & Access Control
   Do the orderers see the transaction data?
 
 :Answer:
-  Orderers receive endorsed transactions that are submitted from application
-  clients. The endorsed payload contains the chaincode execution results
-  including the ReadSet and WriteSet information. The orderers only validate
-  the submitter's identity and order transactions, they do not open the
-  endorsed transactions.
-
+  No, the orderers only order transactions, they do not open the transactions.
   If you do not want the data to go through the orderers at all, then utilize
   the private data feature of Fabric.  Alternatively, you can hash or encrypt
   the data in the client application before calling chaincode. If you encrypt

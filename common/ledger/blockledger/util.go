@@ -10,11 +10,8 @@ import (
 	"github.com/golang/protobuf/proto"
 	cb "github.com/hyperledger/fabric-protos-go/common"
 	ab "github.com/hyperledger/fabric-protos-go/orderer"
-	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/protoutil"
 )
-
-var logger = flogging.MustGetLogger("common.ledger.blockledger.util")
 
 var closedChan chan struct{}
 
@@ -97,9 +94,4 @@ func GetBlock(rl Reader, index uint64) *cb.Block {
 		return nil
 	}
 	return block
-}
-
-func GetBlockByNumber(rl Reader, blockNum uint64) (*cb.Block, error) {
-	logger.Debugw("Retrieving block", "blockNum", blockNum)
-	return rl.RetrieveBlockByNumber(blockNum)
 }

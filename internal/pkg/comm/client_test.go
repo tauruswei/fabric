@@ -478,19 +478,25 @@ func TestSetMessageSize(t *testing.T) {
 		},
 	}
 
+	// set up test client
+	client, err := comm.NewGRPCClient(comm.ClientConfig{
+		Timeout: testTimeout,
+	})
+	if err != nil {
+		t.Fatalf("error creating test client: %v", err)
+	}
 	// run tests
 	for _, test := range tests {
 		test := test
 		address := lis.Addr().String()
 		t.Run(test.name, func(t *testing.T) {
 			t.Log(test.name)
-			// set up test client
-			client, err := comm.NewGRPCClient(comm.ClientConfig{
-				Timeout:        testTimeout,
-				MaxRecvMsgSize: test.maxRecvSize,
-				MaxSendMsgSize: test.maxSendSize,
-			})
-			require.NoError(t, err, "error creating test client")
+			if test.maxRecvSize > 0 {
+				client.SetMaxRecvMsgSize(test.maxRecvSize)
+			}
+			if test.maxSendSize > 0 {
+				client.SetMaxSendMsgSize(test.maxSendSize)
+			}
 			conn, err := client.NewConnection(address)
 			assert.NoError(t, err)
 			defer conn.Close()

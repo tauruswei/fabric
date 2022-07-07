@@ -13,11 +13,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hyperledger/fabric/common/ledger/util"
 	"github.com/hyperledger/fabric/core/config"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestResetCmd(t *testing.T) {
@@ -38,9 +36,8 @@ func TestResetCmd(t *testing.T) {
 	cmd := resetCmd()
 
 	_, err := os.Stat(historyDBPath)
-	require.False(t, os.IsNotExist(err))
-	require.NoError(t, cmd.Execute())
-	empty, err := util.DirEmpty(historyDBPath)
-	require.NoError(t, err)
-	require.True(t, empty)
+	assert.False(t, os.IsNotExist(err))
+	assert.NoError(t, cmd.Execute())
+	_, err = os.Stat(historyDBPath)
+	assert.True(t, os.IsNotExist(err))
 }

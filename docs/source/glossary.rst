@@ -25,7 +25,7 @@ For example, let's assume we have three organizations --- ``A``, ``B``, ``C`` --
 and a single anchor peer --- ``peer0.orgC`` --- defined for organization ``C``.
 When ``peer1.orgA`` (from organization ``A``) contacts ``peer0.orgC``, it will
 tell ``peer0.orgC`` about ``peer0.orgA``. And when at a later time ``peer1.orgB``
-contacts ``peer0.orgC``, the latter would tell the former about ``peer0.orgA``.
+contacts ``peer0.orgC``, the latter would tell the former about ``peer0.orgB``.
 From that point forward, organizations ``A`` and ``B`` would start exchanging
 membership information directly without any assistance from ``peer0.orgC``.
 
@@ -148,10 +148,8 @@ Concurrency Control Version Check
 
 Concurrency Control Version Check is a method of keeping ledger state in sync across
 peers on a channel. Peers execute transactions in parallel, and before committing
-to the ledger, peers check whether the state read at the time the transaction
-was executed has been modified in a new block that was in-flight at time of execution
-or in a prior transaction in the same block.
-If the data read for the transaction has changed between execution time and
+to the ledger, peers check whether the state read at the time the transaction was executed
+has been modified. If the data read for the transaction has changed between execution time and
 commit time, then a Concurrency Control Version Check violation has
 occurred, and the transaction is marked as invalid on the ledger and values
 are not updated in the state database.
