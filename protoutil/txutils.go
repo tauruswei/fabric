@@ -9,6 +9,8 @@ package protoutil
 import (
 	"bytes"
 	"crypto/sha256"
+	"github.com/tjfoc/gmsm/sm3"
+	"runtime/debug"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/common"
@@ -429,6 +431,7 @@ func GetBytesProposalPayloadForTx(
 // has already been enforced and so we already get what
 // we have to get in ccPropPayl
 func GetProposalHash2(header *common.Header, ccPropPayl []byte) ([]byte, error) {
+	debug.PrintStack()
 	// check for nil argument
 	if header == nil ||
 		header.ChannelHeader == nil ||
@@ -437,7 +440,7 @@ func GetProposalHash2(header *common.Header, ccPropPayl []byte) ([]byte, error) 
 		return nil, errors.New("nil arguments")
 	}
 
-	hash := sha256.New()
+	hash := sm3.New()
 	// hash the serialized Channel Header object
 	hash.Write(header.ChannelHeader)
 	// hash the serialized Signature Header object
@@ -450,6 +453,7 @@ func GetProposalHash2(header *common.Header, ccPropPayl []byte) ([]byte, error) 
 // GetProposalHash1 gets the proposal hash bytes after sanitizing the
 // chaincode proposal payload according to the rules of visibility
 func GetProposalHash1(header *common.Header, ccPropPayl []byte) ([]byte, error) {
+	debug.PrintStack()
 	// check for nil argument
 	if header == nil ||
 		header.ChannelHeader == nil ||

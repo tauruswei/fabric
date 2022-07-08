@@ -9,9 +9,11 @@ package msp
 import (
 	"bytes"
 	"crypto/x509"
+
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"fmt"
+	gmx509 "github.com/tjfoc/gmsm/x509"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -60,9 +62,9 @@ func (msp *bccspmsp) getCertifiersIdentifier(certRaw []byte) ([]byte, error) {
 
 	// 3. get the certification path for it
 	var certifiersIdentifier []byte
-	var chain []*x509.Certificate
+	var chain []*gmx509.Certificate
 	if root {
-		chain = []*x509.Certificate{cert}
+		chain = []*gmx509.Certificate{cert}
 	} else {
 		chain, err = msp.getValidationChain(cert, true)
 		if err != nil {
@@ -85,13 +87,13 @@ func (msp *bccspmsp) setupCrypto(conf *m.FabricMSPConfig) error {
 	if msp.cryptoConfig == nil {
 		// Move to defaults
 		msp.cryptoConfig = &m.FabricCryptoConfig{
-			SignatureHashFamily:            bccsp.SHA2,
+			SignatureHashFamily:            bccsp.GMSM3,
 			IdentityIdentifierHashFunction: bccsp.SHA256,
 		}
 		mspLogger.Debugf("CryptoConfig was nil. Move to defaults.")
 	}
 	if msp.cryptoConfig.SignatureHashFamily == "" {
-		msp.cryptoConfig.SignatureHashFamily = bccsp.SHA2
+		msp.cryptoConfig.SignatureHashFamily = bccsp.GMSM3
 		mspLogger.Debugf("CryptoConfig.SignatureHashFamily was nil. Move to defaults.")
 	}
 	if msp.cryptoConfig.IdentityIdentifierHashFunction == "" {
@@ -113,7 +115,7 @@ func (msp *bccspmsp) setupCAs(conf *m.FabricMSPConfig) error {
 	// Recall that sanitization is applied also to root CA and intermediate
 	// CA certificates. After their sanitization is done, the opts
 	// will be recreated using the sanitized certs.
-	msp.opts = &x509.VerifyOptions{Roots: x509.NewCertPool(), Intermediates: x509.NewCertPool()}
+	msp.opts = &gmx509.VerifyOptions{Roots: gmx509.NewCertPool(), Intermediates: gmx509.NewCertPool()}
 	for _, v := range conf.RootCerts {
 		cert, err := msp.getCertFromPem(v)
 		if err != nil {
@@ -153,7 +155,7 @@ func (msp *bccspmsp) setupCAs(conf *m.FabricMSPConfig) error {
 	}
 
 	// root CA and intermediate CA certificates are sanitized, they can be re-imported
-	msp.opts = &x509.VerifyOptions{Roots: x509.NewCertPool(), Intermediates: x509.NewCertPool()}
+	msp.opts = &gmx509.VerifyOptions{Roots: gmx509.NewCertPool(), Intermediates: gmx509.NewCertPool()}
 	for _, id := range msp.rootCerts {
 		msp.opts.Roots.AddCert(id.(*identity).cert)
 	}
@@ -217,7 +219,7 @@ func (msp *bccspmsp) setupCRLs(conf *m.FabricMSPConfig) error {
 	// setup the CRL (if present)
 	msp.CRL = make([]*pkix.CertificateList, len(conf.RevocationList))
 	for i, crlbytes := range conf.RevocationList {
-		crl, err := x509.ParseCRL(crlbytes)
+		crl, err := gmx509.ParseCRL(crlbytes)
 		if err != nil {
 			return errors.Wrap(err, "could not parse RevocationList")
 		}
@@ -458,7 +460,7 @@ func (msp *bccspmsp) setupTLSCAs(conf *m.FabricMSPConfig) error {
 	msp.tlsRootCerts = make([][]byte, len(conf.TlsRootCerts))
 	rootCerts := make([]*x509.Certificate, len(conf.TlsRootCerts))
 	for i, trustedCert := range conf.TlsRootCerts {
-		cert, err := msp.getCertFromPem(trustedCert)
+		cert, err := msp.getTlsCertFromPem(trustedCert)
 		if err != nil {
 			return err
 		}
@@ -472,7 +474,7 @@ func (msp *bccspmsp) setupTLSCAs(conf *m.FabricMSPConfig) error {
 	msp.tlsIntermediateCerts = make([][]byte, len(conf.TlsIntermediateCerts))
 	intermediateCerts := make([]*x509.Certificate, len(conf.TlsIntermediateCerts))
 	for i, trustedCert := range conf.TlsIntermediateCerts {
-		cert, err := msp.getCertFromPem(trustedCert)
+		cert, err := msp.getTlsCertFromPem(trustedCert)
 		if err != nil {
 			return err
 		}
@@ -491,7 +493,7 @@ func (msp *bccspmsp) setupTLSCAs(conf *m.FabricMSPConfig) error {
 		if !cert.IsCA {
 			return errors.Errorf("CA Certificate did not have the CA attribute, (SN: %x)", cert.SerialNumber)
 		}
-		if _, err := getSubjectKeyIdentifierFromCert(cert); err != nil {
+		if _, err := getTlsSubjectKeyIdentifierFromCert(cert); err != nil {
 			return errors.WithMessagef(err, "CA Certificate problem with Subject Key Identifier extension, (SN: %x)", cert.SerialNumber)
 		}
 

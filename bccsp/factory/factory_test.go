@@ -22,9 +22,9 @@ func TestMain(m *testing.M) {
 
 	yamlCFG := `
 BCCSP:
-    default: SW
-    SW:
-        Hash: SHA3
+    default: GM
+    GM:
+        Hash: GMSM3
         Security: 256
 `
 
@@ -61,8 +61,8 @@ BCCSP:
 
 	cfgVariations := []*FactoryOpts{
 		{},
-		{ProviderName: "SW"},
-		{ProviderName: "SW", SwOpts: &SwOpts{HashFamily: "SHA2", SecLevel: 256}},
+		{ProviderName: "GM"},
+		{ProviderName: "GM", SwOpts: &SwOpts{HashFamily: "GMSM3", SecLevel: 256}},
 		yamlBCCSP,
 	}
 

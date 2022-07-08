@@ -7,11 +7,11 @@ SPDX-License-Identifier: Apache-2.0
 package api
 
 import (
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"github.com/tjfoc/gmsm/x509"
 	"time"
 
 	"github.com/golang/protobuf/proto"

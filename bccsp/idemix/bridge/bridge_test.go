@@ -764,7 +764,7 @@ var _ = Describe("Idemix Bridge", func() {
 					IssuerPublicKey,
 					credRequest,
 					nil,
-					&bccsp.IdemixCredentialRequestSignerOpts{IssuerNonce: []byte("pin-apple-pine-apple-pineapple")},
+					&bccsp.IdemixCredentialRequestSignerOpts{IssuerNonce: []byte("pine-apple-pine-apple-pineapple")},
 				)
 				Expect(err).To(MatchError("invalid issuer nonce, expected length 32, got 30"))
 				Expect(valid).NotTo(BeTrue())

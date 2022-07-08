@@ -531,7 +531,7 @@ func generatePeerOrg(baseDir string, orgSpec OrgSpec) {
 		os.Exit(1)
 	}
 	// generate TLS CA
-	tlsCA, err := ca.NewCA(tlsCADir, orgName, "tls"+orgSpec.CA.CommonName, orgSpec.CA.Country, orgSpec.CA.Province, orgSpec.CA.Locality, orgSpec.CA.OrganizationalUnit, orgSpec.CA.StreetAddress, orgSpec.CA.PostalCode)
+	tlsCA, err := ca.NewTlsCA(tlsCADir, orgName, "tls"+orgSpec.CA.CommonName, orgSpec.CA.Country, orgSpec.CA.Province, orgSpec.CA.Locality, orgSpec.CA.OrganizationalUnit, orgSpec.CA.StreetAddress, orgSpec.CA.PostalCode)
 	if err != nil {
 		fmt.Printf("Error generating tlsCA for org %s:\n%v\n", orgName, err)
 		os.Exit(1)
@@ -648,7 +648,7 @@ func generateOrdererOrg(baseDir string, orgSpec OrgSpec) {
 		os.Exit(1)
 	}
 	// generate TLS CA
-	tlsCA, err := ca.NewCA(tlsCADir, orgName, "tls"+orgSpec.CA.CommonName, orgSpec.CA.Country, orgSpec.CA.Province, orgSpec.CA.Locality, orgSpec.CA.OrganizationalUnit, orgSpec.CA.StreetAddress, orgSpec.CA.PostalCode)
+	tlsCA, err := ca.NewTlsCA(tlsCADir, orgName, "tls"+orgSpec.CA.CommonName, orgSpec.CA.Country, orgSpec.CA.Province, orgSpec.CA.Locality, orgSpec.CA.OrganizationalUnit, orgSpec.CA.StreetAddress, orgSpec.CA.PostalCode)
 	if err != nil {
 		fmt.Printf("Error generating tlsCA for org %s:\n%v\n", orgName, err)
 		os.Exit(1)
@@ -724,17 +724,18 @@ func printVersion() {
 
 func getCA(caDir string, spec OrgSpec, name string) *ca.CA {
 	priv, _ := csp.LoadPrivateKey(caDir)
-	cert, _ := ca.LoadCertificateECDSA(caDir)
+	cert, _ := ca.LoadCertificateGMSM2(caDir)
 
 	return &ca.CA{
 		Name:               name,
 		Signer:             priv,
-		SignCert:           cert,
+		SignSm2Cert:        cert,
 		Country:            spec.CA.Country,
 		Province:           spec.CA.Province,
 		Locality:           spec.CA.Locality,
 		OrganizationalUnit: spec.CA.OrganizationalUnit,
 		StreetAddress:      spec.CA.StreetAddress,
 		PostalCode:         spec.CA.PostalCode,
+		Sm2Key:             priv,
 	}
 }

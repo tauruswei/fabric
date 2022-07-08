@@ -135,7 +135,7 @@ func testGenerateVerifyingMSP(t *testing.T, nodeOUs bool) {
 	signCA, err := ca.NewCA(caDir, testCAOrg, testCAName, testCountry, testProvince, testLocality, testOrganizationalUnit, testStreetAddress, testPostalCode)
 	assert.NoError(t, err, "Error generating CA")
 	// generate TLS CA
-	tlsCA, err := ca.NewCA(tlsCADir, testCAOrg, testCAName, testCountry, testProvince, testLocality, testOrganizationalUnit, testStreetAddress, testPostalCode)
+	tlsCA, err := ca.NewTlsCA(tlsCADir, testCAOrg, testCAName, testCountry, testProvince, testLocality, testOrganizationalUnit, testStreetAddress, testPostalCode)
 	assert.NoError(t, err, "Error generating CA")
 
 	err = msp.GenerateVerifyingMSP(mspDir, signCA, tlsCA, nodeOUs)

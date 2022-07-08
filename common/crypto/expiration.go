@@ -8,8 +8,8 @@ package crypto
 
 import (
 	"bytes"
-	"crypto/x509"
 	"encoding/pem"
+	"github.com/tjfoc/gmsm/x509"
 	"time"
 
 	"github.com/golang/protobuf/proto"

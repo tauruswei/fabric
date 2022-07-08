@@ -8,6 +8,7 @@ package msp
 import (
 	"crypto/x509"
 	"encoding/pem"
+	gmx509 "github.com/tjfoc/gmsm/x509"
 	"os"
 	"path/filepath"
 
@@ -96,9 +97,9 @@ func GenerateLocalMSP(
 	// write artifacts to MSP folders
 
 	// the signing CA certificate goes into cacerts
-	err = x509Export(
+	err = sm2Export(
 		filepath.Join(mspDir, "cacerts", x509Filename(signCA.Name)),
-		signCA.SignCert,
+		signCA.SignSm2Cert,
 	)
 	if err != nil {
 		return err
@@ -126,7 +127,7 @@ func GenerateLocalMSP(
 	// we leave a valid admin for now for the sake
 	// of unit tests
 	if !nodeOUs {
-		err = x509Export(filepath.Join(mspDir, "admincerts", x509Filename(name)), cert)
+		err = sm2Export(filepath.Join(mspDir, "admincerts", x509Filename(name)), cert)
 		if err != nil {
 			return err
 		}
@@ -137,13 +138,13 @@ func GenerateLocalMSP(
 	*/
 
 	// generate private key
-	tlsPrivKey, err := csp.GeneratePrivateKey(tlsDir)
+	tlsPrivKey, err := csp.GenerateTlsPrivateKey(tlsDir)
 	if err != nil {
 		return err
 	}
 
 	// generate X509 certificate using TLS CA
-	_, err = tlsCA.SignCertificate(
+	_, err = tlsCA.SignTlsCertificate(
 		filepath.Join(tlsDir),
 		name,
 		nil,
@@ -193,9 +194,9 @@ func GenerateVerifyingMSP(
 		return err
 	}
 	// the signing CA certificate goes into cacerts
-	err = x509Export(
+	err = sm2Export(
 		filepath.Join(baseDir, "cacerts", x509Filename(signCA.Name)),
-		signCA.SignCert,
+		signCA.SignSm2Cert,
 	)
 	if err != nil {
 		return err
@@ -280,7 +281,9 @@ func x509Filename(name string) string {
 func x509Export(path string, cert *x509.Certificate) error {
 	return pemExport(path, "CERTIFICATE", cert.Raw)
 }
-
+func sm2Export(path string, cert *gmx509.Certificate) error {
+	return pemExport(path, "CERTIFICATE", cert.Raw)
+}
 func keyExport(keystore, output string) error {
 	return os.Rename(filepath.Join(keystore, "priv_sk"), output)
 }

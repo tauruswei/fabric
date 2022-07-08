@@ -19,6 +19,7 @@ const (
 )
 
 var Global *Logging
+var logger *FabricLogger
 
 func init() {
 	logging, err := New(Config{})
@@ -27,6 +28,7 @@ func init() {
 	}
 
 	Global = logging
+	logger = Global.Logger("flogging")
 	grpcLogger := Global.ZapLogger("grpc")
 	grpclog.SetLogger(NewGRPCLogger(grpcLogger))
 }

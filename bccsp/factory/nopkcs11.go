@@ -1,3 +1,4 @@
+//go:build !pkcs11
 // +build !pkcs11
 
 /*
@@ -18,7 +19,7 @@ const pkcs11Enabled = false
 // FactoryOpts holds configuration information used to initialize factory implementations
 type FactoryOpts struct {
 	ProviderName string  `mapstructure:"default" json:"default" yaml:"Default"`
-	SwOpts       *SwOpts `mapstructure:"SW,omitempty" json:"SW,omitempty" yaml:"SW,omitempty"`
+	SwOpts       *SwOpts `mapstructure:"SW,omitempty" json:"SW,omitempty" yaml:"SwOpts"`
 }
 
 // InitFactories must be called before using factory interfaces
@@ -40,7 +41,7 @@ func initFactories(config *FactoryOpts) error {
 	}
 
 	if config.ProviderName == "" {
-		config.ProviderName = "SW"
+		config.ProviderName = "GM"
 	}
 
 	if config.SwOpts == nil {
@@ -48,8 +49,8 @@ func initFactories(config *FactoryOpts) error {
 	}
 
 	// Software-Based BCCSP
-	if config.ProviderName == "SW" && config.SwOpts != nil {
-		f := &SWFactory{}
+	if config.ProviderName == "GM" && config.SwOpts != nil {
+		f := &GMFactory{}
 		var err error
 		defaultBCCSP, err = initBCCSP(f, config)
 		if err != nil {
@@ -68,6 +69,8 @@ func initFactories(config *FactoryOpts) error {
 func GetBCCSPFromOpts(config *FactoryOpts) (bccsp.BCCSP, error) {
 	var f BCCSPFactory
 	switch config.ProviderName {
+	case "GM":
+		f = &GMFactory{}
 	case "SW":
 		f = &SWFactory{}
 	default:

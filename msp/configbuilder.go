@@ -136,7 +136,18 @@ func SetupBCCSPKeystoreConfig(bccspConfig *factory.FactoryOpts, keystoreDir stri
 	if bccspConfig == nil {
 		bccspConfig = factory.GetDefaultOpts()
 	}
+	mspLogger.Infof("bccspConfig.ProviderName---,%v", bccspConfig.ProviderName)
+	if bccspConfig.ProviderName == "GM" || bccspConfig.SwOpts != nil {
+		if bccspConfig.SwOpts == nil {
+			bccspConfig.SwOpts = factory.GetDefaultOpts().SwOpts
+		}
 
+		// Only override the KeyStorePath if it was left empty
+		if bccspConfig.SwOpts.FileKeystore == nil ||
+			bccspConfig.SwOpts.FileKeystore.KeyStorePath == "" {
+			bccspConfig.SwOpts.FileKeystore = &factory.FileKeystoreOpts{KeyStorePath: keystoreDir}
+		}
+	}
 	if bccspConfig.ProviderName == "SW" || bccspConfig.SwOpts != nil {
 		if bccspConfig.SwOpts == nil {
 			bccspConfig.SwOpts = factory.GetDefaultOpts().SwOpts
@@ -335,7 +346,7 @@ func getMspConfig(dir string, ID string, sigid *msp.SigningIdentityInfo) (*msp.M
 
 	// Set FabricCryptoConfig
 	cryptoConfig := &msp.FabricCryptoConfig{
-		SignatureHashFamily:            bccsp.SHA2,
+		SignatureHashFamily:            bccsp.GMSM3,
 		IdentityIdentifierHashFunction: bccsp.SHA256,
 	}
 

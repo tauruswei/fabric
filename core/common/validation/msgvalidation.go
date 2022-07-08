@@ -8,6 +8,7 @@ package validation
 
 import (
 	"bytes"
+	"encoding/base64"
 
 	"github.com/hyperledger/fabric-protos-go/common"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
@@ -234,6 +235,9 @@ func validateEndorserTransaction(data []byte, hdr *common.Header) error {
 		if err != nil {
 			return err
 		}
+
+		putilsLogger.Warnf("pHash is %s", base64.StdEncoding.EncodeToString(pHash))
+		putilsLogger.Warnf("prp.ProposalHash %s", base64.StdEncoding.EncodeToString(prp.ProposalHash))
 
 		// ensure that the proposal hash matches
 		if !bytes.Equal(pHash, prp.ProposalHash) {

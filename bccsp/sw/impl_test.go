@@ -8,6 +8,7 @@ package sw
 
 import (
 	"bytes"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -1368,4 +1369,30 @@ func TestAddWrapper(t *testing.T) {
 	err := sw.AddWrapper(reflect.TypeOf(cleanup), cleanup)
 	assert.Error(t, err)
 	assert.Equal(t, err.Error(), "wrapper type not valid, must be on of: KeyGenerator, KeyDeriver, KeyImporter, Encryptor, Decryptor, Signer, Verifier, Hasher")
+}
+func getCryptoHashIndex(t *testing.T) crypto.Hash {
+	switch currentTestConfig.hashFamily {
+	case "SHA2":
+		switch currentTestConfig.securityLevel {
+		case 256:
+			return crypto.SHA256
+		case 384:
+			return crypto.SHA384
+		default:
+			t.Fatalf("Invalid security level [%d]", currentTestConfig.securityLevel)
+		}
+	case "SHA3":
+		switch currentTestConfig.securityLevel {
+		case 256:
+			return crypto.SHA3_256
+		case 384:
+			return crypto.SHA3_384
+		default:
+			t.Fatalf("Invalid security level [%d]", currentTestConfig.securityLevel)
+		}
+	default:
+		t.Fatalf("Invalid hash family [%s]", currentTestConfig.hashFamily)
+	}
+
+	return crypto.SHA3_256
 }

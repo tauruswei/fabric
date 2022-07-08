@@ -223,7 +223,7 @@ $(BUILD_DIR)/images/orderer/$(DUMMY): BUILD_ARGS=--build-arg GO_TAGS=${GO_TAGS}
 $(BUILD_DIR)/images/%/$(DUMMY):
 	@echo "Building Docker image $(DOCKER_NS)/fabric-$*"
 	@mkdir -p $(@D)
-	$(DBUILD) -f images/$*/Dockerfile \
+	$(DBUILD) --platform=linux/amd64 -f images/$*/Dockerfile \
 		--build-arg GO_VER=$(GO_VER) \
 		--build-arg ALPINE_VER=$(ALPINE_VER) \
 		$(BUILD_ARGS) \

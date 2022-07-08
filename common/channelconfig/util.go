@@ -33,7 +33,7 @@ const (
 	// AdminsPolicyKey is the key used for the read policy
 	AdminsPolicyKey = "Admins"
 
-	defaultHashingAlgorithm = bccsp.SHA256
+	defaultHashingAlgorithm = bccsp.GMSM3
 
 	defaultBlockDataHashingStructureWidth = math.MaxUint32
 )

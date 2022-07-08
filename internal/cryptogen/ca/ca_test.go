@@ -6,8 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 package ca_test
 
 import (
-	"crypto/ecdsa"
 	"crypto/x509"
+	"fmt"
+	"github.com/tjfoc/gmsm/sm2"
 	"io/ioutil"
 	"net"
 	"os"
@@ -86,6 +87,13 @@ func TestLoadCertificateECDSA(t *testing.T) {
 	assert.NotNil(t, loadedCert, "Should load cert")
 	assert.Equal(t, cert.SerialNumber, loadedCert.SerialNumber, "Should have same serial number")
 	assert.Equal(t, cert.Subject.CommonName, loadedCert.Subject.CommonName, "Should have same CN")
+}
+func TestLoadCA(t *testing.T) {
+	certDir := "/var/folders/0p/f6p0m_hn1x3bpqfrmw3q3gbc0000gn/T/ca-test2966754643/ca/root0-cert.pem"
+
+	loadedCert, _ := ca.LoadCertificateGMSM2(certDir)
+	fmt.Println(loadedCert.SubjectKeyId)
+
 }
 
 func TestLoadCertificateECDSA_wrongEncoding(t *testing.T) {
@@ -252,7 +260,7 @@ func TestGenerateSignCertificate(t *testing.T) {
 		Name:     "badCA",
 		SignCert: &x509.Certificate{},
 	}
-	_, err = badCA.SignCertificate(certDir, testName, nil, nil, &ecdsa.PublicKey{},
+	_, err = badCA.SignCertificate(certDir, testName, nil, nil, &sm2.PublicKey{},
 		x509.KeyUsageKeyEncipherment, []x509.ExtKeyUsage{x509.ExtKeyUsageAny})
 	assert.Error(t, err, "Empty CA should not be able to sign")
 

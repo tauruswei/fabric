@@ -15,6 +15,8 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	//"github.com/tjfoc/gmsm/sm2"
+	//"github.com/tjfoc/gmsm/x509"
 	"math/big"
 	"net"
 	"time"
@@ -72,6 +74,7 @@ func newCertKeyPair(isCA bool, isServer bool, certSigner crypto.Signer, parent *
 	} else {
 		template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
 	}
+	template.SubjectKeyId = computeSKI(privateKey)
 	if isServer {
 		template.NotAfter = tenYearsFromNow
 		template.ExtKeyUsage = append(template.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
@@ -83,7 +86,6 @@ func newCertKeyPair(isCA bool, isServer bool, certSigner crypto.Signer, parent *
 			}
 		}
 	}
-	template.SubjectKeyId = computeSKI(&privateKey.PublicKey)
 	// If no parent cert, it's a self signed cert
 	if parent == nil || certSigner == nil {
 		parent = &template
@@ -112,13 +114,17 @@ func newCertKeyPair(isCA bool, isServer bool, certSigner crypto.Signer, parent *
 	}, nil
 }
 
-func encodePEM(keyType string, data []byte) []byte {
-	return pem.EncodeToMemory(&pem.Block{Type: keyType, Bytes: data})
+// compute Subject Key Identifier //TODO Important
+func computeSKI(privKey *ecdsa.PrivateKey) []byte {
+	// Marshall the public key
+	raw := elliptic.Marshal(privKey.Curve, privKey.PublicKey.X, privKey.PublicKey.Y)
+	// Hash it
+	hash := sha256.New()
+	hash.Write(raw)
+	return hash.Sum(nil)
+	//return hash[:]
 }
 
-// RFC 7093, Section 2, Method 4
-func computeSKI(key *ecdsa.PublicKey) []byte {
-	raw := elliptic.Marshal(key.Curve, key.X, key.Y)
-	hash := sha256.Sum256(raw)
-	return hash[:]
+func encodePEM(keyType string, data []byte) []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: keyType, Bytes: data})
 }

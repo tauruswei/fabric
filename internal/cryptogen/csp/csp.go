@@ -13,6 +13,8 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/pem"
+	"github.com/tjfoc/gmsm/sm2"
+	gmx509 "github.com/tjfoc/gmsm/x509"
 	"io"
 	"io/ioutil"
 	"math/big"
@@ -25,8 +27,8 @@ import (
 
 // LoadPrivateKey loads a private key from a file in keystorePath.  It looks
 // for a file ending in "_sk" and expects a PEM-encoded PKCS8 EC private key.
-func LoadPrivateKey(keystorePath string) (*ecdsa.PrivateKey, error) {
-	var priv *ecdsa.PrivateKey
+func LoadPrivateKey(keystorePath string) (*sm2.PrivateKey, error) {
+	var priv *sm2.PrivateKey
 
 	walkFunc := func(path string, info os.FileInfo, pathErr error) error {
 
@@ -39,7 +41,7 @@ func LoadPrivateKey(keystorePath string) (*ecdsa.PrivateKey, error) {
 			return err
 		}
 
-		priv, err = parsePrivateKeyPEM(rawKey)
+		priv, err = gmx509.ReadPrivateKeyFromPem(rawKey, nil)
 		if err != nil {
 			return errors.WithMessage(err, path)
 		}
@@ -75,7 +77,32 @@ func parsePrivateKeyPEM(rawKey []byte) (*ecdsa.PrivateKey, error) {
 
 // GeneratePrivateKey creates an EC private key using a P-256 curve and stores
 // it in keystorePath.
-func GeneratePrivateKey(keystorePath string) (*ecdsa.PrivateKey, error) {
+func GeneratePrivateKey(keystorePath string) (*sm2.PrivateKey, error) {
+
+	priv, err := sm2.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to generate private key")
+	}
+
+	pkcs8Encoded, err := gmx509.MarshalSm2PrivateKey(priv, nil)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to marshal private key")
+	}
+
+	pemEncoded := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8Encoded})
+
+	keyFile := filepath.Join(keystorePath, "priv_sk")
+	err = ioutil.WriteFile(keyFile, pemEncoded, 0600)
+	if err != nil {
+		return nil, errors.WithMessagef(err, "failed to save private key to file %s", keyFile)
+	}
+
+	return priv, err
+}
+
+// GenerateTlsPrivateKey creates an EC private key using a P-256 curve and stores
+// it in keystorePath.
+func GenerateTlsPrivateKey(keystorePath string) (*ecdsa.PrivateKey, error) {
 
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -122,7 +149,7 @@ func (e *ECDSASigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts
 	}
 
 	// ensure Low S signatures
-	sig := toLowS(
+	sig := e.toLowS(
 		e.PrivateKey.PublicKey,
 		ECDSASignature{
 			R: r,
@@ -141,7 +168,7 @@ signatures to a canonical form where s is at most half the order of the curve.
 In order to make signatures compliant with what Fabric expects, toLowS creates
 signatures in this canonical form.
 */
-func toLowS(key ecdsa.PublicKey, sig ECDSASignature) ECDSASignature {
+func (e *ECDSASigner) toLowS(key ecdsa.PublicKey, sig ECDSASignature) ECDSASignature {
 	// calculate half order of the curve
 	halfOrder := new(big.Int).Div(key.Curve.Params().N, big.NewInt(2))
 	// check if s is greater than half order of curve
@@ -153,5 +180,63 @@ func toLowS(key ecdsa.PublicKey, sig ECDSASignature) ECDSASignature {
 }
 
 type ECDSASignature struct {
+	R, S *big.Int
+}
+
+/**
+SM2 signer implements the crypto.Signer interface for ECDSA keys.  The
+Sign method ensures signatures are created with Low S values since Fabric
+normalizes all signatures to Low S.
+See https://github.com/bitcoin/bips/blob/master/bip-0146.mediawiki#low_s
+for more detail.
+*/
+type SM2Signer struct {
+	PrivateKey *sm2.PrivateKey
+}
+
+// Public returns the ecdsa.PublicKey associated with PrivateKey.
+func (e *SM2Signer) Public() crypto.PublicKey {
+	return &e.PrivateKey.PublicKey
+}
+
+// Sign signs the digest and ensures that signatures use the Low S value.
+func (e *SM2Signer) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	r, s, err := sm2.Sm2Sign(e.PrivateKey, digest, nil, rand)
+	if err != nil {
+		return nil, err
+	}
+
+	// ensure Low S signatures
+	sig := e.toLowS(
+		e.PrivateKey.PublicKey,
+		ECDSASignature{
+			R: r,
+			S: s,
+		},
+	)
+
+	// return marshaled aignature
+	return asn1.Marshal(sig)
+}
+
+/**
+When using ECDSA, both (r,s) and (r, -s mod n) are valid signatures.  In order
+to protect against signature malleability attacks, Fabric normalizes all
+signatures to a canonical form where s is at most half the order of the curve.
+In order to make signatures compliant with what Fabric expects, toLowS creates
+signatures in this canonical form.
+*/
+func (e *SM2Signer) toLowS(key sm2.PublicKey, sig ECDSASignature) ECDSASignature {
+	// calculate half order of the curve
+	halfOrder := new(big.Int).Div(key.Curve.Params().N, big.NewInt(2))
+	// check if s is greater than half order of curve
+	if sig.S.Cmp(halfOrder) == 1 {
+		// Set s to N - s so that s will be less than or equal to half order
+		sig.S.Sub(key.Params().N, sig.S)
+	}
+	return sig
+}
+
+type SM2Signature struct {
 	R, S *big.Int
 }

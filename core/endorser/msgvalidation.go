@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package endorser
 
 import (
-	"crypto/sha256"
+	"github.com/tjfoc/gmsm/sm3"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-protos-go/common"
@@ -105,7 +105,7 @@ func UnpackProposal(signedProp *pb.SignedProposal) (*UnpackedProposal, error) {
 	// 2) The serialized Signature Header object
 	// 3) The hash of the part of the chaincode proposal payload that will go to the tx
 	// (ie, the parts without the transient data)
-	propHash := sha256.New()
+	propHash := sm3.New()
 	propHash.Write(hdr.ChannelHeader)
 	propHash.Write(hdr.SignatureHeader)
 	propHash.Write(ppBytes)
