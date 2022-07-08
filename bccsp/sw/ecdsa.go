@@ -18,8 +18,6 @@ package sw
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
-	"fmt"
-
 	"github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric/bccsp/utils"
 )
@@ -38,23 +36,24 @@ func signECDSA(k *ecdsa.PrivateKey, digest []byte, opts bccsp.SignerOpts) ([]byt
 	return utils.MarshalECDSASignature(r, s)
 }
 
-func verifyECDSA(k *ecdsa.PublicKey, signature, digest []byte, opts bccsp.SignerOpts) (bool, error) {
-	r, s, err := utils.UnmarshalECDSASignature(signature)
-	if err != nil {
-		return false, fmt.Errorf("Failed unmashalling signature [%s]", err)
-	}
-
-	lowS, err := utils.IsLowS(k, s)
-	if err != nil {
-		return false, err
-	}
-
-	if !lowS {
-		return false, fmt.Errorf("Invalid S. Must be smaller than half the order [%s][%s].", s, utils.GetCurveHalfOrdersAt(k.Curve))
-	}
-
-	return ecdsa.Verify(k, digest, r, s), nil
-}
+// 注销 ecdsa 验签功能，在 sm2.go 中实现验签功能
+//func verifyECDSA(k *ecdsa.PublicKey, signature, digest []byte, opts bccsp.SignerOpts) (bool, error) {
+//	r, s, err := utils.UnmarshalECDSASignature(signature)
+//	if err != nil {
+//		return false, fmt.Errorf("Failed unmashalling signature [%s]", err)
+//	}
+//
+//	lowS, err := utils.IsLowS(k, s)
+//	if err != nil {
+//		return false, err
+//	}
+//
+//	if !lowS {
+//		return false, fmt.Errorf("Invalid S. Must be smaller than half the order [%s][%s].", s, utils.GetCurveHalfOrdersAt(k.Curve))
+//	}
+//
+//	return ecdsa.Verify(k, digest, r, s), nil
+//}
 
 type ecdsaSigner struct{}
 
@@ -62,6 +61,7 @@ func (s *ecdsaSigner) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) ([
 	return signECDSA(k.(*ecdsaPrivateKey).privKey, digest, opts)
 }
 
+// 注销 ecdsa 验签功能，在 sm2.go 中实现验签功能
 //type ecdsaPrivateKeyVerifier struct{}
 //
 //func (v *ecdsaPrivateKeyVerifier) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (bool, error) {

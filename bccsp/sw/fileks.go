@@ -314,11 +314,6 @@ func (ks *fileBasedKeyStore) storePublicKey(alias string, publicKey interface{})
 }
 
 func (ks *fileBasedKeyStore) storeKey(alias string, key []byte) error {
-	//pem, err := aesToEncryptedPEM(key, ks.pwd)
-	if len(ks.pwd) == 0 {
-		ks.pwd = nil
-	}
-
 	pem, err := sm4.WriteKeyToPem(key, ks.pwd)
 	if err != nil {
 		logger.Errorf("Failed converting key to PEM [%s]: [%s]", alias, err)
@@ -390,9 +385,6 @@ func (ks *fileBasedKeyStore) loadKey(alias string) ([]byte, error) {
 	}
 
 	//key, err := pemToAES(pem, ks.pwd)
-	if len(ks.pwd) == 0 {
-		ks.pwd = nil
-	}
 	key, err := sm4.ReadKeyFromPem(pem, ks.pwd)
 	if err != nil {
 		logger.Errorf("Failed parsing key [%s]: [%s]", alias, err)

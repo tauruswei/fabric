@@ -200,7 +200,7 @@ func (msp *bccspmsp) getTlsCertFromPem(idBytes []byte) (*x509.Certificate, error
 	var cert *x509.Certificate
 	cert, err := x509.ParseCertificate(pemCert.Bytes)
 	if err != nil {
-		return nil, errors.Wrap(err, "getCertFromPem error: failed to parse gmx509 cert")
+		return nil, errors.Wrap(err, "getCertFromPem error: failed to parse x509 cert")
 	}
 
 	return cert, nil

@@ -309,7 +309,7 @@ func extendPeerOrg(orgSpec OrgSpec) {
 	tlscaDir := filepath.Join(orgDir, "tlsca")
 
 	signCA := getCA(caDir, orgSpec, orgSpec.CA.CommonName)
-	tlsCA := getCA(tlscaDir, orgSpec, "tls"+orgSpec.CA.CommonName)
+	tlsCA := getTlsCA(tlscaDir, orgSpec, "tls"+orgSpec.CA.CommonName)
 
 	generateNodes(peersDir, orgSpec.Specs, signCA, tlsCA, msp.PEER, orgSpec.EnableNodeOUs)
 
@@ -358,7 +358,7 @@ func extendOrdererOrg(orgSpec OrgSpec) {
 	}
 
 	signCA := getCA(caDir, orgSpec, orgSpec.CA.CommonName)
-	tlsCA := getCA(tlscaDir, orgSpec, "tls"+orgSpec.CA.CommonName)
+	tlsCA := getTlsCA(tlscaDir, orgSpec, "tls"+orgSpec.CA.CommonName)
 
 	generateNodes(orderersDir, orgSpec.Specs, signCA, tlsCA, msp.ORDERER, orgSpec.EnableNodeOUs)
 
@@ -723,7 +723,7 @@ func printVersion() {
 }
 
 func getCA(caDir string, spec OrgSpec, name string) *ca.CA {
-	priv, _ := csp.LoadPrivateKey(caDir)
+	priv, _ := csp.LoadGMSM2PrivateKey(caDir)
 	cert, _ := ca.LoadCertificateGMSM2(caDir)
 
 	return &ca.CA{
@@ -737,5 +737,21 @@ func getCA(caDir string, spec OrgSpec, name string) *ca.CA {
 		StreetAddress:      spec.CA.StreetAddress,
 		PostalCode:         spec.CA.PostalCode,
 		Sm2Key:             priv,
+	}
+}
+func getTlsCA(caDir string, spec OrgSpec, name string) *ca.CA {
+	priv, _ := csp.LoadECDSAPrivateKey(caDir)
+	cert, _ := ca.LoadCertificateECDSA(caDir)
+
+	return &ca.CA{
+		Name:               name,
+		Signer:             priv,
+		SignCert:           cert,
+		Country:            spec.CA.Country,
+		Province:           spec.CA.Province,
+		Locality:           spec.CA.Locality,
+		OrganizationalUnit: spec.CA.OrganizationalUnit,
+		StreetAddress:      spec.CA.StreetAddress,
+		PostalCode:         spec.CA.PostalCode,
 	}
 }

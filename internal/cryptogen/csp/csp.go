@@ -27,7 +27,7 @@ import (
 
 // LoadPrivateKey loads a private key from a file in keystorePath.  It looks
 // for a file ending in "_sk" and expects a PEM-encoded PKCS8 EC private key.
-func LoadPrivateKey(keystorePath string) (*sm2.PrivateKey, error) {
+func LoadGMSM2PrivateKey(keystorePath string) (*sm2.PrivateKey, error) {
 	var priv *sm2.PrivateKey
 
 	walkFunc := func(path string, info os.FileInfo, pathErr error) error {
@@ -42,6 +42,36 @@ func LoadPrivateKey(keystorePath string) (*sm2.PrivateKey, error) {
 		}
 
 		priv, err = gmx509.ReadPrivateKeyFromPem(rawKey, nil)
+		if err != nil {
+			return errors.WithMessage(err, path)
+		}
+
+		return nil
+	}
+
+	err := filepath.Walk(keystorePath, walkFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	return priv, err
+}
+
+func LoadECDSAPrivateKey(keystorePath string) (*ecdsa.PrivateKey, error) {
+	var priv *ecdsa.PrivateKey
+
+	walkFunc := func(path string, info os.FileInfo, pathErr error) error {
+
+		if !strings.HasSuffix(path, "_sk") {
+			return nil
+		}
+
+		rawKey, err := ioutil.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		priv, err = parsePrivateKeyPEM(rawKey)
 		if err != nil {
 			return errors.WithMessage(err, path)
 		}

@@ -91,25 +91,6 @@ func (s *gmsm2Signer) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (s
 	return signGMSM2(k.(*gmsm2PrivateKey).privKey, digest, opts)
 }
 
-type ecdsaPrivateKeySigner struct{}
-
-func (s *ecdsaPrivateKeySigner) Sign(k bccsp.Key, digest []byte, opts bccsp.SignerOpts) (signature []byte, err error) {
-	puk := k.(*ecdsaPrivateKey).privKey.PublicKey
-	sm2pk := sm2.PublicKey{
-		Curve: puk.Curve,
-		X:     puk.X,
-		Y:     puk.Y,
-	}
-
-	privKey := k.(*ecdsaPrivateKey).privKey
-	sm2privKey := sm2.PrivateKey{
-		D:         privKey.D,
-		PublicKey: sm2pk,
-	}
-
-	return signGMSM2(&sm2privKey, digest, opts)
-}
-
 type gmsm2PrivateKeyVerifier struct{}
 
 func (v *gmsm2PrivateKeyVerifier) Verify(k bccsp.Key, signature, digest []byte, opts bccsp.SignerOpts) (valid bool, err error) {
