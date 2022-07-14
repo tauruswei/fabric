@@ -38,8 +38,8 @@ import (
 var logger = flogging.MustGetLogger("kvledger")
 
 var (
-	rwsetHashOpts    = &bccsp.SHA256Opts{}
-	snapshotHashOpts = &bccsp.SHA256Opts{}
+	rwsetHashOpts    = &bccsp.GMSM3Opts{}
+	snapshotHashOpts = &bccsp.GMSM3Opts{}
 )
 
 // kvLedger provides an implementation of `ledger.PeerLedger`.
@@ -613,7 +613,7 @@ func (l *kvLedger) addBlockCommitHash(block *common.Block, updateBatchBytes []by
 	valueBytes = append(valueBytes, updateBatchBytes...)
 	valueBytes = append(valueBytes, l.commitHash...)
 
-	l.commitHash = util.ComputeSHA256(valueBytes)
+	l.commitHash = util.ComputeGMSM3(valueBytes)
 	block.Metadata.Metadata[common.BlockMetadataIndex_COMMIT_HASH] = protoutil.MarshalOrPanic(&common.Metadata{Value: l.commitHash})
 }
 

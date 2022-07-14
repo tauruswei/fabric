@@ -8,8 +8,8 @@ package orderers
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"crypto/x509"
+	"github.com/tjfoc/gmsm/sm3"
 	"math/rand"
 	"sync"
 
@@ -65,7 +65,7 @@ func (cs *ConnectionSource) Update(globalAddrs []string, orgs map[string]Orderer
 	anyChange := false
 	hasOrgEndpoints := false
 	for orgName, org := range orgs {
-		hasher := sha256.New()
+		hasher := sm3.New()
 		for _, cert := range org.RootCerts {
 			hasher.Write(cert)
 		}

@@ -8,7 +8,7 @@ package etcdraft
 
 import (
 	"context"
-	"crypto/sha256"
+	"github.com/hyperledger/fabric/common/util"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -64,7 +64,8 @@ func (n *node) start(fresh, join bool) {
 
 			// determine the node to start campaign by selecting the node with ID equals to:
 			//                hash(channelID) % cluster_size + 1
-			sha := sha256.Sum256([]byte(n.chainID))
+			//sha := sha256.Sum256([]byte(n.chainID))
+			sha := util.ComputeGMSM3([]byte(n.chainID))
 			number, _ := proto.DecodeVarint(sha[24:])
 			if n.config.ID == number%uint64(len(raftPeers))+1 {
 				campaign = true

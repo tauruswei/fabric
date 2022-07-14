@@ -11,12 +11,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	//"github.com/tjfoc/gmsm/sm2"
-	//"github.com/tjfoc/gmsm/x509"
+	"github.com/tjfoc/gmsm/sm3"
 	"math/big"
 	"net"
 	"time"
@@ -119,7 +117,7 @@ func computeSKI(privKey *ecdsa.PrivateKey) []byte {
 	// Marshall the public key
 	raw := elliptic.Marshal(privKey.Curve, privKey.PublicKey.X, privKey.PublicKey.Y)
 	// Hash it
-	hash := sha256.New()
+	hash := sm3.New()
 	hash.Write(raw)
 	return hash.Sum(nil)
 	//return hash[:]
