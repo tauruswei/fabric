@@ -48,6 +48,9 @@ const (
 	// NameMismatch results when the subject name of a parent certificate
 	// does not match the issuer name in the child.
 	NameMismatch
+
+	// NameConstraintsWithoutSANs is a legacy error and is no longer returned.
+	NameConstraintsWithoutSANs
 )
 
 // CertificateInvalidError results when an odd error occurs. Users of this

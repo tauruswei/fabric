@@ -299,7 +299,7 @@ func (ca *CA) SignTlsCertificate(
 		if ip != nil {
 			template.IPAddresses = append(template.IPAddresses, ip)
 		} else {
-			template.DNSNames = append(template.DNSNames, alternateNames...)
+			template.DNSNames = append(template.DNSNames, san)
 		}
 	}
 
@@ -514,7 +514,7 @@ func LoadCertificateECDSA(certPath string) (*x509.Certificate, error) {
 	return cert, err
 }
 
-// LoadCertificateGMSM2 load a ecdsa cert from a file in cert path
+// LoadCertificateGMSM2 load a sm2 cert from a file in cert path
 func LoadCertificateGMSM2(certPath string) (*gmx509.Certificate, error) {
 	var cert *gmx509.Certificate
 	var err error
