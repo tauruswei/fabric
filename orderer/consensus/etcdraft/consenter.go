@@ -7,8 +7,6 @@ SPDX-License-Identifier: Apache-2.0
 package etcdraft
 
 import (
-	"bytes"
-	"github.com/hyperledger/fabric/orderer/consensus/follower"
 	"path"
 	"reflect"
 	"time"
@@ -19,6 +17,7 @@ import (
 	"github.com/hyperledger/fabric-protos-go/orderer"
 	"github.com/hyperledger/fabric-protos-go/orderer/etcdraft"
 	"github.com/hyperledger/fabric/bccsp"
+	"github.com/hyperledger/fabric/common/crypto"
 	"github.com/hyperledger/fabric/common/flogging"
 	"github.com/hyperledger/fabric/common/metrics"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
@@ -26,6 +25,7 @@ import (
 	"github.com/hyperledger/fabric/orderer/common/localconfig"
 	"github.com/hyperledger/fabric/orderer/common/multichannel"
 	"github.com/hyperledger/fabric/orderer/consensus"
+	"github.com/hyperledger/fabric/orderer/consensus/follower"
 	"github.com/hyperledger/fabric/orderer/consensus/inactive"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
@@ -53,9 +53,10 @@ type ChainGetter interface {
 
 // Config contains etcdraft configurations
 type Config struct {
-	WALDir            string // WAL data of <my-channel> is stored in WALDir/<my-channel>
-	SnapDir           string // Snapshots of <my-channel> are stored in SnapDir/<my-channel>
-	EvictionSuspicion string // Duration threshold that the node samples in order to suspect its eviction from the channel.
+	WALDir               string // WAL data of <my-channel> is stored in WALDir/<my-channel>
+	SnapDir              string // Snapshots of <my-channel> are stored in SnapDir/<my-channel>
+	EvictionSuspicion    string // Duration threshold that the node samples in order to suspect its eviction from the channel.
+	TickIntervalOverride string // Duration to use for tick interval instead of what is specified in the channel config.
 }
 
 // Consenter implements etcdraft consenter
@@ -119,7 +120,7 @@ func (c *Consenter) detectSelfID(consenters map[uint64]*etcdraft.Consenter) (uin
 			return 0, err
 		}
 
-		if bytes.Equal(thisNodeCertAsDER, certAsDER) {
+		if crypto.CertificatesWithSamePublicKey(thisNodeCertAsDER, certAsDER) == nil {
 			return nodeID, nil
 		}
 	}
@@ -181,9 +182,18 @@ func (c *Consenter) HandleChain(support consensus.ConsenterSupport, metadata *co
 		}
 	}
 
-	tickInterval, err := time.ParseDuration(m.Options.TickInterval)
-	if err != nil {
-		return nil, errors.Errorf("failed to parse TickInterval (%s) to time duration", m.Options.TickInterval)
+	var tickInterval time.Duration
+	if c.EtcdRaftConfig.TickIntervalOverride == "" {
+		tickInterval, err = time.ParseDuration(m.Options.TickInterval)
+		if err != nil {
+			return nil, errors.Errorf("failed to parse TickInterval (%s) to time duration", m.Options.TickInterval)
+		}
+	} else {
+		tickInterval, err = time.ParseDuration(c.EtcdRaftConfig.TickIntervalOverride)
+		if err != nil {
+			return nil, errors.WithMessage(err, "failed parsing Consensus.TickIntervalOverride")
+		}
+		c.Logger.Infof("TickIntervalOverride is set, overriding channel configuration tick interval to %v", tickInterval)
 	}
 
 	opts := Options{
@@ -343,16 +353,27 @@ func New(
 
 func createComm(clusterDialer *cluster.PredicateDialer, c *Consenter, config localconfig.Cluster, p metrics.Provider) *cluster.Comm {
 	metrics := cluster.NewMetrics(p)
+	logger := flogging.MustGetLogger("orderer.common.cluster")
+
+	compareCert := cluster.CachePublicKeyComparisons(func(a, b []byte) bool {
+		err := crypto.CertificatesWithSamePublicKey(a, b)
+		if err != nil && err != crypto.ErrPubKeyMismatch {
+			crypto.LogNonPubKeyMismatchErr(logger.Errorf, err, a, b)
+		}
+		return err == nil
+	})
+
 	comm := &cluster.Comm{
 		MinimumExpirationWarningInterval: cluster.MinimumExpirationWarningInterval,
 		CertExpWarningThreshold:          config.CertExpirationWarningThreshold,
 		SendBufferSize:                   config.SendBufferSize,
-		Logger:                           flogging.MustGetLogger("orderer.common.cluster"),
+		Logger:                           logger,
 		Chan2Members:                     make(map[string]cluster.MemberMapping),
 		Connections:                      cluster.NewConnectionStore(clusterDialer, metrics.EgressTLSConnectionCount),
 		Metrics:                          metrics,
 		ChanExt:                          c,
 		H:                                c,
+		CompareCertificate:               compareCert,
 	}
 	c.Communication = comm
 	return comm

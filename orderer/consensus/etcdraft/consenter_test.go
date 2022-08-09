@@ -8,7 +8,7 @@ package etcdraft_test
 
 import (
 	"encoding/pem"
-	"github.com/hyperledger/fabric/orderer/consensus/follower"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -22,12 +22,14 @@ import (
 	"github.com/hyperledger/fabric/common/channelconfig"
 	"github.com/hyperledger/fabric/common/crypto/tlsgen"
 	"github.com/hyperledger/fabric/common/flogging"
+	"github.com/hyperledger/fabric/internal/configtxgen/genesisconfig"
 	"github.com/hyperledger/fabric/internal/pkg/comm"
 	"github.com/hyperledger/fabric/orderer/common/cluster"
 	clustermocks "github.com/hyperledger/fabric/orderer/common/cluster/mocks"
 	"github.com/hyperledger/fabric/orderer/common/multichannel"
 	"github.com/hyperledger/fabric/orderer/consensus/etcdraft"
 	"github.com/hyperledger/fabric/orderer/consensus/etcdraft/mocks"
+	"github.com/hyperledger/fabric/orderer/consensus/follower"
 	consensusmocks "github.com/hyperledger/fabric/orderer/consensus/mocks"
 	"github.com/hyperledger/fabric/protoutil"
 	. "github.com/onsi/ginkgo"
@@ -35,6 +37,23 @@ import (
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+)
+
+//These fixtures contain certificates for testing consenters.
+//In both folders certificates generated using tlsgen pkg, each certificate is singed by ca.pem inside corresponding folder.
+//Each cert has 10years expiration time (tlsgenCa.NewServerCertKeyPair("localhost")).
+
+//NOTE ONLY FOR GO 1.15+: prior to go1.15 tlsgen produced CA root cert without SubjectKeyId, which is not allowed by MSP validator.
+//In this test left tags @ONLY-GO1.15+ in places where fixtures can be replaced with tlsgen runtime generated certs once fabric moved to 1.15
+
+const (
+	consentersTestDataDir = "testdata/consenters_certs/"
+	ca1Dir                = consentersTestDataDir + "ca1"
+	ca2Dir                = consentersTestDataDir + "ca2"
+)
+
+var (
+	certAsPEM []byte
 )
 
 //go:generate counterfeiter -o mocks/orderer_capabilities.go --fake-name OrdererCapabilities . ordererCapabilities
@@ -51,17 +70,24 @@ type ordererConfig interface {
 
 var _ = Describe("Consenter", func() {
 	var (
-		certAsPEM   []byte
 		chainGetter *mocks.ChainGetter
 		support     *consensusmocks.FakeConsenterSupport
 		dataDir     string
 		snapDir     string
 		walDir      string
-		err         error
+		mspDir      string
+		tlsCA       tlsgen.CA
 	)
 
 	BeforeEach(func() {
-		certAsPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("cert bytes")})
+		var err error
+		tlsCA, err = tlsgen.NewCA()
+		Expect(err).NotTo(HaveOccurred())
+		kp, err := tlsCA.NewClientCertKeyPair()
+		Expect(err).NotTo(HaveOccurred())
+		if certAsPEM == nil {
+			certAsPEM = kp.Cert
+		}
 		chainGetter = &mocks.ChainGetter{}
 		support = &consensusmocks.FakeConsenterSupport{}
 		dataDir, err = ioutil.TempDir("", "snap-")
@@ -92,21 +118,22 @@ var _ = Describe("Consenter", func() {
 
 	AfterEach(func() {
 		os.RemoveAll(dataDir)
+		os.RemoveAll(mspDir)
 	})
 
 	When("the consenter is extracting the channel", func() {
 		It("extracts successfully from step requests", func() {
-			consenter := newConsenter(chainGetter)
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 			ch := consenter.TargetChannel(&orderer.ConsensusRequest{Channel: "mychannel"})
 			Expect(ch).To(BeIdenticalTo("mychannel"))
 		})
 		It("extracts successfully from submit requests", func() {
-			consenter := newConsenter(chainGetter)
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 			ch := consenter.TargetChannel(&orderer.SubmitRequest{Channel: "mychannel"})
 			Expect(ch).To(BeIdenticalTo("mychannel"))
 		})
 		It("returns an empty string for the rest of the messages", func() {
-			consenter := newConsenter(chainGetter)
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 			ch := consenter.TargetChannel(&common.Block{})
 			Expect(ch).To(BeEmpty())
 		})
@@ -127,30 +154,30 @@ var _ = Describe("Consenter", func() {
 				Chain: &multichannel.ChainSupport{},
 			})
 		})
-		It("calls the chain getter and returns the reference when it is found", func() {
-			consenter := newConsenter(chainGetter)
+		It("calls the chain manager and returns the reference when it is found", func() {
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 			Expect(consenter).NotTo(BeNil())
 
 			chain := consenter.ReceiverByChain("mychannel")
 			Expect(chain).NotTo(BeNil())
 			Expect(chain).To(BeIdenticalTo(chainInstance))
 		})
-		It("calls the chain getter and returns nil when it's not found", func() {
-			consenter := newConsenter(chainGetter)
+		It("calls the chain manager and returns nil when it's not found", func() {
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 			Expect(consenter).NotTo(BeNil())
 
 			chain := consenter.ReceiverByChain("notmychannel")
 			Expect(chain).To(BeNil())
 		})
-		It("calls the chain getter and returns nil when it's not a raft chain", func() {
-			consenter := newConsenter(chainGetter)
+		It("calls the chain manager and returns nil when it's not a raft chain", func() {
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 			Expect(consenter).NotTo(BeNil())
 
 			chain := consenter.ReceiverByChain("notraftchain")
 			Expect(chain).To(BeNil())
 		})
 		It("calls the chain getter and panics when the chain has a bad internal state", func() {
-			consenter := newConsenter(chainGetter)
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 			Expect(consenter).NotTo(BeNil())
 
 			Expect(func() {
@@ -160,8 +187,7 @@ var _ = Describe("Consenter", func() {
 	})
 
 	It("successfully constructs a Chain", func() {
-		// We append a line feed to our cert, just to ensure that we can still consume it and ignore.
-		certAsPEMWithLineFeed := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("cert bytes")})
+		certAsPEMWithLineFeed := certAsPEM
 		certAsPEMWithLineFeed = append(certAsPEMWithLineFeed, []byte("\n")...)
 		m := &etcdraftproto.ConfigMetadata{
 			Consenters: []*etcdraftproto.Consenter{
@@ -184,7 +210,7 @@ var _ = Describe("Consenter", func() {
 		)
 		support.SharedConfigReturns(mockOrderer)
 
-		consenter := newConsenter(chainGetter)
+		consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 		consenter.EtcdRaftConfig.WALDir = walDir
 		consenter.EtcdRaftConfig.SnapDir = snapDir
 		// consenter.EtcdRaftConfig.EvictionSuspicion is missing
@@ -207,7 +233,7 @@ var _ = Describe("Consenter", func() {
 
 	It("successfully constructs a Chain without a system channel", func() {
 		// We append a line feed to our cert, just to ensure that we can still consume it and ignore.
-		certAsPEMWithLineFeed := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("cert bytes")})
+		certAsPEMWithLineFeed := certAsPEM
 		certAsPEMWithLineFeed = append(certAsPEMWithLineFeed, []byte("\n")...)
 		m := &etcdraftproto.ConfigMetadata{
 			Consenters: []*etcdraftproto.Consenter{
@@ -230,7 +256,7 @@ var _ = Describe("Consenter", func() {
 		)
 		support.SharedConfigReturns(mockOrderer)
 
-		consenter := newConsenter(chainGetter)
+		consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 		consenter.EtcdRaftConfig.WALDir = walDir
 		consenter.EtcdRaftConfig.SnapDir = snapDir
 		//without a system channel, the InactiveChainRegistry is nil
@@ -280,7 +306,7 @@ var _ = Describe("Consenter", func() {
 		support.SharedConfigReturns(mockOrderer)
 		support.ChannelIDReturns("foo")
 
-		consenter := newConsenter(chainGetter)
+		consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 
 		chain, err := consenter.HandleChain(support, &common.Metadata{})
 		Expect(chain).To(Not(BeNil()))
@@ -305,7 +331,7 @@ var _ = Describe("Consenter", func() {
 		)
 		support.SharedConfigReturns(mockOrderer)
 
-		consenter := newConsenter(chainGetter)
+		consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 
 		chain, err := consenter.HandleChain(support, nil)
 		Expect(chain).To(BeNil())
@@ -335,11 +361,44 @@ var _ = Describe("Consenter", func() {
 		mockOrderer.CapabilitiesReturns(&mocks.OrdererCapabilities{})
 		support.SharedConfigReturns(mockOrderer)
 
-		consenter := newConsenter(chainGetter)
+		consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 
 		chain, err := consenter.HandleChain(support, nil)
 		Expect(chain).To(BeNil())
 		Expect(err).To(MatchError("failed to parse TickInterval (500) to time duration"))
+	})
+
+	When("the TickIntervalOverride is invalid", func() {
+		It("returns an error", func() {
+			m := &etcdraftproto.ConfigMetadata{
+				Consenters: []*etcdraftproto.Consenter{
+					{ServerTlsCert: certAsPEM},
+				},
+				Options: &etcdraftproto.Options{
+					TickInterval:      "500s",
+					ElectionTick:      10,
+					HeartbeatTick:     1,
+					MaxInflightBlocks: 5,
+				},
+			}
+			metadata := protoutil.MarshalOrPanic(m)
+			mockOrderer := &mocks.OrdererConfig{}
+			mockOrderer.ConsensusMetadataReturns(metadata)
+			mockOrderer.BatchSizeReturns(
+				&orderer.BatchSize{
+					PreferredMaxBytes: 2 * 1024 * 1024,
+				},
+			)
+			mockOrderer.CapabilitiesReturns(&mocks.OrdererCapabilities{})
+			support.SharedConfigReturns(mockOrderer)
+
+			consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
+			consenter.EtcdRaftConfig.TickIntervalOverride = "seven"
+
+			_, err := consenter.HandleChain(support, nil)
+			Expect(err).To(MatchError(HavePrefix("failed parsing Consensus.TickIntervalOverride:")))
+			Expect(err).To(MatchError(ContainSubstring("seven")))
+		})
 	})
 
 	It("constructs a follower chain if no matching cert found", func() {
@@ -366,7 +425,7 @@ var _ = Describe("Consenter", func() {
 		support.SharedConfigReturns(mockOrderer)
 		support.ChannelIDReturns("foo")
 
-		consenter := newConsenter(chainGetter)
+		consenter := newConsenter(chainGetter, tlsCA.CertBytes(), certAsPEM)
 		//without a system channel, the InactiveChainRegistry is nil
 		consenter.InactiveChainRegistry = nil
 		consenter.icr = nil
@@ -385,14 +444,11 @@ type consenter struct {
 	icr *mocks.InactiveChainRegistry
 }
 
-func newConsenter(chainGetter *mocks.ChainGetter) *consenter {
+func newConsenter(chainGetter *mocks.ChainGetter, caCert, cert []byte) *consenter {
 	communicator := &clustermocks.Communicator{}
-	ca, err := tlsgen.NewCA()
-	Expect(err).NotTo(HaveOccurred())
 	communicator.On("Configure", mock.Anything, mock.Anything)
 	icr := &mocks.InactiveChainRegistry{}
 	icr.On("TrackChain", "foo", mock.Anything, mock.Anything)
-	certAsPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("cert bytes")})
 
 	cryptoProvider, err := sw.NewDefaultSecurityLevelWithKeystore(sw.NewDummyKeyStore())
 	Expect(err).NotTo(HaveOccurred())
@@ -400,7 +456,7 @@ func newConsenter(chainGetter *mocks.ChainGetter) *consenter {
 	c := &etcdraft.Consenter{
 		InactiveChainRegistry: icr,
 		Communication:         communicator,
-		Cert:                  certAsPEM,
+		Cert:                  cert,
 		Logger:                flogging.MustGetLogger("test"),
 		Chains:                chainGetter,
 		Dispatcher: &etcdraft.Dispatcher{
@@ -410,7 +466,7 @@ func newConsenter(chainGetter *mocks.ChainGetter) *consenter {
 		Dialer: &cluster.PredicateDialer{
 			Config: comm.ClientConfig{
 				SecOpts: comm.SecureOptions{
-					Certificate: ca.CertBytes(),
+					Certificate: caCert,
 				},
 			},
 		},
@@ -420,4 +476,28 @@ func newConsenter(chainGetter *mocks.ChainGetter) *consenter {
 		Consenter: c,
 		icr:       icr,
 	}
+}
+
+func generateCertificates(confAppRaft *genesisconfig.Profile, tlsCA tlsgen.CA, certDir string) [][]byte {
+	certificates := [][]byte{}
+	for i, c := range confAppRaft.Orderer.EtcdRaft.Consenters {
+		srvC, err := tlsCA.NewServerCertKeyPair(c.Host)
+		Expect(err).NotTo(HaveOccurred())
+		srvP := path.Join(certDir, fmt.Sprintf("server%d.crt", i))
+		err = ioutil.WriteFile(srvP, srvC.Cert, 0644)
+		Expect(err).NotTo(HaveOccurred())
+
+		clnC, err := tlsCA.NewClientCertKeyPair()
+		Expect(err).NotTo(HaveOccurred())
+		clnP := path.Join(certDir, fmt.Sprintf("client%d.crt", i))
+		err = ioutil.WriteFile(clnP, clnC.Cert, 0644)
+		Expect(err).NotTo(HaveOccurred())
+
+		c.ServerTlsCert = []byte(srvP)
+		c.ClientTlsCert = []byte(clnP)
+
+		certificates = append(certificates, srvC.Cert)
+	}
+
+	return certificates
 }

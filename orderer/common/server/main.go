@@ -200,6 +200,7 @@ func Main() {
 		serverConfig.SecOpts.Certificate,
 		[][]byte{clusterClientConfig.SecOpts.Certificate},
 		identityBytes,
+		expirationLogger.Infof,
 		expirationLogger.Warnf, // This can be used to piggyback a metric event in the future
 		time.Now(),
 		time.AfterFunc)
@@ -462,17 +463,23 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel) comm.ClientConfig
 		SecOpts:      comm.SecureOptions{},
 	}
 
-	if conf.General.Cluster.ClientCertificate == "" {
-		return cc
-	}
+	reuseGrpcListener := reuseListener(conf)
 
 	certFile := conf.General.Cluster.ClientCertificate
+	keyFile := conf.General.Cluster.ClientPrivateKey
+	if certFile == "" && keyFile == "" {
+		if !reuseGrpcListener {
+			return cc
+		}
+		certFile = conf.General.TLS.Certificate
+		keyFile = conf.General.TLS.PrivateKey
+	}
+
 	certBytes, err := ioutil.ReadFile(certFile)
 	if err != nil {
 		logger.Fatalf("Failed to load client TLS certificate file '%s' (%s)", certFile, err)
 	}
 
-	keyFile := conf.General.Cluster.ClientPrivateKey
 	keyBytes, err := ioutil.ReadFile(keyFile)
 	if err != nil {
 		logger.Fatalf("Failed to load client TLS key file '%s' (%s)", keyFile, err)
@@ -487,8 +494,13 @@ func initializeClusterClientConfig(conf *localconfig.TopLevel) comm.ClientConfig
 		serverRootCAs = append(serverRootCAs, rootCACert)
 	}
 
+	timeShift := conf.General.TLS.TLSHandshakeTimeShift
+	if !reuseGrpcListener {
+		timeShift = conf.General.Cluster.TLSHandshakeTimeShift
+	}
+
 	cc.SecOpts = comm.SecureOptions{
-		TimeShift:         conf.General.Cluster.TLSHandshakeTimeShift,
+		TimeShift:         timeShift,
 		RequireClientCert: true,
 		CipherSuites:      comm.DefaultTLSCipherSuites,
 		ServerRootCAs:     serverRootCAs,
@@ -505,6 +517,7 @@ func initializeServerConfig(conf *localconfig.TopLevel, metricsProvider metrics.
 	secureOpts := comm.SecureOptions{
 		UseTLS:            conf.General.TLS.Enabled,
 		RequireClientCert: conf.General.TLS.ClientAuthRequired,
+		TimeShift:         conf.General.TLS.TLSHandshakeTimeShift,
 	}
 	// check to see if TLS is enabled
 	if secureOpts.UseTLS {
@@ -913,15 +926,26 @@ func (mgr *caManager) updateClusterDialer(
 
 	// Iterate over all orderer root CAs for all chains and add them
 	// to the root CAs
-	var clusterRootCAs [][]byte
-	for _, roots := range mgr.ordererRootCAsByChain {
-		clusterRootCAs = append(clusterRootCAs, roots...)
+	clusterRootCAs := make(cluster.StringSet)
+	for _, orgRootCAs := range mgr.ordererRootCAsByChain {
+		for _, rootCA := range orgRootCAs {
+			clusterRootCAs[string(rootCA)] = struct{}{}
+		}
 	}
 
 	// Add the local root CAs too
-	clusterRootCAs = append(clusterRootCAs, localClusterRootCAs...)
+	for _, localRootCA := range localClusterRootCAs {
+		clusterRootCAs[string(localRootCA)] = struct{}{}
+	}
+
+	// Convert StringSet to byte slice
+	var clusterRootCAsBytes [][]byte
+	for root := range clusterRootCAs {
+		clusterRootCAsBytes = append(clusterRootCAsBytes, []byte(root))
+	}
+
 	// Update the cluster config with the new root CAs
-	clusterDialer.UpdateRootCAs(clusterRootCAs)
+	clusterDialer.UpdateRootCAs(clusterRootCAsBytes)
 }
 
 func prettyPrintStruct(i interface{}) {

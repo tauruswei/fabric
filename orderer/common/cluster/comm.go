@@ -104,6 +104,7 @@ type Comm struct {
 	Connections                      *ConnectionStore
 	Chan2Members                     MembersByChannel
 	Metrics                          *Metrics
+	CompareCertificate               CertificateComparator
 }
 
 type requestContext struct {
@@ -231,9 +232,9 @@ func (c *Comm) Shutdown() {
 
 	c.shutdown = true
 	for _, members := range c.Chan2Members {
-		for _, member := range members {
-			c.Connections.Disconnect(member.ServerTLSCert)
-		}
+		members.Foreach(func(id uint64, stub *Stub) {
+			c.Connections.Disconnect(stub.ServerTLSCert)
+		})
 	}
 }
 
@@ -272,15 +273,15 @@ func (c *Comm) applyMembershipConfig(channel string, newNodes []RemoteNode) {
 
 	// Remove all stubs without a corresponding node
 	// in the new nodes
-	for id, stub := range mapping {
+	mapping.Foreach(func(id uint64, stub *Stub) {
 		if _, exists := newNodeIDs[id]; exists {
 			c.Logger.Info(id, "exists in both old and new membership for channel", channel, ", skipping its deactivation")
-			continue
+			return
 		}
 		c.Logger.Info("Deactivated node", id, "who's endpoint is", stub.Endpoint, "as it's removed from membership")
-		delete(mapping, id)
+		mapping.Remove(id)
 		stub.Deactivate()
-	}
+	})
 }
 
 // updateStubInMapping updates the given RemoteNode and adds it to the MemberMapping
@@ -374,7 +375,10 @@ func (c *Comm) getOrCreateMapping(channel string) MemberMapping {
 	// Lazily create a mapping if it doesn't already exist
 	mapping, exists := c.Chan2Members[channel]
 	if !exists {
-		mapping = make(MemberMapping)
+		mapping = MemberMapping{
+			id2stub:       make(map[uint64]*Stub),
+			SamePublicKey: c.CompareCertificate,
+		}
 		c.Chan2Members[channel] = mapping
 	}
 	return mapping
@@ -551,7 +555,12 @@ func (stream *Stream) sendMessage(request *orderer.StepRequest) {
 }
 
 func (stream *Stream) serviceStream() {
-	defer stream.Cancel(errAborted)
+	streamStartTime := time.Now()
+	defer func() {
+		stream.Cancel(errAborted)
+		stream.Logger.Debugf("Stream %d to (%s) terminated with total lifetime of %s",
+			stream.ID, stream.Endpoint, time.Since(streamStartTime))
+	}()
 
 	for {
 		select {
@@ -656,21 +665,20 @@ func (rc *RemoteContext) NewStream(timeout time.Duration) (*Stream, error) {
 	var canceled uint32
 
 	abortChan := make(chan struct{})
-
-	abort := func() {
-		cancel()
-		rc.streamsByID.Delete(streamID)
-		rc.Metrics.reportEgressStreamCount(rc.Channel, atomic.LoadUint32(&rc.streamsByID.size))
-		rc.Logger.Debugf("Stream %d to %s(%s) is aborted", streamID, nodeName, rc.endpoint)
-		atomic.StoreUint32(&canceled, 1)
-		close(abortChan)
-	}
+	abortReason := &atomic.Value{}
 
 	once := &sync.Once{}
-	abortReason := &atomic.Value{}
+
 	cancelWithReason := func(err error) {
-		abortReason.Store(err.Error())
-		once.Do(abort)
+		once.Do(func() {
+			abortReason.Store(err.Error())
+			cancel()
+			rc.streamsByID.Delete(streamID)
+			rc.Metrics.reportEgressStreamCount(rc.Channel, atomic.LoadUint32(&rc.streamsByID.size))
+			rc.Logger.Debugf("Stream %d to %s(%s) is aborted", streamID, nodeName, rc.endpoint)
+			atomic.StoreUint32(&canceled, 1)
+			close(abortChan)
+		})
 	}
 
 	logger := flogging.MustGetLogger("orderer.common.cluster.step")

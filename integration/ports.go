@@ -24,6 +24,7 @@ const (
 
 const (
 	ConfigBasePort TestPortRange = basePort + portsPerSuite*iota
+	DevModePort
 	DiscoveryBasePort
 	E2EBasePort
 	GossipBasePort
@@ -32,6 +33,7 @@ const (
 	LifecyclePort
 	MSPPort
 	NWOBasePort
+	PKCS11Port
 	PluggableBasePort
 	PrivateDataBasePort
 	RaftBasePort

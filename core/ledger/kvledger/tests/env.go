@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/fabric-protos-go/common"
 	"github.com/hyperledger/fabric-protos-go/peer"
@@ -27,6 +28,7 @@ import (
 	"github.com/hyperledger/fabric/core/ledger/ledgermgmt"
 	corepeer "github.com/hyperledger/fabric/core/peer"
 	"github.com/hyperledger/fabric/core/scc/lscc"
+	"github.com/hyperledger/fabric/internal/fileutil"
 	"github.com/hyperledger/fabric/msp"
 	"github.com/hyperledger/fabric/msp/mgmt"
 	"github.com/hyperledger/fabric/protoutil"
@@ -79,7 +81,7 @@ func (e *env) cleanup() {
 	os.RemoveAll(e.initializer.Config.RootFSPath)
 }
 
-func (e *env) closeAllLedgersAndDrop(flags rebuildable) {
+func (e *env) closeAllLedgersAndRemoveDirContents(flags rebuildable) {
 	if e.ledgerMgr != nil {
 		e.ledgerMgr.Close()
 	}
@@ -89,38 +91,38 @@ func (e *env) closeAllLedgersAndDrop(flags rebuildable) {
 		indexPath := e.getBlockIndexDBPath()
 		logger.Infof("Deleting blockstore indexdb path [%s]", indexPath)
 		e.verifyNonEmptyDirExists(indexPath)
-		e.assert.NoError(os.RemoveAll(indexPath))
+		e.assert.NoError(fileutil.RemoveContents(indexPath))
 	}
 
 	if flags&rebuildableStatedb == rebuildableStatedb {
 		statedbPath := e.getLevelstateDBPath()
 		logger.Infof("Deleting statedb path [%s]", statedbPath)
 		e.verifyNonEmptyDirExists(statedbPath)
-		e.assert.NoError(os.RemoveAll(statedbPath))
+		e.assert.NoError(fileutil.RemoveContents(statedbPath))
 	}
 
 	if flags&rebuildableConfigHistory == rebuildableConfigHistory {
 		configHistoryPath := e.getConfigHistoryDBPath()
 		logger.Infof("Deleting configHistory db path [%s]", configHistoryPath)
 		e.verifyNonEmptyDirExists(configHistoryPath)
-		e.assert.NoError(os.RemoveAll(configHistoryPath))
+		e.assert.NoError(fileutil.RemoveContents(configHistoryPath))
 	}
 
 	if flags&rebuildableBookkeeper == rebuildableBookkeeper {
 		bookkeeperPath := e.getBookkeeperDBPath()
 		logger.Infof("Deleting bookkeeper db path [%s]", bookkeeperPath)
 		e.verifyNonEmptyDirExists(bookkeeperPath)
-		e.assert.NoError(os.RemoveAll(bookkeeperPath))
+		e.assert.NoError(fileutil.RemoveContents(bookkeeperPath))
 	}
 
 	if flags&rebuildableHistoryDB == rebuildableHistoryDB {
 		historyPath := e.getHistoryDBPath()
 		logger.Infof("Deleting history db path [%s]", historyPath)
 		e.verifyNonEmptyDirExists(historyPath)
-		e.assert.NoError(os.RemoveAll(historyPath))
+		e.assert.NoError(fileutil.RemoveContents(historyPath))
 	}
 
-	e.verifyRebuilableDoesNotExist(flags)
+	e.verifyRebuilableDirEmpty(flags)
 }
 
 func (e *env) verifyRebuilablesExist(flags rebuildable) {
@@ -141,21 +143,21 @@ func (e *env) verifyRebuilablesExist(flags rebuildable) {
 	}
 }
 
-func (e *env) verifyRebuilableDoesNotExist(flags rebuildable) {
+func (e *env) verifyRebuilableDirEmpty(flags rebuildable) {
 	if flags&rebuildableStatedb == rebuildableStatedb {
-		e.verifyDirDoesNotExist(e.getLevelstateDBPath())
+		e.verifyDirEmpty(e.getLevelstateDBPath())
 	}
 	if flags&rebuildableBlockIndex == rebuildableBlockIndex {
-		e.verifyDirDoesNotExist(e.getBlockIndexDBPath())
+		e.verifyDirEmpty(e.getBlockIndexDBPath())
 	}
 	if flags&rebuildableConfigHistory == rebuildableConfigHistory {
-		e.verifyDirDoesNotExist(e.getConfigHistoryDBPath())
+		e.verifyDirEmpty(e.getConfigHistoryDBPath())
 	}
 	if flags&rebuildableBookkeeper == rebuildableBookkeeper {
-		e.verifyDirDoesNotExist(e.getBookkeeperDBPath())
+		e.verifyDirEmpty(e.getBookkeeperDBPath())
 	}
 	if flags&rebuildableHistoryDB == rebuildableHistoryDB {
-		e.verifyDirDoesNotExist(e.getHistoryDBPath())
+		e.verifyDirEmpty(e.getHistoryDBPath())
 	}
 }
 
@@ -165,10 +167,10 @@ func (e *env) verifyNonEmptyDirExists(path string) {
 	e.assert.False(empty)
 }
 
-func (e *env) verifyDirDoesNotExist(path string) {
-	exists, _, err := util.FileExists(path)
+func (e *env) verifyDirEmpty(path string) {
+	empty, err := util.DirEmpty(path)
 	e.assert.NoError(err)
-	e.assert.False(exists)
+	e.assert.True(empty)
 }
 
 func (e *env) initLedgerMgmt() {
@@ -223,7 +225,7 @@ func populateMissingsWithTestDefaults(t *testing.T, initializer *ledgermgmt.Init
 		initializer.MetricsProvider = &disabled.Provider{}
 	}
 
-	if initializer.Config == nil {
+	if initializer.Config == nil || initializer.Config.RootFSPath == "" {
 		rootPath, err := ioutil.TempDir("/tmp", "ledgersData")
 		if err != nil {
 			t.Fatalf("Failed to create root directory: %s", err)
@@ -248,9 +250,10 @@ func populateMissingsWithTestDefaults(t *testing.T, initializer *ledgermgmt.Init
 
 	if initializer.Config.PrivateDataConfig == nil {
 		initializer.Config.PrivateDataConfig = &ledger.PrivateDataConfig{
-			MaxBatchSize:    5000,
-			BatchesInterval: 1000,
-			PurgeInterval:   100,
+			MaxBatchSize:                        5000,
+			BatchesInterval:                     1000,
+			PurgeInterval:                       100,
+			DeprioritizedDataReconcilerInterval: 120 * time.Minute,
 		}
 	}
 	if initializer.Config.SnapshotsConfig == nil {

@@ -100,6 +100,7 @@ func (o Orderer) ID() string {
 // channels that the peer should be joined to.
 type Peer struct {
 	Name         string         `yaml:"name,omitempty"`
+	DevMode      bool           `yaml:"devmode,omitempty"`
 	Organization string         `yaml:"organization,omitempty"`
 	Channels     []*PeerChannel `yaml:"channels,omitempty"`
 }
@@ -150,6 +151,7 @@ type Network struct {
 	StatsdEndpoint              string
 	ClientAuthRequired          bool
 	ChannelParticipationEnabled bool
+	TLSEnabled                  bool
 
 	PortsByBrokerID  map[string]Ports
 	PortsByOrdererID map[string]Ports
@@ -194,6 +196,7 @@ func New(c *Config, rootDir string, client *docker.Client, startPort int, compon
 		Profiles:      c.Profiles,
 		Consortiums:   c.Consortiums,
 		Templates:     c.Templates,
+		TLSEnabled:    true, // Set TLS enabled as true for default
 
 		sessLastExecuted: make(map[string]time.Time),
 	}
@@ -410,6 +413,28 @@ func (n *Network) userCryptoDir(org *Organization, nodeOrganizationType, user, c
 		"users",
 		fmt.Sprintf("%s@%s", user, org.Domain),
 		cryptoMaterialType,
+	)
+}
+
+// PeerOrgCADir returns the path to the folder containing the CA certificate(s) and/or
+// keys for the specified peer organization.
+func (n *Network) PeerOrgCADir(o *Organization) string {
+	return filepath.Join(
+		n.CryptoPath(),
+		"peerOrganizations",
+		o.Domain,
+		"ca",
+	)
+}
+
+// OrdererOrgCADir returns the path to the folder containing the CA certificate(s) and/or
+// keys for the specified orderer organization.
+func (n *Network) OrdererOrgCADir(o *Organization) string {
+	return filepath.Join(
+		n.CryptoPath(),
+		"ordererOrganizations",
+		o.Domain,
+		"ca",
 	)
 }
 
@@ -665,7 +690,7 @@ func (n *Network) GenerateConfigTree() {
 // written to ${rootDir}/${Channel.Name}_tx.pb.
 func (n *Network) Bootstrap() {
 	if n.DockerClient != nil {
-		n.createDockerNetwork()
+		n.CreateDockerNetwork()
 	}
 
 	sess, err := n.Cryptogen(commands.Generate{
@@ -701,7 +726,7 @@ func (n *Network) Bootstrap() {
 	n.ConcatenateTLSCACertificates()
 }
 
-func (n *Network) createDockerNetwork() {
+func (n *Network) CreateDockerNetwork() {
 	_, err := n.DockerClient.CreateNetwork(
 		docker.CreateNetworkOptions{
 			Name:   n.NetworkID,
@@ -789,7 +814,6 @@ func hostIPv4Addrs() []net.IP {
 // bootstrapIdemix creates the idemix-related crypto material
 func (n *Network) bootstrapIdemix() {
 	for j, org := range n.IdemixOrgs() {
-
 		output := n.IdemixOrgMSPDir(org)
 		// - ca-keygen
 		sess, err := n.Idemixgen(commands.CAKeyGen{
@@ -800,13 +824,13 @@ func (n *Network) bootstrapIdemix() {
 
 		// - signerconfig
 		usersOutput := filepath.Join(n.IdemixOrgMSPDir(org), "users")
-		userOutput := filepath.Join(usersOutput, fmt.Sprintf("User%d@%s", 1, org.Domain))
+		userOutput := filepath.Join(usersOutput, "User1@"+org.Domain)
 		sess, err = n.Idemixgen(commands.SignerConfig{
 			CAInput:          output,
 			Output:           userOutput,
 			OrgUnit:          org.Domain,
-			EnrollmentID:     "User" + string(1),
-			RevocationHandle: fmt.Sprintf("1%d%d", 1, j),
+			EnrollmentID:     "User1",
+			RevocationHandle: fmt.Sprintf("11%d", j),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(sess, n.EventuallyTimeout).Should(gexec.Exit(0))
@@ -848,7 +872,7 @@ func (n *Network) listTLSCACertificates() []string {
 // Cleanup attempts to cleanup docker related artifacts that may
 // have been created by the network.
 func (n *Network) Cleanup() {
-	if n.DockerClient == nil {
+	if n == nil || n.DockerClient == nil {
 		return
 	}
 
@@ -1209,7 +1233,7 @@ func (n *Network) OrdererGroupRunner() ifrit.Runner {
 // used to start and manage a peer process.
 func (n *Network) PeerRunner(p *Peer, env ...string) *ginkgomon.Runner {
 	cmd := n.peerCommand(
-		commands.NodeStart{PeerID: p.ID()},
+		commands.NodeStart{PeerID: p.ID(), DevMode: p.DevMode},
 		"",
 		fmt.Sprintf("FABRIC_CFG_PATH=%s", n.PeerDir(p)),
 		fmt.Sprintf("CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin"),
@@ -1250,7 +1274,7 @@ func (n *Network) NetworkGroupRunner() ifrit.Runner {
 func (n *Network) peerCommand(command Command, tlsDir string, env ...string) *exec.Cmd {
 	cmd := NewCommand(n.Components.Peer(), command)
 	cmd.Env = append(cmd.Env, env...)
-	if ConnectsToOrderer(command) {
+	if ConnectsToOrderer(command) && n.TLSEnabled {
 		cmd.Args = append(cmd.Args, "--tls")
 		cmd.Args = append(cmd.Args, "--cafile", n.CACertsBundlePath())
 	}
